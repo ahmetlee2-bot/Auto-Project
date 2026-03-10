@@ -1,0 +1,16 @@
+node_modules/
+.next/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.env
+.env.local
+.runtime-temp/
+.npm-cache/
+*.tsbuildinfo
+*.db
+backend/data/

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AUTONOW | Phase 0 MVP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#081019;--bg2:#0e1824;--card:#132233;--line:#294158;--text:#edf6ff;--muted:#92adc2;--muted2:#60788d;--mint:#8cf0d2;--cyan:#57c7ff;--yellow:#ffc56f;--red:#ff8f7f;--green:#7cffaa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);font-family:"IBM Plex Mono",monospace;background:radial-gradient(circle at top left,rgba(87,199,255,.12),transparent 24%),linear-gradient(180deg,#071019,#0a1320)}button,input,select,textarea{font:inherit}button{cursor:pointer}::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:#22364a;border-radius:999px}
+.app{display:grid;grid-template-columns:270px 1fr;min-height:100vh}.sidebar{padding:24px 18px;border-right:1px solid rgba(255,255,255,.06);background:rgba(9,16,25,.86);backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:18px}.main{padding:28px 30px 60px}
+.brand{display:grid;gap:10px}.mark{display:flex;gap:12px;align-items:center}.logo{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,var(--mint),var(--cyan));color:#071019;font-family:"Space Grotesk",sans-serif;font-weight:700}.brand h1,.page h2,.hero h3,.card h3,.deal h4{font-family:"Space Grotesk",sans-serif;letter-spacing:-.04em;margin:0}.sub,.muted{color:var(--muted);font-size:12px;line-height:1.75}
+.chip,.badge,.pill,.status{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border-radius:999px;font-size:11px;border:1px solid rgba(255,255,255,.08)}.chip{width:max-content;background:rgba(140,240,210,.08);border-color:rgba(140,240,210,.18);color:var(--mint)}
+.nav{display:grid;gap:8px}.nav button{display:flex;justify-content:space-between;gap:12px;background:transparent;border:1px solid transparent;color:var(--muted);padding:13px 14px;border-radius:16px;text-align:left}.nav button:hover{background:rgba(255,255,255,.03);color:var(--text)}.nav button.active{background:linear-gradient(135deg,rgba(140,240,210,.12),rgba(87,199,255,.08));border-color:rgba(140,240,210,.12);color:var(--text)}.nav strong{display:block;font-size:13px;margin-bottom:4px}.nav span{font-size:10px;color:var(--muted2)}
+.panel,.hero,.card,.deal,.stat,.sidecard{background:linear-gradient(180deg,rgba(18,31,45,.96),rgba(13,24,36,.96));border:1px solid rgba(255,255,255,.06);border-radius:22px;box-shadow:0 18px 50px rgba(0,0,0,.28)}.sidecard{margin-top:auto;padding:16px}.sidecard h3{margin:0 0 8px}
+.top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.top h2{font-size:34px;line-height:1.04;margin:0 0 8px}.actions,.row,.badges,.meta,.inline,.toolbar{display:flex;gap:10px;flex-wrap:wrap}
+.btn,.btn2,.btn3,.quick{padding:12px 15px;border-radius:14px;transition:.2s ease}.btn{border:none;background:linear-gradient(135deg,var(--mint),var(--cyan));color:#041018;font-weight:600}.btn2,.quick{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02);color:var(--text)}.btn3{border:1px solid rgba(87,199,255,.18);background:rgba(87,199,255,.08);color:var(--cyan)}.quick{padding:9px 12px;border-radius:12px}
+.page{display:none;animation:fade .24s ease}.page.active{display:block}@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.hero{padding:24px;display:grid;grid-template-columns:1.45fr 1fr;gap:16px;margin-bottom:16px}.hero h3{font-size:30px;line-height:1.06;margin:10px 0 12px}.eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--mint)}.mini{display:grid;gap:10px}.mini div{padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05)}.mini strong{display:block;font-size:12px;margin-bottom:4px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}.stat{padding:16px}.stat span{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}.stat strong{display:block;font-family:"Space Grotesk",sans-serif;font-size:28px}.grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.card{padding:20px}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.head p{max-width:640px;color:var(--muted);font-size:12px;line-height:1.8;margin:0}
+.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.field{display:grid;gap:7px}.field.full{grid-column:1/-1}.field label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}.field input,.field select,.field textarea,.toolbar input,.toolbar select{background:var(--bg2);border:1px solid var(--line);color:var(--text);border-radius:14px;padding:12px 13px;outline:none}.field textarea{min-height:138px;resize:vertical;line-height:1.7}.field input:focus,.field select:focus,.field textarea:focus,.toolbar input:focus,.toolbar select:focus{border-color:rgba(140,240,210,.3);box-shadow:0 0 0 4px rgba(140,240,210,.06)}
+.empty{min-height:420px;display:grid;place-items:center;text-align:center;border:1px dashed rgba(255,255,255,.08);border-radius:18px;color:var(--muted);padding:20px;line-height:1.8}.summary{padding:15px 16px;border-radius:18px;line-height:1.8;font-size:12px}.buy{background:rgba(124,255,170,.08);border:1px solid rgba(124,255,170,.16)}.caution{background:rgba(255,197,111,.08);border:1px solid rgba(255,197,111,.16)}.skip{background:rgba(255,143,127,.08);border:1px solid rgba(255,143,127,.16)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric,.box{padding:14px;border-radius:16px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}.metric span{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}.metric strong{display:block;margin-top:8px;font-family:"Space Grotesk",sans-serif;font-size:22px}.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}.box h5{font-family:"Space Grotesk",sans-serif;font-size:15px;margin:0 0 8px}.list{display:grid;gap:8px}.list div{font-size:12px;color:var(--muted);line-height:1.7}
+.watch{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.deal{padding:16px;display:grid;gap:12px}.src-k{background:rgba(255,180,110,.1);color:#ffc07a;border-color:rgba(255,180,110,.18)}.src-f{background:rgba(128,165,255,.1);color:#adc7ff;border-color:rgba(128,165,255,.18)}.src-m{background:rgba(140,240,210,.08);color:var(--mint);border-color:rgba(140,240,210,.18)}.risk-low{background:rgba(124,255,170,.1);color:var(--green);border-color:rgba(124,255,170,.18)}.risk-medium{background:rgba(255,197,111,.1);color:var(--yellow);border-color:rgba(255,197,111,.18)}.risk-high{background:rgba(255,143,127,.1);color:var(--red);border-color:rgba(255,143,127,.18)}.score-good{background:rgba(124,255,170,.1);color:var(--green);border-color:rgba(124,255,170,.18)}.score-mid{background:rgba(255,197,111,.1);color:var(--yellow);border-color:rgba(255,197,111,.18)}.score-bad{background:rgba(255,143,127,.1);color:var(--red);border-color:rgba(255,143,127,.18)}.pill{background:rgba(255,255,255,.03);color:var(--muted)}
+.table{overflow:auto;border-radius:18px;border:1px solid rgba(255,255,255,.05)}table{width:100%;border-collapse:collapse}th,td{padding:14px 12px;text-align:left;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}th{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}.status.sourcing{background:rgba(87,199,255,.08);color:var(--cyan)}.status.prep{background:rgba(255,197,111,.08);color:var(--yellow)}.status.sold{background:rgba(124,255,170,.08);color:var(--green)}
+.road{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:16px}.road .card span{display:block;font-size:10px;color:var(--mint);letter-spacing:.18em;text-transform:uppercase;margin-bottom:10px}.stack{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stack strong{display:block;margin-bottom:8px}
+@media(max-width:1150px){.hero,.grid2,.watch,.road,.stack{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:920px){.app{grid-template-columns:1fr}.sidebar{border-right:none;border-bottom:1px solid rgba(255,255,255,.06)}.stats{grid-template-columns:1fr}.top{display:grid}.actions{justify-content:flex-start}}@media(max-width:720px){.main{padding:18px 14px 40px}.fields,.metrics,.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">
+        <div class="logo">A</div>
+        <div>
+          <h1>AUTONOW</h1>
+          <p class="sub">Deal intelligence cockpit for Hamburg vehicle flipping.</p>
+        </div>
+      </div>
+      <div class="chip">Phase 0 rebuild complete</div>
+    </div>
+    <div class="nav">
+      <button class="active" data-page="cockpit"><div><strong>Cockpit</strong><span>Bugunun odagi</span></div><small>01</small></button>
+      <button data-page="intake"><div><strong>Deal Intake</strong><span>Link veya metinden analiz</span></div><small>02</small></button>
+      <button data-page="watchlist"><div><strong>Watchlist</strong><span>Secili firsat akisi</span></div><small id="navWatch">06</small></button>
+      <button data-page="portfolio"><div><strong>Portfolio</strong><span>Operasyon paneli</span></div><small id="navPortfolio">00</small></button>
+      <button data-page="roadmap"><div><strong>Roadmap</strong><span>AR-GE sira plani</span></div><small>R&amp;D</small></button>
+    </div>
+    <div class="sidecard">
+      <h3>Kurucu profili</h3>
+      <p class="sub">Hamburg merkezli, Turkce ve Almanca kullanan, Kfz Ausbildung icinde olan operator icin kuruldu. Ilk urun genel pazar degil, senin sahadaki karar ritmin olmali.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <div>
+        <h2>Demo algisini temizledim, urun cekirdegini korudum.</h2>
+        <p class="sub">Bu surum kirik AI fetch'leri ve sahte canli tarama hissini kaldirir. Yerine offline bir deal engine koyar: ilan verisini al, normalize et, teklif seviyesi, risk ve kar penceresini cikar, sonra watchlist ve portfoye tasi.</p>
+      </div>
+      <div class="actions">
+        <button class="btn2" id="goWatch">Watchlist</button>
+        <button class="btn3" id="loadSample">Ornek ilan</button>
+        <button class="btn" id="goIntake">Yeni analiz</button>
+      </div>
+    </div>
+
+    <section class="page active" id="page-cockpit">
+      <div class="hero">
+        <div>
+          <div class="eyebrow">Operator view</div>
+          <h3>Ilk hedefin ilan sitesi degil, karar destek kokpiti olmali.</h3>
+          <p class="sub">Burada tek soru su: Bu arac alinmaya deger mi? Ne teklif verilir, ne kadar masraf cikar, ne kadar surede satilir ve ne kadar kar birakir? MVP bu sorulara odaklaniyor.</p>
+          <div class="actions" style="margin-top:18px">
+            <button class="btn" data-jump="intake">Deal intake ac</button>
+            <button class="btn2" data-jump="roadmap">AR-GE planini gor</button>
+          </div>
+        </div>
+        <div class="mini">
+          <div><strong>Phase 0</strong><span class="muted">Tek dosyalik prototip temizlendi, MVP ekranlari sadeleştirildi.</span></div>
+          <div><strong>Siradaki adim</strong><span class="muted">Frontend/backend ayrimi ve guvenli AI proxy tasarimi.</span></div>
+          <div><strong>Urun tezi</strong><span class="muted">AI wrapper degil, veri + kural + operasyon paneli birikimi.</span></div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Qualified deals</span><strong id="qualified">0</strong><small class="muted">Marj ve risk filtresini gecen adaylar</small></div>
+        <div class="stat"><span>Average expected profit</span><strong id="avgProfit">0 €</strong><small class="muted">Watchlist ortalama net kar</small></div>
+        <div class="stat"><span>Portfolio exposure</span><strong id="exposure">0 €</strong><small class="muted">Aktif portfoyde bagli sermaye</small></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="head"><div><h3>En guclu aday</h3><p>Watchlist'teki ilanlardan teklif seviyesi, risk ve net kara gore one cikan aday burada gorunur.</p></div></div>
+          <div id="bestDeal" class="empty">Watchlist yukleniyor...</div>
+        </div>
+        <div class="card">
+          <div class="head"><div><h3>Karar disiplini</h3><p>Bu urun hisse degil standart kuruyor. Her deal ayni mantikla degerlenmeli.</p></div></div>
+          <div class="mini">
+            <div><strong>1. Veri cikar</strong><span class="muted">Marka, model, yil, km, fiyat ve sorun kelimeleri normalize edilir.</span></div>
+            <div><strong>2. Rule engine</strong><span class="muted">Piyasa referansi, tamir tahmini, hedef teklif ve net kar hesaplanir.</span></div>
+            <div><strong>3. Sonra AI</strong><span class="muted">AI, bu iskeletin uzerine aciklama, pazarlik dili ve eksik veri yorumu ekler.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-intake">
+      <div class="grid2">
+        <div class="card">
+          <div class="head"><div><h3>Deal intake</h3><p>MVP'nin kalbi burada. Link veya ilan metnini gir, gerekirse alanlari elle tamamla, sonra sistem sana karar penceresi cikarsin.</p></div></div>
+          <div class="row" style="margin-bottom:16px">
+            <button class="quick" data-sample="golf">Golf</button>
+            <button class="quick" data-sample="corsa">Corsa</button>
+            <button class="quick" data-sample="focus">Focus</button>
+          </div>
+          <div class="fields">
+            <div class="field"><label>Kaynak</label><select id="src"><option>Kleinanzeigen</option><option>Facebook Marketplace</option><option>Mobile.de</option><option>Manual Import</option></select></div>
+            <div class="field"><label>Ilan linki</label><input id="url" placeholder="https://..."></div>
+            <div class="field"><label>Marka</label><input id="brand" placeholder="VW, Opel, Ford"></div>
+            <div class="field"><label>Model</label><input id="model" placeholder="Golf, Corsa..."></div>
+            <div class="field"><label>Yil</label><input id="year" type="number" placeholder="2007"></div>
+            <div class="field"><label>KM</label><input id="km" type="number" placeholder="148000"></div>
+            <div class="field"><label>Yakit</label><select id="fuel"><option value="">Belirtilmedi</option><option>Benzin</option><option>Diesel</option></select></div>
+            <div class="field"><label>Istenen fiyat</label><input id="price" type="number" placeholder="1350"></div>
+            <div class="field full"><label>Ilan metni / notlar</label><textarea id="text" placeholder="Ornek: VW Golf 5 1.6 2006, 178000 km, TUV yazin bitiyor, klima sogutmuyor. Hamburg Wandsbek. 1350 Euro."></textarea></div>
+          </div>
+          <div class="actions" style="margin-top:18px">
+            <button class="btn" id="analyzeBtn">Deal analiz et</button>
+            <button class="btn2" id="resetBtn">Formu sifirla</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="head"><div><h3>Analiz cikisi</h3><p>Bu bolum su anda rule engine ile calisir. Boylece prototip guvenilir, hizli ve kiriksizdir.</p></div></div>
+          <div id="result" class="empty">Hazir oldugunda ilk deal'i analiz edelim.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-watchlist">
+      <div class="card">
+        <div class="head"><div><h3>Watchlist</h3><p>Simdilik secili demo ilanlari ve senin intake uzerinden eklediklerin burada. Sonraki sprintte burasi zamanlanmis filtreler ve kaynak baglayicilarla beslenecek.</p></div></div>
+        <div class="toolbar">
+          <input id="search" placeholder="Golf, Hamburg, klima, TUV...">
+          <select id="riskFilter"><option value="all">Tum riskler</option><option value="low">Dusuk risk</option><option value="medium">Orta risk</option><option value="high">Yuksek risk</option></select>
+          <select id="sourceFilter"><option value="all">Tum kaynaklar</option><option>Kleinanzeigen</option><option>Facebook Marketplace</option><option>Mobile.de</option><option>Manual Import</option></select>
+        </div>
+        <div id="watch" class="watch"></div>
+      </div>
+    </section>
+
+    <section class="page" id="page-portfolio">
+      <div class="card">
+        <div class="head"><div><h3>Portfolio</h3><p>Burasi operasyon paneli. Hangi araca ne teklif verilmis, toplam maliyet ne ve hedef cikis kac, tek yerde gorunur.</p></div></div>
+        <div class="stats" style="margin-bottom:18px">
+          <div class="stat"><span>Active deals</span><strong id="pfActive">0</strong><small class="muted">Sourcing veya hazirlik asamasinda</small></div>
+          <div class="stat"><span>Expected profit</span><strong id="pfExpected">0 €</strong><small class="muted">Acilmamis deal'lerin toplami</small></div>
+          <div class="stat"><span>Sold profit</span><strong id="pfSold">0 €</strong><small class="muted">Satildi durumuna gecenlerden gelen kar</small></div>
+        </div>
+        <div class="table">
+          <table>
+            <thead><tr><th>Arac</th><th>Durum</th><th>Teklif</th><th>Toplam maliyet</th><th>Hedef cikis</th><th>Net kar</th><th>Aksiyon</th></tr></thead>
+            <tbody id="pfBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-roadmap">
+      <div class="road">
+        <div class="card"><span>Faz 0</span><h3>Cleanup</h3><p class="sub">Demo hissi, kirik API ve encoding sorunlari temizlendi. Geriye gercek MVP iskeleti kaldi.</p></div>
+        <div class="card"><span>Faz 1</span><h3>Frontend + backend</h3><p class="sub">Deal intake akisini guvenli backend'e tasiyip AI anahtarlarini browser disina al.</p></div>
+        <div class="card"><span>Faz 2</span><h3>Deal engine</h3><p class="sub">Masraf, teklif, cikis ve net kar hesabini standardize et. Burasi savunulabilir cekirdek olacak.</p></div>
+        <div class="card"><span>Faz 3</span><h3>Yari otomatik kaynaklar</h3><p class="sub">Kaydedilmis arama URL'leri, mail parse veya extension ile watchlist'i doldur.</p></div>
+      </div>
+      <div class="card">
+        <div class="head"><div><h3>Hedef stack</h3><p>Detayli plan ayri dokumanda var. Bu prototip artik o stratejiye tasinabilir bir urun cekirdegi gosteriyor.</p></div></div>
+        <div class="stack">
+          <div class="box"><strong>Frontend</strong><div class="muted">Next.js + TypeScript</div></div>
+          <div class="box"><strong>Backend</strong><div class="muted">FastAPI + AI proxy</div></div>
+          <div class="box"><strong>Data</strong><div class="muted">PostgreSQL + Redis</div></div>
+          <div class="box"><strong>AI role</strong><div class="muted">Metin anlama, pazarlik dili, aciklama</div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+const refs=[{b:"VW",m:"Golf",k:["golf"],y:2007,km:155000,p:3150,s:"10-18 gun"},{b:"Opel",m:"Corsa",k:["corsa"],y:2008,km:140000,p:2550,s:"8-16 gun"},{b:"Ford",m:"Focus",k:["focus"],y:2007,km:165000,p:2800,s:"11-20 gun"},{b:"Skoda",m:"Fabia",k:["fabia"],y:2009,km:130000,p:2950,s:"9-15 gun"},{b:"Seat",m:"Ibiza",k:["ibiza"],y:2008,km:140000,p:2700,s:"9-16 gun"},{b:"Toyota",m:"Yaris",k:["yaris"],y:2007,km:135000,p:3200,s:"8-14 gun"}];
+const issues=[{k:["tuv","tüv"],l:"TUV / muayene",r:[80,250],s:16},{k:["motorleuchte","motor lambasi","check engine"],l:"Motor ikaz",r:[180,650],s:24},{k:["klima"],l:"Klima",r:[120,380],s:10},{k:["kupplung","debriyaj"],l:"Kupplung",r:[350,900],s:24},{k:["springt nicht","calismiyor"],l:"Calismama",r:[180,700],s:28},{k:["aku","batterie"],l:"Aku",r:[60,150],s:8},{k:["rost","pas"],l:"Rost / pas",r:[250,900],s:22},{k:["unfall","hasar"],l:"Hasar",r:[350,1400],s:30},{k:["fren","bremse"],l:"Fren",r:[120,320],s:12},{k:["lastik","reifen"],l:"Lastik",r:[180,420],s:10}];
+const samples={golf:{src:"Kleinanzeigen",url:"https://www.kleinanzeigen.de/s-anzeige/vw-golf-5/123456",brand:"VW",model:"Golf",year:2006,km:178000,fuel:"Benzin",price:1350,text:"VW Golf 5 1.6 2006, 178000 km, TUV yazin bitiyor, klima sogutmuyor. Hamburg Wandsbek."},corsa:{src:"Facebook Marketplace",url:"",brand:"Opel",model:"Corsa",year:2009,km:149000,fuel:"Benzin",price:1450,text:"Opel Corsa D 1.2 2009, 149000 km. Motorleuchte bazen yaniyor. Hamburg Altona."},focus:{src:"Mobile.de",url:"https://www.mobile.de/ford-focus",brand:"Ford",model:"Focus",year:2007,km:196000,fuel:"Diesel",price:1100,text:"Ford Focus 1.6 TDCi 2007, 196000 km. TUV yaklasiyor, fren ve aku isteyebilir. Hamburg Harburg."}};
+const demo=[{src:"Kleinanzeigen",city:"Hamburg-Wandsbek",price:1350,text:"VW Golf 5 1.6 2006 178000 km Benzin. TUV yazin bitiyor, klima sogutmuyor."},{src:"Facebook Marketplace",city:"Hamburg-Altona",price:1450,text:"Opel Corsa D 1.2 2009 149000 km Benzin. Motorleuchte bazen yaniyor."},{src:"Mobile.de",city:"Hamburg-Harburg",price:1100,text:"Ford Focus 1.6 TDCi 2007 196000 km Diesel. Frenler ve aku bakim isteyebilir, TUV yaklasiyor."},{src:"Kleinanzeigen",city:"Hamburg-Nord",price:1250,text:"Skoda Fabia 1.2 2009 132000 km Benzin. Sadece lastikler zayif."},{src:"Facebook Marketplace",city:"Norderstedt",price:980,text:"Seat Ibiza 2007 171000 km Benzin. Klima zayif, kupplung yuksek kavriyor."},{src:"Kleinanzeigen",city:"Luneburg",price:1550,text:"Toyota Yaris 2007 139000 km Benzin. Ciddi sorun yok, kozmetik cizikler var."}];
+const st={page:"cockpit",watch:[],pf:[],last:null};
+
+const euro=v=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Math.round(v||0));
+const uid=p=>`${p}-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+const txt=s=>(s||"").toLowerCase();
+const mid=r=>Math.round((r[0]+r[1])/2);
+const load=(k,f)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):f}catch{return f}};
+const save=()=>{localStorage.setItem("autonow.watch",JSON.stringify(st.watch));localStorage.setItem("autonow.pf",JSON.stringify(st.pf))};
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const sourceClass=s=>s==="Kleinanzeigen"?"src-k":s==="Facebook Marketplace"?"src-f":"src-m";
+const riskLabel=s=>s==="low"?"Dusuk risk":s==="medium"?"Orta risk":"Yuksek risk";
+const scoreClass=s=>s>=68?"score-good":s>=46?"score-mid":"score-bad";
+const recClass=s=>s==="buy"?"buy":s==="caution"?"caution":"skip";
+const form=()=>({
+  src:document.getElementById("src"),
+  url:document.getElementById("url"),
+  brand:document.getElementById("brand"),
+  model:document.getElementById("model"),
+  year:document.getElementById("year"),
+  km:document.getElementById("km"),
+  fuel:document.getElementById("fuel"),
+  price:document.getElementById("price"),
+  text:document.getElementById("text"),
+});
+
+function refFor(s,b,m){const n=txt(`${b||""} ${m||""} ${s||""}`);return refs.find(x=>x.k.some(k=>n.includes(k)))||null}
+function yearFor(s){const m=(s||"").match(/\b(19\d{2}|20[0-2]\d)\b/);return m?+m[1]:null}
+function kmFor(s){const a=(s||"").match(/\b(\d{5,6})\s*km\b/i);if(a)return+a[1];const b=(s||"").match(/\b(\d{2,3})[\s\.,]?(\d{3})\s*km\b/i);return b?+`${b[1]}${b[2]}`:null}
+function fuelFor(s){const n=txt(s);if(n.includes("diesel")||n.includes("tdi")||n.includes("tdci"))return"Diesel";if(n.includes("benzin")||n.includes("fsi"))return"Benzin";return""}
+function issueFor(s){const n=txt(s);return issues.filter(i=>i.k.some(k=>n.includes(k)))}
+
+function analyzeDeal(p){
+  const blob=[p.brand,p.model,p.year,p.km,p.fuel,p.text].filter(Boolean).join(" ");
+  const ref=refFor(blob,p.brand,p.model);
+  const year=+p.year||yearFor(blob)||(ref?ref.y:2007);
+  const km=+p.km||kmFor(blob)||(ref?ref.km:160000);
+  const fuel=p.fuel||fuelFor(blob)||"Benzin";
+  const ask=+p.price||0;
+  const brand=p.brand||ref?.b||"Bilinmiyor";
+  const model=p.model||ref?.m||"Model";
+  const found=issueFor(blob);
+  const repair=found.reduce((a,i)=>a+mid(i.r),0);
+  const prep=found.length?180:110;
+  const transfer=120;
+  let market=ref?ref.p:2400;
+  market+=(year-(ref?.y||2007))*90;
+  market-=Math.round((km-(ref?.km||160000))/10000)*70;
+  if(fuel==="Diesel"&&km>180000)market-=180;
+  market=clamp(Math.round(market/50)*50,900,6500);
+  const riskRaw=found.reduce((a,i)=>a+i.s,0)+Math.max(0,2026-year)*1.35+Math.max(0,(km-120000)/12000)+(ask?0:12);
+  const riskScore=clamp(Math.round(riskRaw),8,94);
+  const risk=riskScore>=58?"high":riskScore>=34?"medium":"low";
+  const discount=risk==="high"?.22:risk==="medium"?.15:.08;
+  const offer=clamp(Math.min(Math.round((market-repair-prep-transfer)*(1-discount)),Math.round((ask||market)*.94)),500,Math.max(700,ask||market));
+  const total=offer+repair+prep+transfer;
+  const exit=clamp(Math.round(market*.96),total+150,8000);
+  const sellCost=Math.round(exit*.06);
+  const profit=exit-total-sellCost;
+  const margin=exit?Math.round(profit/exit*100):0;
+  const score=clamp(Math.round(100-riskScore+Math.max(0,margin)),12,94);
+  let rec="buy";if(profit<250||risk==="high")rec="caution";if(profit<0||(risk==="high"&&repair>900))rec="skip";
+  const summary=rec==="buy"?"AL - kontrollu firsat":rec==="caution"?"DIKKAT - saha teyidi lazim":"ATLA - marj zayif";
+  const strengths=[!found.length?"Belirgin mekanik sorun sinyali yok":"Sorunlar en azindan metinde yakalandi",risk==="low"?"Risk seviyesi dusuk":"Pazarlikta sorun kalemleri kullanilabilir",margin>=14?"Marj flip icin makul":"Kar alani sinirli ama optimize edilebilir",ref?`${ref.m} icin referans var`:"Referans piyasa manuel teyit ister"];
+  const warns=[found.length?`Baslica sorunlar: ${found.map(i=>i.l).join(", ")}`:"Servis gecmisi ve TUV tarihi mutlaka teyit edilmeli",repair>500?"Masraf kalemleri ekspertizle netlesmeli":"Masraf kalemleri gorece kontrollu",km>180000?"Yuksek km cikis suresini uzatabilir":"KM seviyesi tolere edilebilir",`Beklenen satis suresi: ${ref?.s||"12-24 gun"}`];
+  return {id:uid("deal"),src:p.src||"Manual Import",url:p.url||"",city:p.city||"Hamburg",brand,model,title:`${brand} ${model} ${year}`.trim(),year,km,fuel,ask,offer,market,repair,prep,transfer,total,exit,sellCost,profit,margin,score,risk,rec,summary,strengths,warns,text:p.text||"",sourceClass:sourceClass(p.src||"Manual Import")};
+}
+
+function seedWatch(){return demo.map(x=>analyzeDeal({src:x.src,city:x.city,price:x.price,text:x.text}))}
+
+function renderResult(d){
+  const el=document.getElementById("result");
+  el.className="";
+  el.innerHTML=`
+    <div class="summary ${recClass(d.rec)}"><strong style="display:block;font-family:'Space Grotesk',sans-serif;font-size:16px;margin-bottom:8px">${d.summary}</strong>Hedef teklif ${euro(d.offer)} seviyesinde tutulursa tahmini toplam maliyet ${euro(d.total)} oluyor. Hedef cikis ${euro(d.exit)} bandinda. Beklenen net kar ${euro(d.profit)} ve marj %${d.margin}.</div>
+    <div class="row" style="margin:14px 0 12px"><span class="badge ${d.sourceClass}">${d.src}</span><span class="badge risk-${d.risk}">${riskLabel(d.risk)}</span><span class="badge ${scoreClass(d.score)}">Score ${d.score}</span></div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;margin-bottom:10px">${d.title}</div>
+    <div class="muted" style="margin-bottom:14px">${d.city} | ${d.km.toLocaleString("de-DE")} km | ${d.fuel} | Ilan ${euro(d.ask)}</div>
+    <div class="metrics">
+      <div class="metric"><span>Teklif</span><strong>${euro(d.offer)}</strong></div>
+      <div class="metric"><span>Toplam maliyet</span><strong>${euro(d.total)}</strong></div>
+      <div class="metric"><span>Hedef cikis</span><strong>${euro(d.exit)}</strong></div>
+      <div class="metric"><span>Net kar</span><strong>${euro(d.profit)}</strong></div>
+    </div>
+    <div class="split" style="margin-top:12px">
+      <div class="box"><h5>Guclu taraflar</h5><div class="list">${d.strengths.map(x=>`<div>- ${x}</div>`).join("")}</div></div>
+      <div class="box"><h5>Dikkat</h5><div class="list">${d.warns.map(x=>`<div>- ${x}</div>`).join("")}</div></div>
+    </div>
+    <div class="actions" style="margin-top:14px"><button class="btn" id="saveWatchBtn">Watchlist'e ekle</button><button class="btn2" id="savePfBtn">Portfoye al</button></div>`;
+  document.getElementById("saveWatchBtn").onclick=()=>addWatch(d);
+  document.getElementById("savePfBtn").onclick=()=>addPf(d);
+}
+
+function renderBest(){
+  const el=document.getElementById("bestDeal");
+  if(!st.watch.length){el.className="empty";el.textContent="Watchlist bos.";return}
+  const d=[...st.watch].sort((a,b)=>(b.profit+b.score*5)-(a.profit+a.score*5))[0];
+  el.className="";
+  el.innerHTML=`<div class="deal" style="padding:0;background:transparent;border:none;box-shadow:none">
+    <div class="badges"><span class="badge ${d.sourceClass}">${d.src}</span><span class="badge risk-${d.risk}">${riskLabel(d.risk)}</span><span class="badge ${scoreClass(d.score)}">Score ${d.score}</span></div>
+    <h4>${d.title}</h4>
+    <div class="meta"><span class="pill">${euro(d.ask)} ilan</span><span class="pill">${euro(d.offer)} teklif</span><span class="pill">${euro(d.profit)} net kar</span></div>
+    <div class="summary ${recClass(d.rec)}">${d.summary}</div>
+    <div class="inline"><button class="quick" onclick="openWatch('${d.id}')">Intake'e tasi</button><button class="quick" onclick="addPfById('${d.id}')">Portfoye ekle</button></div>
+  </div>`;
+}
+
+function renderWatch(){
+  const q=txt(document.getElementById("search").value);
+  const rf=document.getElementById("riskFilter").value;
+  const sf=document.getElementById("sourceFilter").value;
+  const items=st.watch.filter(d=>(!q||txt(`${d.title} ${d.city} ${d.text}`).includes(q))&&(rf==="all"||d.risk===rf)&&(sf==="all"||d.src===sf));
+  document.getElementById("watch").innerHTML=items.length?items.map(d=>`<div class="deal">
+    <div class="badges"><span class="badge ${d.sourceClass}">${d.src}</span><span class="badge risk-${d.risk}">${riskLabel(d.risk)}</span><span class="badge ${scoreClass(d.score)}">Score ${d.score}</span></div>
+    <h4>${d.title}</h4>
+    <div class="meta"><span class="pill">${d.city}</span><span class="pill">${d.km.toLocaleString("de-DE")} km</span><span class="pill">${euro(d.ask)} ilan</span></div>
+    <div class="summary ${recClass(d.rec)}">${d.summary}</div>
+    <div class="list"><div>- Teklif seviyesi ${euro(d.offer)}</div><div>- Toplam maliyet ${euro(d.total)}</div><div>- Hedef cikis ${euro(d.exit)}</div></div>
+    <div class="inline"><button class="quick" onclick="openWatch('${d.id}')">Intake</button><button class="quick" onclick="addPfById('${d.id}')">Portfoy</button><button class="quick" onclick="dropWatch('${d.id}')">Sil</button></div>
+  </div>`).join(""):`<div class="empty" style="grid-column:1/-1;min-height:220px">Filtreye uyan deal bulunamadi.</div>`;
+}
+
+function renderPf(){
+  const active=st.pf.filter(x=>x.status!=="sold");
+  const expected=active.reduce((a,x)=>a+x.profit,0);
+  const sold=st.pf.filter(x=>x.status==="sold").reduce((a,x)=>a+x.profit,0);
+  document.getElementById("pfActive").textContent=active.length;
+  document.getElementById("pfExpected").textContent=euro(expected);
+  document.getElementById("pfSold").textContent=euro(sold);
+  document.getElementById("navPortfolio").textContent=String(st.pf.length).padStart(2,"0");
+  document.getElementById("pfBody").innerHTML=st.pf.length?st.pf.map(d=>`<tr>
+    <td><strong>${d.title}</strong><br><span style="color:var(--muted)">${d.city} | ${d.km.toLocaleString("de-DE")} km</span></td>
+    <td><span class="status ${d.status}">${d.statusLabel}</span></td>
+    <td>${euro(d.offer)}</td><td>${euro(d.total)}</td><td>${euro(d.exit)}</td><td>${euro(d.profit)}</td>
+    <td><div class="inline"><button class="quick" onclick="cyclePf('${d.id}')">Durum</button><button class="quick" onclick="dropPf('${d.id}')">Sil</button></div></td>
+  </tr>`).join(""):`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">Portfoy bos. Watchlist veya intake'ten arac ekleyebilirsin.</td></tr>`;
+}
+
+function renderStats(){
+  const qualified=st.watch.filter(d=>d.rec==="buy"&&d.risk!=="high").length;
+  const avg=st.watch.length?st.watch.reduce((a,x)=>a+x.profit,0)/st.watch.length:0;
+  const exposure=st.pf.filter(x=>x.status!=="sold").reduce((a,x)=>a+x.total,0);
+  document.getElementById("qualified").textContent=qualified;
+  document.getElementById("avgProfit").textContent=euro(avg);
+  document.getElementById("exposure").textContent=euro(exposure);
+  document.getElementById("navWatch").textContent=String(st.watch.length).padStart(2,"0");
+}
+
+function renderAll(){renderStats();renderBest();renderWatch();renderPf()}
+function switchPage(p){st.page=p;document.querySelectorAll(".page").forEach(x=>x.classList.toggle("active",x.id===`page-${p}`));document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x.dataset.page===p))}
+function addWatch(d){if(!st.watch.some(x=>x.title===d.title&&x.km===d.km&&x.ask===d.ask)){st.watch.unshift(d);save();renderAll()}switchPage("watchlist")}
+function addPf(d){if(!st.pf.some(x=>x.title===d.title&&x.km===d.km&&x.offer===d.offer)){st.pf.unshift({...d,status:"sourcing",statusLabel:"Sourcing"});save();renderAll()}switchPage("portfolio")}
+function addPfById(i){const d=st.watch.find(x=>x.id===i);if(d)addPf(d)}
+function dropWatch(i){st.watch=st.watch.filter(x=>x.id!==i);save();renderAll()}
+function dropPf(i){st.pf=st.pf.filter(x=>x.id!==i);save();renderAll()}
+function cyclePf(i){const o=[["sourcing","Sourcing"],["prep","Hazirlaniyor"],["sold","Satildi"]];st.pf=st.pf.map(x=>{if(x.id!==i)return x;const n=(o.findIndex(a=>a[0]===x.status)+1)%o.length;return {...x,status:o[n][0],statusLabel:o[n][1]}});save();renderAll()}
+function openWatch(i){const d=st.watch.find(x=>x.id===i);if(!d)return;const f=form();f.src.value=d.src;f.url.value=d.url||"";f.brand.value=d.brand;f.model.value=d.model;f.year.value=d.year;f.km.value=d.km;f.fuel.value=d.fuel;f.price.value=d.ask;f.text.value=d.text;st.last=d;renderResult(d);switchPage("intake")}
+function fill(n){const s=samples[n];if(!s)return;const f=form();f.src.value=s.src;f.url.value=s.url;f.brand.value=s.brand;f.model.value=s.model;f.year.value=s.year;f.km.value=s.km;f.fuel.value=s.fuel;f.price.value=s.price;f.text.value=s.text;switchPage("intake")}
+function resetForm(){const f=form();["url","brand","model","year","km","price","text"].forEach(x=>f[x].value="");f.fuel.value="";f.src.value="Kleinanzeigen";document.getElementById("result").className="empty";document.getElementById("result").textContent="Hazir oldugunda ilk deal'i analiz edelim."}
+function run(){const f=form();const p={src:f.src.value,url:f.url.value.trim(),brand:f.brand.value.trim(),model:f.model.value.trim(),year:f.year.value,km:f.km.value,fuel:f.fuel.value,price:f.price.value,text:f.text.value.trim(),city:"Hamburg"};if(!p.text&&!p.brand&&!p.model){document.getElementById("result").className="empty";document.getElementById("result").textContent="Analiz icin en azindan ilan metni veya arac bilgisi girmen gerekiyor.";return}const d=analyzeDeal(p);st.last=d;renderResult(d)}
+
+window.addPfById=addPfById;window.dropWatch=dropWatch;window.dropPf=dropPf;window.cyclePf=cyclePf;window.openWatch=openWatch;
+
+st.watch=load("autonow.watch",[]);st.pf=load("autonow.pf",[]);if(!st.watch.length)st.watch=seedWatch();
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>switchPage(b.dataset.page));
+document.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>switchPage(b.dataset.jump));
+document.querySelectorAll("[data-sample]").forEach(b=>b.onclick=()=>fill(b.dataset.sample));
+document.getElementById("analyzeBtn").onclick=run;
+document.getElementById("resetBtn").onclick=resetForm;
+document.getElementById("goIntake").onclick=()=>switchPage("intake");
+document.getElementById("goWatch").onclick=()=>switchPage("watchlist");
+document.getElementById("loadSample").onclick=()=>fill("golf");
+document.getElementById("search").oninput=renderWatch;
+document.getElementById("riskFilter").onchange=renderWatch;
+document.getElementById("sourceFilter").onchange=renderWatch;
+renderAll();
+switchPage(st.page);
+</script>
+</body>
+</html>

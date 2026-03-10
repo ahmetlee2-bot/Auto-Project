@@ -1,0 +1,412 @@
+:root {
+  --bg: #071019;
+  --surface: #132233;
+  --surface-2: #182c40;
+  --line: #284158;
+  --text: #edf6ff;
+  --muted: #8ea8be;
+  --mint: #8cf0d2;
+  --cyan: #57c7ff;
+  --yellow: #ffc56f;
+  --red: #ff8f7f;
+  --green: #7cffaa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(87, 199, 255, 0.14), transparent 24%),
+    linear-gradient(180deg, #071019, #0b1320);
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.shell {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.hero h1,
+.card h2,
+.resultHero h3,
+.subCard h4 {
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.hero h1 {
+  font-size: 3rem;
+  line-height: 1.02;
+  margin: 8px 0 14px;
+  max-width: 12ch;
+}
+
+.eyebrow {
+  color: var(--mint);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.7rem;
+}
+
+.lead {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.85;
+  max-width: 74ch;
+}
+
+.heroCard,
+.card,
+.subCard,
+.metric {
+  background: linear-gradient(180deg, rgba(19, 34, 51, 0.95), rgba(11, 20, 31, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
+}
+
+.heroCard {
+  padding: 24px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.heroCard span {
+  color: var(--mint);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+.heroCard strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.75rem;
+  line-height: 1.05;
+}
+
+.heroCard p,
+.card p,
+.resultHero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.75;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 16px;
+}
+
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card {
+  padding: 22px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.cardHeader h2 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 8px;
+}
+
+.formGrid .full {
+  grid-column: 1 / -1;
+}
+
+.formGrid span {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+}
+
+.formGrid input,
+.formGrid select,
+.formGrid textarea {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #0e1824;
+  color: var(--text);
+  padding: 13px 14px;
+  outline: none;
+}
+
+.formGrid textarea {
+  min-height: 160px;
+  resize: vertical;
+  line-height: 1.75;
+}
+
+.formActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.primaryButton,
+.secondaryButton {
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+.primaryButton {
+  border: none;
+  background: linear-gradient(135deg, var(--mint), var(--cyan));
+  color: #051019;
+  font-weight: 700;
+}
+
+.secondaryButton {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+}
+
+.emptyState,
+.notice,
+.subCard {
+  padding: 18px;
+}
+
+.emptyState {
+  min-height: 320px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.emptyState strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.resultGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.notice {
+  border-radius: 18px;
+  line-height: 1.75;
+}
+
+.notice strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+}
+
+.notice p {
+  margin-top: 8px;
+}
+
+.noticebuy {
+  background: rgba(124, 255, 170, 0.08);
+  border: 1px solid rgba(124, 255, 170, 0.16);
+}
+
+.noticecaution,
+.noticeWarning {
+  background: rgba(255, 197, 111, 0.08);
+  border: 1px solid rgba(255, 197, 111, 0.16);
+}
+
+.noticeskip {
+  background: rgba(255, 143, 127, 0.08);
+  border: 1px solid rgba(255, 143, 127, 0.16);
+}
+
+.badgeRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.72rem;
+}
+
+.metricGrid,
+.columns {
+  display: grid;
+  gap: 12px;
+}
+
+.metricGrid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 10px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.45rem;
+}
+
+.columns {
+  grid-template-columns: 1fr 1fr;
+}
+
+.collection {
+  display: grid;
+  gap: 12px;
+}
+
+.savedCard {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.savedCard h3 {
+  margin: 8px 0;
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.savedCard p {
+  color: var(--muted);
+  margin: 0 0 6px;
+  line-height: 1.75;
+}
+
+.inlineActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.noteField {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.noteField span {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+}
+
+.noteField textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #0e1824;
+  color: var(--text);
+  padding: 12px 14px;
+  line-height: 1.7;
+}
+
+.subCard h4 {
+  margin: 0 0 10px;
+}
+
+.subCard ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 8px;
+  line-height: 1.7;
+}
+
+@media (max-width: 1100px) {
+  .hero,
+  .grid,
+  .dashboardGrid,
+  .metricGrid,
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding: 20px 14px 40px;
+  }
+
+  .hero h1 {
+    font-size: 2.3rem;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}
