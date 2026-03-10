@@ -7,7 +7,8 @@ $commands = @(
   @{ Label = "Python"; Path = (Resolve-PythonPath); Args = @("--version") },
   @{ Label = "Docker"; Path = (Resolve-DockerPath); Args = @("--version") },
   @{ Label = "Git"; Path = (Resolve-GitPath); Args = @("--version") },
-  @{ Label = "GitHub CLI"; Path = (Resolve-GitHubCliPath); Args = @("--version") }
+  @{ Label = "GitHub CLI"; Path = (Resolve-GitHubCliPath); Args = @("--version") },
+  @{ Label = "cloudflared"; Path = (Resolve-CloudflaredPath); Args = @("--version") }
 )
 
 function Test-CommandWorks {

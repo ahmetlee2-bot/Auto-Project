@@ -89,7 +89,24 @@ export type SearchProfile = {
 
 export type SearchProfileCreate = Omit<SearchProfile, "id" | "created_at">;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+function resolveApiBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (configured !== undefined) {
+    return configured;
+  }
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const port = window.location.port;
+    if ((host === "localhost" || host === "127.0.0.1") && port === "3000") {
+      return "http://localhost:8000";
+    }
+  }
+
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export async function analyzeListing(payload: AnalyzeRequest): Promise<AnalyzeResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/analyze`, {

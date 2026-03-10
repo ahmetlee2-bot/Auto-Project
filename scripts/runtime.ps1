@@ -120,3 +120,29 @@ function Resolve-GitHubCliPath {
 
   return $null
 }
+
+function Resolve-CloudflaredPath {
+  $root = Resolve-Path (Join-Path $PSScriptRoot "..")
+  $localPath = Join-Path $root ".demo-runtime\bin\cloudflared.exe"
+  if (Test-Path $localPath) {
+    return $localPath
+  }
+
+  $fromPath = Get-Command cloudflared -ErrorAction SilentlyContinue
+  if ($fromPath) {
+    return $fromPath.Source
+  }
+
+  $commonPaths = @(
+    "C:\Program Files (x86)\cloudflared\cloudflared.exe",
+    "C:\Program Files\cloudflared\cloudflared.exe"
+  )
+
+  foreach ($path in $commonPaths) {
+    if (Test-Path $path) {
+      return $path
+    }
+  }
+
+  return $null
+}

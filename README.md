@@ -121,6 +121,18 @@ Run frontend quality gate:
 .\scripts\test-frontend.cmd
 ```
 
+Start a password-protected internet demo:
+
+```powershell
+.\scripts\start-private-demo.cmd --bootstrap
+```
+
+Stop the running internet demo:
+
+```powershell
+.\scripts\stop-private-demo.cmd
+```
+
 Run full stack with Docker:
 
 ```powershell
@@ -141,6 +153,15 @@ The frontend script:
 
 - installs npm dependencies when needed
 - starts `next dev`
+
+The private demo launcher:
+
+- prepares backend and frontend production assets
+- starts backend on `127.0.0.1:8000`
+- starts frontend on `127.0.0.1:3000`
+- starts a Basic Auth gateway on `127.0.0.1:8080`
+- downloads a local `cloudflared` binary into `.demo-runtime/bin/` if needed
+- publishes a temporary `trycloudflare.com` URL and stores session metadata in `.demo-runtime/session.json`
 
 ## Container runtime details
 
