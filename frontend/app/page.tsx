@@ -122,6 +122,9 @@ export default function Page() {
       setPortfolio(portfolioData);
       setAppSettings(settingsData);
       setSearchProfiles(searchProfileData);
+      setForm((current) =>
+        current.city === initialForm.city ? { ...current, city: settingsData.preferred_city } : current,
+      );
       setError("");
     } catch (loadError) {
       console.error(loadError);
@@ -135,6 +138,12 @@ export default function Page() {
     event.preventDefault();
     setError("");
     setNotice("");
+
+    if (!form.raw_text?.trim() && !form.url?.trim()) {
+      setError("Ilan metni veya ilan linki girmeden analiz baslatilamaz.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -312,18 +321,17 @@ export default function Page() {
       <section className="hero">
         <div>
           <p className="eyebrow">AUTONOW Phase 1</p>
-          <h1>Analizden sonra kararlar artik backend'de saklaniyor.</h1>
+          <h1>Ilan yapistir, riski gor, teklif cizgisini hemen cikar.</h1>
           <p className="lead">
-            Bu ekran artik sadece intake paneli degil. Analiz sonucunu watchlist ve portfolio'ya kaydedip
-            ayni backend API uzerinden geri okuyabiliyoruz. Bir sonraki mantikli adim artik database
-            uzerinde operator akisini buyutmek. Bu sprintte source parser ve Hamburg buy-box
-            siniflamasi da eklendi.
+            Bu demo artik tek bir operator ekranina donuyor. Amacimiz her seyi elle doldurmak degil;
+            linki veya ilan metnini birakip saniyeler icinde karlilik, risk, pazarlik ve sonraki
+            adimi gorebilmek.
           </p>
         </div>
         <div className="heroCard">
           <span>Current milestone</span>
-          <strong>analysis + parser + buy-box + persistence</strong>
-          <p>SQLite tabani aktif. Frontend artik parser sonucu ve buy-box uygunlugunu da canli okuyor.</p>
+          <strong>operator-first live demo</strong>
+          <p>Hizli intake, saklanan analizler, Hamburg buy-box ve password-protected live URL ayni akista calisiyor.</p>
         </div>
       </section>
 
@@ -341,7 +349,7 @@ export default function Page() {
           <div className="cardHeader">
             <div>
               <h2>Deal Intake</h2>
-              <p>Link veya ilan metnini gir. Backend analizi artik kaydedilebilir sonuc uretiyor.</p>
+              <p>Zorunlu olan sey sadece ilan linki veya ilan metni. Geri kalan alanlar artik opsiyonel.</p>
             </div>
             <button
               className="secondaryButton"
@@ -350,13 +358,8 @@ export default function Page() {
                 setForm({
                   ...initialForm,
                   source: "Kleinanzeigen",
-                  brand: "VW",
-                  model: "Golf",
-                  year: 2006,
-                  km: 178000,
-                  fuel: "Benzin",
                   asking_price: 1350,
-                  city: "Hamburg",
+                  city: appSettings.preferred_city,
                   raw_text: sampleText,
                 })
               }
@@ -365,7 +368,23 @@ export default function Page() {
             </button>
           </div>
 
+          <div className="intakeNote">
+            <strong>Hizli kullanim</strong>
+            <p>
+              Ilan metnini yapistir veya linki birak. Sadece fiyat ilanda net degilse manuel yaz. Marka,
+              model, km ve yakit artik gelismis override alanlarinda.
+            </p>
+          </div>
+
           <div className="formGrid">
+            <label className="full">
+              <span>Ilan metni / notlar</span>
+              <textarea
+                value={form.raw_text ?? ""}
+                onChange={(event) => setForm((current) => ({ ...current, raw_text: event.target.value }))}
+                placeholder={sampleText}
+              />
+            </label>
             <label>
               <span>Kaynak</span>
               <select
@@ -376,69 +395,6 @@ export default function Page() {
                 <option>Facebook Marketplace</option>
                 <option>Mobile.de</option>
                 <option>Manual Import</option>
-              </select>
-            </label>
-            <label>
-              <span>Ilan linki</span>
-              <input
-                value={form.url ?? ""}
-                onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
-            <label>
-              <span>Marka</span>
-              <input
-                value={form.brand ?? ""}
-                onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))}
-                placeholder="VW"
-              />
-            </label>
-            <label>
-              <span>Model</span>
-              <input
-                value={form.model ?? ""}
-                onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
-                placeholder="Golf"
-              />
-            </label>
-            <label>
-              <span>Yil</span>
-              <input
-                type="number"
-                value={form.year ?? ""}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    year: event.target.value ? Number(event.target.value) : null,
-                  }))
-                }
-                placeholder="2007"
-              />
-            </label>
-            <label>
-              <span>KM</span>
-              <input
-                type="number"
-                value={form.km ?? ""}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    km: event.target.value ? Number(event.target.value) : null,
-                  }))
-                }
-                placeholder="148000"
-              />
-            </label>
-            <label>
-              <span>Yakit</span>
-              <select
-                value={form.fuel ?? ""}
-                onChange={(event) => setForm((current) => ({ ...current, fuel: event.target.value }))}
-              >
-                <option value="">Belirtilmedi</option>
-                <option value="Benzin">Benzin</option>
-                <option value="Diesel">Diesel</option>
               </select>
             </label>
             <label>
@@ -456,20 +412,87 @@ export default function Page() {
               />
             </label>
             <label className="full">
-              <span>Ilan metni / notlar</span>
-              <textarea
-                value={form.raw_text ?? ""}
-                onChange={(event) => setForm((current) => ({ ...current, raw_text: event.target.value }))}
-                placeholder={sampleText}
+              <span>Ilan linki (opsiyonel)</span>
+              <input
+                value={form.url ?? ""}
+                onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
+                placeholder="https://..."
               />
             </label>
           </div>
 
+          <details className="detailsBlock">
+            <summary>Gelismis manuel alanlar</summary>
+            <p>Parser eksik okursa sadece burada override girmen yeterli.</p>
+
+            <div className="formGrid compactForm">
+              <label>
+                <span>Marka</span>
+                <input
+                  value={form.brand ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))}
+                  placeholder="VW"
+                />
+              </label>
+              <label>
+                <span>Model</span>
+                <input
+                  value={form.model ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
+                  placeholder="Golf"
+                />
+              </label>
+              <label>
+                <span>Yil</span>
+                <input
+                  type="number"
+                  value={form.year ?? ""}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      year: event.target.value ? Number(event.target.value) : null,
+                    }))
+                  }
+                  placeholder="2007"
+                />
+              </label>
+              <label>
+                <span>KM</span>
+                <input
+                  type="number"
+                  value={form.km ?? ""}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      km: event.target.value ? Number(event.target.value) : null,
+                    }))
+                  }
+                  placeholder="148000"
+                />
+              </label>
+              <label>
+                <span>Yakit</span>
+                <select
+                  value={form.fuel ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, fuel: event.target.value }))}
+                >
+                  <option value="">Belirtilmedi</option>
+                  <option value="Benzin">Benzin</option>
+                  <option value="Diesel">Diesel</option>
+                </select>
+              </label>
+            </div>
+          </details>
+
           <div className="formActions">
             <button className="primaryButton" type="submit" disabled={isLoading}>
-              {isLoading ? "Analiz ediliyor..." : "Backend ile analiz et"}
+              {isLoading ? "Analiz ediliyor..." : "Hizli analiz"}
             </button>
-            <button className="secondaryButton" type="button" onClick={() => setForm(initialForm)}>
+            <button
+              className="secondaryButton"
+              type="button"
+              onClick={() => setForm({ ...initialForm, city: appSettings.preferred_city })}
+            >
               Temizle
             </button>
           </div>
@@ -479,7 +502,7 @@ export default function Page() {
           <div className="cardHeader">
             <div>
               <h2>Analysis Output</h2>
-              <p>Backend'den gelen normalize analiz sonucu burada ve artik kaydedilebilir durumda.</p>
+              <p>Ilk bakista karar ver, detay gerekiyorsa asagidaki notlari ac.</p>
             </div>
           </div>
 
@@ -543,61 +566,73 @@ export default function Page() {
 
               <div className="columns">
                 <div className="subCard">
-                  <h4>Strengths</h4>
+                  <h4>Quick Read</h4>
                   <ul>
-                    {result.strengths.map((item) => (
-                      <li key={item}>{item}</li>
+                    {result.strengths.map((item, index) => (
+                      <li key={`strength-${index}`}>{item}</li>
+                    ))}
+                    {result.warnings.slice(0, 2).map((item, index) => (
+                      <li key={`warning-${index}`}>{item}</li>
                     ))}
                   </ul>
                 </div>
                 <div className="subCard">
-                  <h4>Warnings</h4>
-                  <ul>
-                    {result.warnings.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="subCard">
-                  <h4>Parser Notes</h4>
-                  <ul>
-                    {result.parser_notes.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="subCard">
-                  <h4>Negotiation Plan</h4>
-                  <ul>
-                    {result.negotiation_points.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="subCard">
-                  <h4>Verification Checklist</h4>
-                  <ul>
-                    {(result.verification_notes.length
-                      ? result.verification_notes
-                      : ["Standart kontrol: cold start, test drive, TUV ve alt takim teyidi."]).map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="subCard">
-                  <h4>Buy-box Notes</h4>
-                  <ul>
-                    {result.buy_box_notes.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="subCard">
-                  <h4>Action Prompt</h4>
-                  <p>{result.next_action}</p>
+                  <h4>Negotiation</h4>
                   <p>{result.recommended_message}</p>
+                  <ul>
+                    {result.negotiation_points.slice(0, 3).map((item, index) => (
+                      <li key={`negotiation-${index}`}>{item}</li>
+                    ))}
+                  </ul>
                 </div>
               </div>
+
+              <div className="subCard">
+                <h4>Next Action</h4>
+                <p>{result.next_action}</p>
+              </div>
+
+              <details className="detailsBlock">
+                <summary>Detayli kontrol notlari</summary>
+                <p>Parser, verification ve buy-box detaylari burada. Ilk ekrani sade tutmak icin katlandi.</p>
+
+                <div className="columns">
+                  <div className="subCard">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {result.warnings.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="subCard">
+                    <h4>Parser Notes</h4>
+                    <ul>
+                      {result.parser_notes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="subCard">
+                    <h4>Verification Checklist</h4>
+                    <ul>
+                      {(result.verification_notes.length
+                        ? result.verification_notes
+                        : ["Standart kontrol: cold start, test drive, TUV ve alt takim teyidi."]).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="subCard">
+                    <h4>Buy-box Notes</h4>
+                    <ul>
+                      {result.buy_box_notes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </details>
 
               <div className="formActions">
                 <button className="primaryButton" type="button" onClick={() => void handleSaveToWatchlist()}>
@@ -752,13 +787,13 @@ export default function Page() {
       </section>
 
       <section className="grid">
-        <section className="card">
-          <div className="cardHeader">
+        <details className="card collapseCard">
+          <summary className="cardSummary">
             <div>
               <h2>Operator Settings</h2>
-              <p>Hamburg odakli buy-box ve maliyet varsayimlarini buradan ayarla.</p>
+              <p>Her ziyarette acik kalmasin diye katlandi. Buy-box ve maliyet varsayimlari burada.</p>
             </div>
-          </div>
+          </summary>
 
           <div className="formGrid">
             <label>
@@ -915,15 +950,15 @@ export default function Page() {
               Ayarlari kaydet
             </button>
           </div>
-        </section>
+        </details>
 
-        <section className="card">
-          <div className="cardHeader">
+        <details className="card collapseCard">
+          <summary className="cardSummary">
             <div>
               <h2>Saved Search Profiles</h2>
-              <p>Kullandigin filtreli arama linklerini burada biriktir. Bir sonraki sprintte bunlar otomasyona baglanacak.</p>
+              <p>Arama linkleri ve otomasyon hazirliklari burada. Ana akistan ayirdim.</p>
             </div>
-          </div>
+          </summary>
 
           <div className="formGrid">
             <label>
@@ -1031,7 +1066,7 @@ export default function Page() {
               ))}
             </div>
           )}
-        </section>
+        </details>
       </section>
     </main>
   );

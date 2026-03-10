@@ -136,6 +136,32 @@ button {
   padding: 22px;
 }
 
+.intakeNote,
+.detailsBlock {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.intakeNote {
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.intakeNote strong {
+  display: block;
+  margin-bottom: 6px;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.intakeNote p,
+.detailsBlock p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+  font-size: 0.82rem;
+}
+
 .cardHeader {
   display: flex;
   align-items: flex-start;
@@ -194,6 +220,37 @@ button {
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 18px;
+}
+
+.detailsBlock {
+  margin-top: 16px;
+  padding: 16px 18px;
+}
+
+.detailsBlock summary,
+.cardSummary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.detailsBlock summary::-webkit-details-marker,
+.cardSummary::-webkit-details-marker {
+  display: none;
+}
+
+.detailsBlock summary {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+}
+
+.detailsBlock .formGrid,
+.detailsBlock .columns {
+  margin-top: 14px;
+}
+
+.compactForm input,
+.compactForm select {
+  padding-block: 12px;
 }
 
 .primaryButton,
@@ -390,6 +447,36 @@ button {
   display: grid;
   gap: 8px;
   line-height: 1.7;
+}
+
+.collapseCard {
+  padding: 0;
+  overflow: hidden;
+}
+
+.cardSummary {
+  padding: 22px;
+}
+
+.cardSummary h2 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.cardSummary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.75;
+}
+
+.collapseCard .formGrid,
+.collapseCard .formActions,
+.collapseCard .collection,
+.collapseCard .emptyState {
+  margin: 0 22px 22px;
 }
 
 @media (max-width: 1100px) {
