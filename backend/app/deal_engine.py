@@ -1,26 +1,40 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from .buy_box import assess_buy_box
 from .reference_data import ISSUE_LIBRARY, VEHICLE_REFERENCES
 from .schemas import AnalyzeRequest, AnalyzeResponse
+from .source_parser import parse_listing
 
 
 def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
     raw_text = (payload.raw_text or "").strip()
+    parsed = parse_listing(payload)
+
     blob = " ".join(
         str(value)
-        for value in [payload.brand, payload.model, payload.year, payload.km, payload.fuel, raw_text]
-        if value
+        for value in [
+            payload.brand,
+            payload.model,
+            payload.year,
+            payload.km,
+            payload.fuel,
+            payload.asking_price,
+            raw_text,
+        ]
+        if value is not None and value != ""
     )
-    ref = _find_reference(blob, payload.brand, payload.model)
-    year = payload.year or _extract_year(blob) or (ref["baseline_year"] if ref else 2007)
-    km = payload.km or _extract_km(blob) or (ref["baseline_km"] if ref else 160000)
-    fuel = payload.fuel or _extract_fuel(blob) or "Benzin"
-    asking_price = payload.asking_price or 0
-    brand = payload.brand or (ref["brand"] if ref else "Bilinmiyor")
-    model = payload.model or (ref["model"] if ref else "Model")
+
+    ref = _find_reference(blob, payload.brand or parsed.brand, payload.model or parsed.model)
+    year = payload.year or parsed.year or (ref["baseline_year"] if ref else 2007)
+    km = payload.km or parsed.km or (ref["baseline_km"] if ref else 160000)
+    fuel = payload.fuel or parsed.fuel or "Benzin"
+    asking_price = payload.asking_price if payload.asking_price is not None else (parsed.asking_price or 0)
+    brand = payload.brand or parsed.brand or (ref["brand"] if ref else "Bilinmiyor")
+    model = payload.model or parsed.model or (ref["model"] if ref else "Model")
+    city = payload.city or parsed.city or "Hamburg"
+
     detected_issues = _detect_issues(blob)
 
     repair_cost = sum(_midpoint(issue["repair_range"]) for issue in detected_issues)
@@ -49,17 +63,30 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
 
     discount = 0.22 if risk_level == "high" else 0.15 if risk_level == "medium" else 0.08
     suggested_offer = round((market_price - repair_cost - prep_cost - transfer_cost) * (1 - discount))
-    offer_price = _clamp(min(suggested_offer, round((asking_price or market_price) * 0.94)), 500, max(700, asking_price or market_price))
+    offer_ceiling = max(700, asking_price or market_price)
+    offer_reference = asking_price or market_price
+    offer_price = _clamp(min(suggested_offer, round(offer_reference * 0.94)), 500, offer_ceiling)
     total_cost = offer_price + repair_cost + prep_cost + transfer_cost
     target_sale_price = _clamp(round(market_price * 0.96), total_cost + 150, 8000)
     sales_cost = round(target_sale_price * 0.06)
     net_profit = target_sale_price - total_cost - sales_cost
     margin_percent = round((net_profit / target_sale_price) * 100) if target_sale_price else 0
 
+    buy_box_status, buy_box_notes = assess_buy_box(
+        city=city,
+        year=year,
+        km=km,
+        fuel=fuel,
+        asking_price=asking_price,
+        net_profit=net_profit,
+        margin_percent=margin_percent,
+        risk_level=risk_level,
+    )
+
     recommendation = "buy"
-    if net_profit < 250 or risk_level == "high":
+    if net_profit < 250 or risk_level == "high" or buy_box_status == "review":
         recommendation = "caution"
-    if net_profit < 0 or (risk_level == "high" and repair_cost > 900):
+    if net_profit < 0 or buy_box_status == "out" or (risk_level == "high" and repair_cost > 900):
         recommendation = "skip"
 
     summary = {
@@ -73,6 +100,7 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
         "Risk seviyesi dusuk" if risk_level == "low" else "Pazarlikta sorun kalemleri kullanilabilir",
         "Marj flip icin makul" if margin_percent >= 14 else "Kar alani sinirli ama optimize edilebilir",
         f"{ref['model']} icin referans var" if ref else "Referans piyasa manuel teyit ister",
+        f"Parser: {parsed.source_parser}",
     ]
 
     warnings = [
@@ -82,27 +110,30 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
         f"Beklenen satis suresi: {ref['sell_days'] if ref else '12-24 gun'}",
     ]
 
-    confidence_score = 88
-    verification_notes: list[str] = []
+    confidence_score = parsed.parser_confidence + 18
+    verification_notes = list(parsed.parser_notes)
 
     if not ref:
         confidence_score -= 12
         verification_notes.append("Referans piyasa eslesmesi yok; benzer ilanlari manual karsilastir.")
-    if not payload.asking_price:
+    if not asking_price:
         confidence_score -= 18
         verification_notes.append("Istenen fiyat eksik; pazarlik seviyesi sahada teyit edilmeli.")
-    if not payload.brand or not payload.model:
+    if not payload.brand and not parsed.brand:
         confidence_score -= 8
-        verification_notes.append("Marka veya model tam girilmedi; cikarim ilan metnine dayaniyor.")
-    if not payload.year:
+        verification_notes.append("Marka bilgisi cikarilamadi; ilan basligini manuel kontrol et.")
+    if not payload.model and not parsed.model:
+        confidence_score -= 8
+        verification_notes.append("Model bilgisi cikarilamadi; yanlis eslesme riski var.")
+    if not payload.year and not parsed.year:
         confidence_score -= 6
-        verification_notes.append("Model yili metinden cikarildi; ruhsat veya VIN ile kontrol et.")
-    if not payload.km:
+        verification_notes.append("Model yili net degil; ruhsat veya VIN ile kontrol et.")
+    if not payload.km and not parsed.km:
         confidence_score -= 8
-        verification_notes.append("KM bilgisi metinden cikarildi; gosterge ve servis kaydiyla dogrula.")
-    if not payload.fuel:
+        verification_notes.append("KM bilgisi cikarilamadi; gosterge ve servis kaydiyla dogrula.")
+    if not payload.fuel and not parsed.fuel:
         confidence_score -= 4
-        verification_notes.append("Yakit tipi default veya metin tahminiyle geldi; ilani tekrar kontrol et.")
+        verification_notes.append("Yakit tipi default veya zayif cikarimla geldi; ilani tekrar kontrol et.")
     if not raw_text:
         confidence_score -= 10
         verification_notes.append("Ilan metni yok; fotograf ve satici gorusmesi daha kritik.")
@@ -117,23 +148,30 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
         verification_notes.append("Risk yuksek; lift gormeden baglanma ve kapora verme.")
     if km > 220000:
         confidence_score -= 6
-        verification_notes.append("KM cok yuksek; motor, sanziman ve yuruyen kontrolu derin olmalı.")
+        verification_notes.append("KM cok yuksek; motor, sanziman ve yuruyen kontrolu derin olmali.")
+    if buy_box_status == "out":
+        confidence_score -= 8
+        verification_notes.append("Buy-box disinda kaliyor; kriter disi oldugu icin ekstra temkinli ol.")
 
     confidence_score = _clamp(confidence_score, 24, 96)
     verification_notes = _dedupe_notes(verification_notes)
+    buy_box_notes = _dedupe_notes(buy_box_notes)
     verification_required = (
         confidence_score < 72
         or risk_level != "low"
-        or not payload.asking_price
+        or not asking_price
         or not ref
         or bool(detected_issues)
+        or buy_box_status != "fit"
     )
+
     negotiation_points = _build_negotiation_points(
         asking_price=asking_price,
         offer_price=offer_price,
         km=km,
         risk_level=risk_level,
         detected_issues=detected_issues,
+        buy_box_status=buy_box_status,
     )
     recommended_message = _build_recommended_message(
         title=f"{brand} {model} {year}".strip(),
@@ -145,6 +183,7 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
         recommendation=recommendation,
         risk_level=risk_level,
         verification_required=verification_required,
+        buy_box_status=buy_box_status,
     )
 
     return AnalyzeResponse(
@@ -153,7 +192,7 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
         model=model,
         title=f"{brand} {model} {year}".strip(),
         source=payload.source,
-        city=payload.city,
+        city=city,
         year=year,
         km=km,
         fuel=fuel,
@@ -165,6 +204,11 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
         margin_percent=margin_percent,
         risk_level=risk_level,
         recommendation=recommendation,
+        source_parser=parsed.source_parser,
+        parser_confidence=parsed.parser_confidence,
+        parser_notes=parsed.parser_notes,
+        buy_box_status=buy_box_status,
+        buy_box_notes=buy_box_notes,
         confidence_score=confidence_score,
         verification_required=verification_required,
         verification_notes=verification_notes,
@@ -183,32 +227,6 @@ def _find_reference(text: str, brand: str | None, model: str | None) -> dict[str
     for item in VEHICLE_REFERENCES:
         if any(keyword in normalized for keyword in item["keywords"]):
             return item
-    return None
-
-
-def _extract_year(text: str) -> int | None:
-    match = re.search(r"\b(19\d{2}|20[0-2]\d)\b", text)
-    return int(match.group(1)) if match else None
-
-
-def _extract_km(text: str) -> int | None:
-    direct = re.search(r"\b(\d{5,6})\s*km\b", text, flags=re.IGNORECASE)
-    if direct:
-        return int(direct.group(1))
-
-    grouped = re.search(r"\b(\d{2,3})[\s\.,]?(\d{3})\s*km\b", text, flags=re.IGNORECASE)
-    if grouped:
-        return int(f"{grouped.group(1)}{grouped.group(2)}")
-
-    return None
-
-
-def _extract_fuel(text: str) -> str | None:
-    normalized = text.lower()
-    if "diesel" in normalized or "tdi" in normalized or "tdci" in normalized:
-        return "Diesel"
-    if "benzin" in normalized or "fsi" in normalized:
-        return "Benzin"
     return None
 
 
@@ -237,11 +255,13 @@ def _dedupe_notes(items: list[str]) -> list[str]:
 
 
 def _build_negotiation_points(
+    *,
     asking_price: int,
     offer_price: int,
     km: int,
     risk_level: str,
     detected_issues: list[dict[str, Any]],
+    buy_box_status: str,
 ) -> list[str]:
     points: list[str] = []
 
@@ -268,11 +288,14 @@ def _build_negotiation_points(
         points.append("Kapora veya anlik soz verme; once test surusu ve OBD/usta gorusu al.")
     else:
         points.append("Fiyat uygunsa ayni gun gorup hizli kapatma avantaji kullan.")
+    if buy_box_status == "out":
+        points.append("Buy-box disi oldugu icin teklifini sert tut ve tavana cikma.")
 
     return _dedupe_notes(points)
 
 
 def _build_recommended_message(
+    *,
     title: str,
     offer_price: int,
     detected_issues: list[dict[str, Any]],
@@ -296,11 +319,13 @@ def _build_recommended_message(
 
 
 def _build_next_action(
+    *,
     recommendation: str,
     risk_level: str,
     verification_required: bool,
+    buy_box_status: str,
 ) -> str:
-    if recommendation == "skip":
+    if recommendation == "skip" or buy_box_status == "out":
         return "Bu ilani pas gec, ancak satici ciddi fiyat dusurse yeniden bak."
     if recommendation == "caution" or verification_required or risk_level != "low":
         return "Sahada kontrol listesiyle ilerle; net teyit olmadan teklif baglama."

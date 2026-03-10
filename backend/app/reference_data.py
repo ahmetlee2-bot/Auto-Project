@@ -8,7 +8,7 @@ VEHICLE_REFERENCES = [
 ]
 
 ISSUE_LIBRARY = [
-    {"keywords": ["tuv", "tüv"], "label": "TUV / muayene", "repair_range": (80, 250), "risk_score": 16},
+    {"keywords": ["tuv", "tuev"], "label": "TUV / muayene", "repair_range": (80, 250), "risk_score": 16},
     {"keywords": ["motorleuchte", "motor lambasi", "check engine"], "label": "Motor ikaz", "repair_range": (180, 650), "risk_score": 24},
     {"keywords": ["klima"], "label": "Klima", "repair_range": (120, 380), "risk_score": 10},
     {"keywords": ["kupplung", "debriyaj"], "label": "Kupplung", "repair_range": (350, 900), "risk_score": 24},
@@ -20,3 +20,28 @@ ISSUE_LIBRARY = [
     {"keywords": ["lastik", "reifen"], "label": "Lastik", "repair_range": (180, 420), "risk_score": 10},
 ]
 
+HAMBURG_CITY_ALIASES = [
+    "hamburg",
+    "wandsbek",
+    "altona",
+    "harburg",
+    "bergedorf",
+    "eimsbuettel",
+    "eimsbuttel",
+    "winterhude",
+    "barmbek",
+    "stellingen",
+    "pinneberg",
+    "norderstedt",
+]
+
+HAMBURG_BUY_BOX = {
+    "preferred_city": "Hamburg",
+    "max_asking_price": 5000,
+    "min_net_profit": 550,
+    "min_margin_percent": 18,
+    "max_km_benzin": 210000,
+    "max_km_diesel": 190000,
+    "min_year": 2005,
+    "max_risk_level": "medium",
+}

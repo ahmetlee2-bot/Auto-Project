@@ -45,9 +45,13 @@ def test_analyze_endpoint(client: TestClient) -> None:
     assert data["brand"] == "VW"
     assert data["offer_price"] > 0
     assert data["recommendation"] in {"buy", "caution", "skip"}
+    assert data["source_parser"] == "kleinanzeigen"
+    assert data["buy_box_status"] in {"fit", "review", "out"}
     assert 0 <= data["confidence_score"] <= 100
     assert isinstance(data["verification_required"], bool)
     assert isinstance(data["verification_notes"], list)
+    assert isinstance(data["parser_notes"], list)
+    assert isinstance(data["buy_box_notes"], list)
     assert isinstance(data["negotiation_points"], list)
     assert data["recommended_message"]
     assert data["next_action"]
@@ -72,6 +76,11 @@ def test_watchlist_endpoints(client: TestClient) -> None:
         "margin_percent": 25,
         "risk_level": "medium",
         "recommendation": "buy",
+        "source_parser": "kleinanzeigen",
+        "parser_confidence": 76,
+        "parser_notes": ["Kleinanzeigen parser aktif."],
+        "buy_box_status": "review",
+        "buy_box_notes": ["Hamburg operasyonu icin lokal takip uygun."],
         "confidence_score": 66,
         "verification_required": True,
         "verification_notes": ["TUV ve klima masrafi ekspertizle teyit edilmeli."],
@@ -94,6 +103,7 @@ def test_watchlist_endpoints(client: TestClient) -> None:
     list_body = listed.json()
     assert len(list_body) == 1
     assert list_body[0]["title"] == "VW Golf 2006"
+    assert list_body[0]["source_parser"] == "kleinanzeigen"
     assert list_body[0]["confidence_score"] == 66
     assert list_body[0]["verification_required"] is True
     assert list_body[0]["recommended_message"]
@@ -129,6 +139,11 @@ def test_portfolio_endpoints(client: TestClient) -> None:
         "margin_percent": 31,
         "risk_level": "medium",
         "recommendation": "buy",
+        "source_parser": "mobile.de",
+        "parser_confidence": 82,
+        "parser_notes": ["Mobile.de parser aktif."],
+        "buy_box_status": "fit",
+        "buy_box_notes": ["Net kar hedef seviyeyi geciyor."],
         "confidence_score": 71,
         "verification_required": True,
         "verification_notes": ["Motor ikaz nedeni usta tarafindan okunmali."],
@@ -149,6 +164,7 @@ def test_portfolio_endpoints(client: TestClient) -> None:
     updated = client.patch(f"/api/v1/portfolio/{created_body['id']}", json={"status": "prep"})
     assert updated.status_code == 200
     assert updated.json()["status"] == "prep"
+    assert updated.json()["buy_box_status"] == "fit"
     assert updated.json()["confidence_score"] == 71
 
     noted = client.patch(

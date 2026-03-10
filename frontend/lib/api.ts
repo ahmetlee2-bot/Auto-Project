@@ -29,6 +29,11 @@ export type AnalyzeResponse = {
   margin_percent: number;
   risk_level: "low" | "medium" | "high";
   recommendation: "buy" | "caution" | "skip";
+  source_parser: string;
+  parser_confidence: number;
+  parser_notes: string[];
+  buy_box_status: "fit" | "review" | "out";
+  buy_box_notes: string[];
   confidence_score: number;
   verification_required: boolean;
   verification_notes: string[];

@@ -201,6 +201,7 @@ export default function Page() {
   const activePortfolio = portfolio.filter((item) => item.status !== "sold");
   const expectedProfit = activePortfolio.reduce((total, item) => total + item.net_profit, 0);
   const soldProfit = portfolio.filter((item) => item.status === "sold").reduce((total, item) => total + item.net_profit, 0);
+  const buyBoxFitDeals = watchlist.filter((item) => item.buy_box_status === "fit").length;
 
   return (
     <main className="shell">
@@ -211,20 +212,21 @@ export default function Page() {
           <p className="lead">
             Bu ekran artik sadece intake paneli degil. Analiz sonucunu watchlist ve portfolio'ya kaydedip
             ayni backend API uzerinden geri okuyabiliyoruz. Bir sonraki mantikli adim artik database
-            uzerinde operator akisini buyutmek. Bu sprintte confidence skoru ve manual verification
-            bandi da eklendi.
+            uzerinde operator akisini buyutmek. Bu sprintte source parser ve Hamburg buy-box
+            siniflamasi da eklendi.
           </p>
         </div>
         <div className="heroCard">
           <span>Current milestone</span>
-          <strong>analysis + persistence + confidence guardrails</strong>
-          <p>SQLite tabani aktif. Frontend artik hem kayitlari hem de verification ihtiyacini canli okuyor.</p>
+          <strong>analysis + parser + buy-box + persistence</strong>
+          <p>SQLite tabani aktif. Frontend artik parser sonucu ve buy-box uygunlugunu da canli okuyor.</p>
         </div>
       </section>
 
       <section className="dashboardGrid">
         <MetricCard label="Watchlist deals" value={String(watchlist.length)} />
         <MetricCard label="Portfolio deals" value={String(portfolio.length)} />
+        <MetricCard label="Buy-box fit" value={String(buyBoxFitDeals)} />
         <MetricCard label="Expected profit" value={`${expectedProfit} EUR`} />
         <MetricCard label="Sold profit" value={`${soldProfit} EUR`} />
       </section>
@@ -395,6 +397,8 @@ export default function Page() {
                     <span className="pill">{result.source}</span>
                     <span className="pill">{result.risk_level}</span>
                     <span className="pill">{result.recommendation}</span>
+                    <span className="pill">{buyBoxLabel(result.buy_box_status)}</span>
+                    <span className="pill">parser {result.source_parser}</span>
                     <span className="pill">{confidenceLabel(result.confidence_score)}</span>
                   </div>
                   <h3>{result.title}</h3>
@@ -420,6 +424,18 @@ export default function Page() {
                 </div>
               ) : null}
 
+              {result.buy_box_status !== "fit" ? (
+                <div className="notice noticecaution">
+                  <strong>Buy-box {result.buy_box_status}</strong>
+                  <p>Bu ilan senin Hamburg flip kriterlerine tam oturmuyor olabilir.</p>
+                </div>
+              ) : (
+                <div className="notice noticebuy">
+                  <strong>Buy-box fit</strong>
+                  <p>Bu ilan mevcut Hamburg hedeflerine gore uygun gorunuyor.</p>
+                </div>
+              )}
+
               <div className="columns">
                 <div className="subCard">
                   <h4>Strengths</h4>
@@ -438,6 +454,14 @@ export default function Page() {
                   </ul>
                 </div>
                 <div className="subCard">
+                  <h4>Parser Notes</h4>
+                  <ul>
+                    {result.parser_notes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="subCard">
                   <h4>Negotiation Plan</h4>
                   <ul>
                     {result.negotiation_points.map((item) => (
@@ -451,6 +475,14 @@ export default function Page() {
                     {(result.verification_notes.length
                       ? result.verification_notes
                       : ["Standart kontrol: cold start, test drive, TUV ve alt takim teyidi."]).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="subCard">
+                  <h4>Buy-box Notes</h4>
+                  <ul>
+                    {result.buy_box_notes.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
@@ -500,6 +532,8 @@ export default function Page() {
                   <div className="badgeRow">
                     <span className="pill">{deal.source}</span>
                     <span className="pill">{deal.risk_level}</span>
+                    <span className="pill">{buyBoxLabel(deal.buy_box_status)}</span>
+                    <span className="pill">parser {deal.source_parser}</span>
                     <span className="pill">{confidenceLabel(deal.confidence_score)}</span>
                     {deal.verification_required ? <span className="pill">manual check</span> : null}
                   </div>
@@ -508,6 +542,7 @@ export default function Page() {
                     Offer {deal.offer_price} EUR | Net {deal.net_profit} EUR | Margin %{deal.margin_percent}
                   </p>
                   <p>Verification: {deal.verification_notes[0] ?? "Ek saha teyidi notu yok."}</p>
+                  <p>Buy-box: {deal.buy_box_notes[0] ?? "Kural notu yok."}</p>
                   <p>Next step: {deal.next_action}</p>
                   <p>Message: {deal.recommended_message}</p>
                   <label className="noteField">
@@ -564,6 +599,8 @@ export default function Page() {
                   <div className="badgeRow">
                     <span className="pill">{deal.status}</span>
                     <span className="pill">{deal.source}</span>
+                    <span className="pill">{buyBoxLabel(deal.buy_box_status)}</span>
+                    <span className="pill">parser {deal.source_parser}</span>
                     <span className="pill">{confidenceLabel(deal.confidence_score)}</span>
                   </div>
                   <h3>{deal.title}</h3>
@@ -575,6 +612,7 @@ export default function Page() {
                       ? `Verification: ${deal.verification_notes[0] ?? "Manual kontrol oneriliyor."}`
                       : "Verification: confidence seviyesi bu analiz icin daha guclu."}
                   </p>
+                  <p>Buy-box: {deal.buy_box_notes[0] ?? "Kural notu yok."}</p>
                   <p>Next step: {deal.next_action}</p>
                   <p>Message: {deal.recommended_message}</p>
                   <label className="noteField">
@@ -637,6 +675,16 @@ function confidenceLabel(score: number): string {
     return `medium confidence ${score}`;
   }
   return `low confidence ${score}`;
+}
+
+function buyBoxLabel(status: "fit" | "review" | "out"): string {
+  if (status === "fit") {
+    return "buy-box fit";
+  }
+  if (status === "review") {
+    return "buy-box review";
+  }
+  return "buy-box out";
 }
 
 function noteKey(scope: "watchlist" | "portfolio", id: number): string {

@@ -25,6 +25,7 @@ The goal is to first build a reliable operator cockpit.
 
 The current API also returns a confidence score and manual verification notes so the operator can see where the model is weak before committing money.
 It now also returns negotiation points, a recommended opening message, and a next action so each analysis can turn into an operator task.
+The latest sprint adds source-aware parsing and a Hamburg-focused buy-box score so each listing can be evaluated against the operator profile instead of generic text rules alone.
 
 ## Tech direction
 
@@ -192,12 +193,13 @@ This is enough for the current phase because the frontend is still a thin intake
 - SQLite-backed watchlist and portfolio persistence
 - confidence guardrails for risky or incomplete listings
 - negotiation guidance and operator notes for saved deals
+- source-aware parsing and Hamburg buy-box assessment
 - clean separation between prototype and real product code
 
 ## Immediate next milestone
 
 Now that runtimes are prepared and the first test gate passes, the next development target should be:
 
-1. source-aware listing parsers and safer extraction
-2. repository abstraction to support PostgreSQL after SQLite
-3. Hamburg-focused buy rules and editable cost assumptions
+1. repository abstraction to support PostgreSQL after SQLite
+2. editable repair, prep, and target margin assumptions
+3. semi-automatic source ingestion from saved search URLs

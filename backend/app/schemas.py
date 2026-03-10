@@ -34,6 +34,11 @@ class AnalyzeResponse(BaseModel):
     margin_percent: int
     risk_level: Literal["low", "medium", "high"]
     recommendation: Literal["buy", "caution", "skip"]
+    source_parser: str
+    parser_confidence: int = Field(ge=0, le=100)
+    parser_notes: list[str]
+    buy_box_status: Literal["fit", "review", "out"]
+    buy_box_notes: list[str]
     confidence_score: int = Field(ge=0, le=100)
     verification_required: bool
     verification_notes: list[str]
@@ -64,6 +69,11 @@ class SavedDealCreate(BaseModel):
     margin_percent: int
     risk_level: Literal["low", "medium", "high"]
     recommendation: Literal["buy", "caution", "skip"]
+    source_parser: str
+    parser_confidence: int = Field(ge=0, le=100)
+    parser_notes: list[str]
+    buy_box_status: Literal["fit", "review", "out"]
+    buy_box_notes: list[str]
     confidence_score: int = Field(ge=0, le=100)
     verification_required: bool
     verification_notes: list[str]
