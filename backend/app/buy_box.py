@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from .reference_data import HAMBURG_BUY_BOX
+from .schemas import AppSettings
 
 
 def assess_buy_box(
     *,
+    app_settings: AppSettings,
     city: str,
     year: int,
     km: int,
@@ -18,34 +19,34 @@ def assess_buy_box(
     hard_fail = False
     soft_miss_count = 0
 
-    if city.lower() == HAMBURG_BUY_BOX["preferred_city"].lower():
+    if city.lower() == app_settings.preferred_city.lower():
         notes.append("Hamburg operasyonu icin lokal takip uygun.")
     else:
         notes.append("Hamburg disi lojistik maliyeti ve zaman etkisi olabilir.")
         soft_miss_count += 1
 
-    if asking_price and asking_price <= HAMBURG_BUY_BOX["max_asking_price"]:
+    if asking_price and asking_price <= app_settings.max_asking_price:
         notes.append("Alis butcesi buy-box tavaninin icinde.")
     else:
         notes.append("Ilan fiyati buy-box tavanini asiyor.")
         hard_fail = True
 
-    if net_profit >= HAMBURG_BUY_BOX["min_net_profit"]:
+    if net_profit >= app_settings.min_net_profit:
         notes.append("Net kar hedef seviyeyi geciyor.")
     else:
         notes.append("Net kar hedefin altinda.")
         hard_fail = True
 
-    if margin_percent >= HAMBURG_BUY_BOX["min_margin_percent"]:
+    if margin_percent >= app_settings.min_margin_percent:
         notes.append("Marj oranı flip hedefinle uyumlu.")
     else:
         notes.append("Marj oranı zayif; pazarlik veya cikis fiyatı iyilesmeli.")
         soft_miss_count += 1
 
     max_km = (
-        HAMBURG_BUY_BOX["max_km_diesel"]
+        app_settings.max_km_diesel
         if fuel.lower() == "diesel"
-        else HAMBURG_BUY_BOX["max_km_benzin"]
+        else app_settings.max_km_benzin
     )
     if km <= max_km:
         notes.append("KM seviyesi mevcut yakit tipi icin kabul edilebilir.")
@@ -53,7 +54,7 @@ def assess_buy_box(
         notes.append("KM seviyesi buy-box limitinin ustunde.")
         hard_fail = True
 
-    if year >= HAMBURG_BUY_BOX["min_year"]:
+    if year >= app_settings.min_year:
         notes.append("Model yili hedef alt sinirin ustunde.")
     else:
         notes.append("Model yili cok eski; cikis hizi dusabilir.")

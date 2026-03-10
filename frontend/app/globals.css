@@ -235,6 +235,11 @@ button {
   margin-bottom: 8px;
 }
 
+.compactState {
+  min-height: 180px;
+  margin-top: 16px;
+}
+
 .resultGrid {
   display: grid;
   gap: 14px;

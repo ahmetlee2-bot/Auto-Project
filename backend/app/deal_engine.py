@@ -4,11 +4,12 @@ from typing import Any
 
 from .buy_box import assess_buy_box
 from .reference_data import ISSUE_LIBRARY, VEHICLE_REFERENCES
-from .schemas import AnalyzeRequest, AnalyzeResponse
+from .schemas import AnalyzeRequest, AnalyzeResponse, AppSettings
 from .source_parser import parse_listing
 
 
-def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
+def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = None) -> AnalyzeResponse:
+    app_settings = app_settings or AppSettings()
     raw_text = (payload.raw_text or "").strip()
     parsed = parse_listing(payload)
 
@@ -38,8 +39,8 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
     detected_issues = _detect_issues(blob)
 
     repair_cost = sum(_midpoint(issue["repair_range"]) for issue in detected_issues)
-    prep_cost = 180 if detected_issues else 110
-    transfer_cost = 120
+    prep_cost = app_settings.issue_prep_cost if detected_issues else app_settings.clean_prep_cost
+    transfer_cost = app_settings.transfer_cost
 
     market_price = ref["market_price"] if ref else 2400
     market_price += (year - (ref["baseline_year"] if ref else 2007)) * 90
@@ -61,18 +62,30 @@ def analyze_listing(payload: AnalyzeRequest) -> AnalyzeResponse:
     else:
         risk_level = "low"
 
-    discount = 0.22 if risk_level == "high" else 0.15 if risk_level == "medium" else 0.08
+    discount_percent = (
+        app_settings.high_risk_discount_percent
+        if risk_level == "high"
+        else app_settings.medium_risk_discount_percent
+        if risk_level == "medium"
+        else app_settings.low_risk_discount_percent
+    )
+    discount = discount_percent / 100
     suggested_offer = round((market_price - repair_cost - prep_cost - transfer_cost) * (1 - discount))
     offer_ceiling = max(700, asking_price or market_price)
     offer_reference = asking_price or market_price
     offer_price = _clamp(min(suggested_offer, round(offer_reference * 0.94)), 500, offer_ceiling)
     total_cost = offer_price + repair_cost + prep_cost + transfer_cost
-    target_sale_price = _clamp(round(market_price * 0.96), total_cost + 150, 8000)
-    sales_cost = round(target_sale_price * 0.06)
+    target_sale_price = _clamp(
+        round(market_price * (1 - (app_settings.exit_discount_percent / 100))),
+        total_cost + 150,
+        8000,
+    )
+    sales_cost = round(target_sale_price * (app_settings.sales_cost_percent / 100))
     net_profit = target_sale_price - total_cost - sales_cost
     margin_percent = round((net_profit / target_sale_price) * 100) if target_sale_price else 0
 
     buy_box_status, buy_box_notes = assess_buy_box(
+        app_settings=app_settings,
         city=city,
         year=year,
         km=km,

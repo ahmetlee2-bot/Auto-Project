@@ -16,6 +16,24 @@ class AnalyzeRequest(BaseModel):
     raw_text: str | None = None
 
 
+class AppSettings(BaseModel):
+    preferred_city: str = "Hamburg"
+    max_asking_price: int = Field(default=5000, ge=500)
+    min_net_profit: int = Field(default=550, ge=0)
+    min_margin_percent: int = Field(default=18, ge=0, le=100)
+    max_km_benzin: int = Field(default=210000, ge=0)
+    max_km_diesel: int = Field(default=190000, ge=0)
+    min_year: int = Field(default=2005, ge=1980, le=2030)
+    clean_prep_cost: int = Field(default=110, ge=0)
+    issue_prep_cost: int = Field(default=180, ge=0)
+    transfer_cost: int = Field(default=120, ge=0)
+    sales_cost_percent: int = Field(default=6, ge=0, le=40)
+    exit_discount_percent: int = Field(default=4, ge=0, le=40)
+    low_risk_discount_percent: int = Field(default=8, ge=0, le=40)
+    medium_risk_discount_percent: int = Field(default=15, ge=0, le=50)
+    high_risk_discount_percent: int = Field(default=22, ge=0, le=60)
+
+
 class AnalyzeResponse(BaseModel):
     url: str | None = None
     brand: str
@@ -103,3 +121,24 @@ class PortfolioStatusUpdate(BaseModel):
 
 class OperatorNoteUpdate(BaseModel):
     operator_note: str = Field(default="", max_length=2000)
+
+
+class SearchProfileCreate(BaseModel):
+    label: str = Field(min_length=2, max_length=80)
+    source: str
+    search_url: str = Field(min_length=8, max_length=2000)
+    city: str = "Hamburg"
+    max_price: int | None = Field(default=None, ge=0)
+    min_year: int | None = Field(default=None, ge=1980, le=2030)
+    min_profit: int | None = Field(default=None, ge=0)
+    notes: str = Field(default="", max_length=2000)
+    active: bool = True
+
+
+class SearchProfile(SearchProfileCreate):
+    id: int
+    created_at: str
+
+
+class SearchProfileStatusUpdate(BaseModel):
+    active: bool

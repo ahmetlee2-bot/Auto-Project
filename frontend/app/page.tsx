@@ -2,19 +2,27 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import {
+  AppSettings,
   AnalyzeRequest,
   AnalyzeResponse,
   PortfolioDeal,
   SavedDeal,
+  SearchProfile,
   analyzeListing,
+  createSearchProfile,
   createPortfolioDeal,
   createWatchlistDeal,
+  deleteSearchProfile,
   deletePortfolioDeal,
   deleteWatchlistDeal,
+  fetchAppSettings,
   fetchPortfolio,
+  fetchSearchProfiles,
   fetchWatchlist,
+  updateAppSettings,
   updatePortfolioNote,
   updatePortfolioStatus,
+  updateSearchProfileStatus,
   updateWatchlistNote,
 } from "../lib/api";
 
@@ -34,11 +42,44 @@ const initialForm: AnalyzeRequest = {
 const sampleText =
   "VW Golf 5 1.6 2006, 178000 km, TUV yazin bitiyor, klima sogutmuyor. Hamburg Wandsbek. 1350 Euro.";
 
+const defaultSettings: AppSettings = {
+  preferred_city: "Hamburg",
+  max_asking_price: 5000,
+  min_net_profit: 550,
+  min_margin_percent: 18,
+  max_km_benzin: 210000,
+  max_km_diesel: 190000,
+  min_year: 2005,
+  clean_prep_cost: 110,
+  issue_prep_cost: 180,
+  transfer_cost: 120,
+  sales_cost_percent: 6,
+  exit_discount_percent: 4,
+  low_risk_discount_percent: 8,
+  medium_risk_discount_percent: 15,
+  high_risk_discount_percent: 22,
+};
+
+const initialSearchProfile = {
+  label: "",
+  source: "Kleinanzeigen",
+  search_url: "",
+  city: "Hamburg",
+  max_price: "",
+  min_year: "",
+  min_profit: "",
+  notes: "",
+  active: true,
+};
+
 export default function Page() {
   const [form, setForm] = useState<AnalyzeRequest>(initialForm);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [watchlist, setWatchlist] = useState<SavedDeal[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioDeal[]>([]);
+  const [appSettings, setAppSettings] = useState<AppSettings>(defaultSettings);
+  const [searchProfiles, setSearchProfiles] = useState<SearchProfile[]>([]);
+  const [searchProfileForm, setSearchProfileForm] = useState(initialSearchProfile);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>("");
   const [notice, setNotice] = useState<string>("");
@@ -71,13 +112,20 @@ export default function Page() {
   async function refreshData() {
     try {
       setIsBootstrapping(true);
-      const [watchlistData, portfolioData] = await Promise.all([fetchWatchlist(), fetchPortfolio()]);
+      const [watchlistData, portfolioData, settingsData, searchProfileData] = await Promise.all([
+        fetchWatchlist(),
+        fetchPortfolio(),
+        fetchAppSettings(),
+        fetchSearchProfiles(),
+      ]);
       setWatchlist(watchlistData);
       setPortfolio(portfolioData);
+      setAppSettings(settingsData);
+      setSearchProfiles(searchProfileData);
       setError("");
     } catch (loadError) {
       console.error(loadError);
-      setError("Backend calisiyor ama watchlist veya portfolio verisi okunamadi.");
+      setError("Backend calisiyor ama ayarlar veya koleksiyon verileri okunamadi.");
     } finally {
       setIsBootstrapping(false);
     }
@@ -198,10 +246,66 @@ export default function Page() {
     }
   }
 
+  async function handleSaveSettings() {
+    try {
+      await updateAppSettings(appSettings);
+      setNotice("Operator ayarlari kaydedildi.");
+      await refreshData();
+    } catch (saveError) {
+      console.error(saveError);
+      setError("Operator ayarlari kaydedilemedi.");
+    }
+  }
+
+  async function handleCreateSearchProfile() {
+    try {
+      await createSearchProfile({
+        label: searchProfileForm.label,
+        source: searchProfileForm.source,
+        search_url: searchProfileForm.search_url,
+        city: searchProfileForm.city,
+        max_price: searchProfileForm.max_price ? Number(searchProfileForm.max_price) : null,
+        min_year: searchProfileForm.min_year ? Number(searchProfileForm.min_year) : null,
+        min_profit: searchProfileForm.min_profit ? Number(searchProfileForm.min_profit) : null,
+        notes: searchProfileForm.notes,
+        active: searchProfileForm.active,
+      });
+      setSearchProfileForm(initialSearchProfile);
+      setNotice("Search profile kaydedildi.");
+      await refreshData();
+    } catch (saveError) {
+      console.error(saveError);
+      setError("Search profile kaydedilemedi.");
+    }
+  }
+
+  async function handleToggleSearchProfile(profile: SearchProfile) {
+    try {
+      await updateSearchProfileStatus(profile.id, !profile.active);
+      setNotice(`Search profile ${!profile.active ? "aktif" : "pasif"} yapildi.`);
+      await refreshData();
+    } catch (toggleError) {
+      console.error(toggleError);
+      setError("Search profile durumu guncellenemedi.");
+    }
+  }
+
+  async function handleDeleteSearchProfile(id: number) {
+    try {
+      await deleteSearchProfile(id);
+      setNotice("Search profile silindi.");
+      await refreshData();
+    } catch (deleteError) {
+      console.error(deleteError);
+      setError("Search profile silinemedi.");
+    }
+  }
+
   const activePortfolio = portfolio.filter((item) => item.status !== "sold");
   const expectedProfit = activePortfolio.reduce((total, item) => total + item.net_profit, 0);
   const soldProfit = portfolio.filter((item) => item.status === "sold").reduce((total, item) => total + item.net_profit, 0);
   const buyBoxFitDeals = watchlist.filter((item) => item.buy_box_status === "fit").length;
+  const activeSearchProfiles = searchProfiles.filter((item) => item.active).length;
 
   return (
     <main className="shell">
@@ -227,6 +331,7 @@ export default function Page() {
         <MetricCard label="Watchlist deals" value={String(watchlist.length)} />
         <MetricCard label="Portfolio deals" value={String(portfolio.length)} />
         <MetricCard label="Buy-box fit" value={String(buyBoxFitDeals)} />
+        <MetricCard label="Active searches" value={String(activeSearchProfiles)} />
         <MetricCard label="Expected profit" value={`${expectedProfit} EUR`} />
         <MetricCard label="Sold profit" value={`${soldProfit} EUR`} />
       </section>
@@ -636,6 +741,289 @@ export default function Page() {
                       Durum degistir
                     </button>
                     <button className="secondaryButton" type="button" onClick={() => void handleDeletePortfolio(deal.id)}>
+                      Sil
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
+
+      <section className="grid">
+        <section className="card">
+          <div className="cardHeader">
+            <div>
+              <h2>Operator Settings</h2>
+              <p>Hamburg odakli buy-box ve maliyet varsayimlarini buradan ayarla.</p>
+            </div>
+          </div>
+
+          <div className="formGrid">
+            <label>
+              <span>Preferred city</span>
+              <input
+                value={appSettings.preferred_city}
+                onChange={(event) => setAppSettings((current) => ({ ...current, preferred_city: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Max asking price</span>
+              <input
+                type="number"
+                value={appSettings.max_asking_price}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, max_asking_price: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Min net profit</span>
+              <input
+                type="number"
+                value={appSettings.min_net_profit}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, min_net_profit: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Min margin %</span>
+              <input
+                type="number"
+                value={appSettings.min_margin_percent}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, min_margin_percent: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Max km benzin</span>
+              <input
+                type="number"
+                value={appSettings.max_km_benzin}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, max_km_benzin: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Max km diesel</span>
+              <input
+                type="number"
+                value={appSettings.max_km_diesel}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, max_km_diesel: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Min year</span>
+              <input
+                type="number"
+                value={appSettings.min_year}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, min_year: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Clean prep cost</span>
+              <input
+                type="number"
+                value={appSettings.clean_prep_cost}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, clean_prep_cost: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Issue prep cost</span>
+              <input
+                type="number"
+                value={appSettings.issue_prep_cost}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, issue_prep_cost: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Transfer cost</span>
+              <input
+                type="number"
+                value={appSettings.transfer_cost}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, transfer_cost: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Sales cost %</span>
+              <input
+                type="number"
+                value={appSettings.sales_cost_percent}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, sales_cost_percent: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Exit discount %</span>
+              <input
+                type="number"
+                value={appSettings.exit_discount_percent}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, exit_discount_percent: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Low risk discount %</span>
+              <input
+                type="number"
+                value={appSettings.low_risk_discount_percent}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, low_risk_discount_percent: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>Medium risk discount %</span>
+              <input
+                type="number"
+                value={appSettings.medium_risk_discount_percent}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, medium_risk_discount_percent: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+            <label>
+              <span>High risk discount %</span>
+              <input
+                type="number"
+                value={appSettings.high_risk_discount_percent}
+                onChange={(event) =>
+                  setAppSettings((current) => ({ ...current, high_risk_discount_percent: Number(event.target.value) || 0 }))
+                }
+              />
+            </label>
+          </div>
+
+          <div className="formActions">
+            <button className="primaryButton" type="button" onClick={() => void handleSaveSettings()}>
+              Ayarlari kaydet
+            </button>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="cardHeader">
+            <div>
+              <h2>Saved Search Profiles</h2>
+              <p>Kullandigin filtreli arama linklerini burada biriktir. Bir sonraki sprintte bunlar otomasyona baglanacak.</p>
+            </div>
+          </div>
+
+          <div className="formGrid">
+            <label>
+              <span>Label</span>
+              <input
+                value={searchProfileForm.label}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, label: event.target.value }))}
+                placeholder="Hamburg Golf tarama"
+              />
+            </label>
+            <label>
+              <span>Source</span>
+              <select
+                value={searchProfileForm.source}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, source: event.target.value }))}
+              >
+                <option>Kleinanzeigen</option>
+                <option>Facebook Marketplace</option>
+                <option>Mobile.de</option>
+              </select>
+            </label>
+            <label className="full">
+              <span>Search URL</span>
+              <input
+                value={searchProfileForm.search_url}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, search_url: event.target.value }))}
+                placeholder="https://..."
+              />
+            </label>
+            <label>
+              <span>City</span>
+              <input
+                value={searchProfileForm.city}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, city: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Max price</span>
+              <input
+                type="number"
+                value={searchProfileForm.max_price}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, max_price: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Min year</span>
+              <input
+                type="number"
+                value={searchProfileForm.min_year}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, min_year: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Min profit</span>
+              <input
+                type="number"
+                value={searchProfileForm.min_profit}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, min_profit: event.target.value }))}
+              />
+            </label>
+            <label className="full">
+              <span>Notes</span>
+              <textarea
+                value={searchProfileForm.notes}
+                onChange={(event) => setSearchProfileForm((current) => ({ ...current, notes: event.target.value }))}
+                placeholder="Ornek: sadece manuel, klima, 5-kapi, Hamburg ici"
+              />
+            </label>
+          </div>
+
+          <div className="formActions">
+            <button className="primaryButton" type="button" onClick={() => void handleCreateSearchProfile()}>
+              Search profile ekle
+            </button>
+          </div>
+
+          {searchProfiles.length === 0 ? (
+            <div className="emptyState compactState">
+              <strong>Kayitli arama yok.</strong>
+              <p>Ilk filtreli arama linkini eklediginde burada gorunecek.</p>
+            </div>
+          ) : (
+            <div className="collection">
+              {searchProfiles.map((profile) => (
+                <article className="savedCard" key={profile.id}>
+                  <div className="badgeRow">
+                    <span className="pill">{profile.source}</span>
+                    <span className="pill">{profile.active ? "active" : "paused"}</span>
+                  </div>
+                  <h3>{profile.label}</h3>
+                  <p>{profile.city} | URL ready for future ingestion</p>
+                  <p>
+                    Max {profile.max_price ?? "-"} EUR | Min year {profile.min_year ?? "-"} | Min profit {profile.min_profit ?? "-"} EUR
+                  </p>
+                  <p>{profile.notes || "Not yok."}</p>
+                  <div className="inlineActions">
+                    <button className="secondaryButton" type="button" onClick={() => void handleToggleSearchProfile(profile)}>
+                      {profile.active ? "Pasif yap" : "Aktif yap"}
+                    </button>
+                    <button className="secondaryButton" type="button" onClick={() => void handleDeleteSearchProfile(profile.id)}>
                       Sil
                     </button>
                   </div>

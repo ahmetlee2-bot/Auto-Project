@@ -5,24 +5,34 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import (
     create_portfolio_deal,
+    create_search_profile,
     create_watchlist_deal,
+    delete_search_profile,
     delete_portfolio_deal,
     delete_watchlist_deal,
+    get_app_settings,
     init_db,
+    list_search_profiles,
     list_portfolio_deals,
     list_watchlist_deals,
+    update_app_settings,
     update_portfolio_note,
     update_portfolio_status,
+    update_search_profile_status,
     update_watchlist_note,
 )
 from .deal_engine import analyze_listing
 from .schemas import (
+    AppSettings,
     AnalyzeRequest,
     AnalyzeResponse,
     OperatorNoteUpdate,
     PortfolioDeal,
     PortfolioStatusUpdate,
     SavedDealCreate,
+    SearchProfile,
+    SearchProfileCreate,
+    SearchProfileStatusUpdate,
     WatchlistDeal,
 )
 from .settings import settings
@@ -52,7 +62,17 @@ def healthcheck() -> dict[str, str]:
 
 @app.post("/api/v1/analyze", response_model=AnalyzeResponse)
 def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
-    return analyze_listing(payload)
+    return analyze_listing(payload, app_settings=get_app_settings())
+
+
+@app.get("/api/v1/settings", response_model=AppSettings)
+def get_settings() -> AppSettings:
+    return get_app_settings()
+
+
+@app.put("/api/v1/settings", response_model=AppSettings)
+def put_settings(payload: AppSettings) -> AppSettings:
+    return update_app_settings(payload)
 
 
 @app.get("/api/v1/watchlist", response_model=list[WatchlistDeal])
@@ -107,3 +127,26 @@ def patch_portfolio_note(deal_id: int, payload: OperatorNoteUpdate) -> Portfolio
     if not updated:
         raise HTTPException(status_code=404, detail="Portfolio deal not found.")
     return updated
+
+
+@app.get("/api/v1/search-profiles", response_model=list[SearchProfile])
+def get_search_profiles() -> list[SearchProfile]:
+    return list_search_profiles()
+
+
+@app.post("/api/v1/search-profiles", response_model=SearchProfile)
+def post_search_profile(payload: SearchProfileCreate) -> SearchProfile:
+    return create_search_profile(payload)
+
+
+@app.patch("/api/v1/search-profiles/{profile_id}", response_model=SearchProfile)
+def patch_search_profile(profile_id: int, payload: SearchProfileStatusUpdate) -> SearchProfile:
+    updated = update_search_profile_status(profile_id, payload.active)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Search profile not found.")
+    return updated
+
+
+@app.delete("/api/v1/search-profiles/{profile_id}", status_code=204)
+def remove_search_profile(profile_id: int) -> None:
+    delete_search_profile(profile_id)

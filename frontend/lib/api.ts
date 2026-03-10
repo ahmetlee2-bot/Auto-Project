@@ -11,6 +11,24 @@ export type AnalyzeRequest = {
   raw_text?: string;
 };
 
+export type AppSettings = {
+  preferred_city: string;
+  max_asking_price: number;
+  min_net_profit: number;
+  min_margin_percent: number;
+  max_km_benzin: number;
+  max_km_diesel: number;
+  min_year: number;
+  clean_prep_cost: number;
+  issue_prep_cost: number;
+  transfer_cost: number;
+  sales_cost_percent: number;
+  exit_discount_percent: number;
+  low_risk_discount_percent: number;
+  medium_risk_discount_percent: number;
+  high_risk_discount_percent: number;
+};
+
 export type AnalyzeResponse = {
   url?: string | null;
   brand: string;
@@ -55,6 +73,22 @@ export type PortfolioDeal = SavedDeal & {
   status: "sourcing" | "prep" | "sold";
 };
 
+export type SearchProfile = {
+  id: number;
+  created_at: string;
+  label: string;
+  source: string;
+  search_url: string;
+  city: string;
+  max_price?: number | null;
+  min_year?: number | null;
+  min_profit?: number | null;
+  notes: string;
+  active: boolean;
+};
+
+export type SearchProfileCreate = Omit<SearchProfile, "id" | "created_at">;
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export async function analyzeListing(payload: AnalyzeRequest): Promise<AnalyzeResponse> {
@@ -71,6 +105,30 @@ export async function analyzeListing(payload: AnalyzeRequest): Promise<AnalyzeRe
   }
 
   return response.json() as Promise<AnalyzeResponse>;
+}
+
+export async function fetchAppSettings(): Promise<AppSettings> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/settings`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Settings request failed.");
+  }
+  return response.json() as Promise<AppSettings>;
+}
+
+export async function updateAppSettings(payload: AppSettings): Promise<AppSettings> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/settings`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("Settings update failed.");
+  }
+
+  return response.json() as Promise<AppSettings>;
 }
 
 export async function fetchWatchlist(): Promise<SavedDeal[]> {
@@ -129,6 +187,56 @@ export async function fetchPortfolio(): Promise<PortfolioDeal[]> {
     throw new Error("Portfolio request failed.");
   }
   return response.json() as Promise<PortfolioDeal[]>;
+}
+
+export async function fetchSearchProfiles(): Promise<SearchProfile[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/search-profiles`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Search profiles request failed.");
+  }
+  return response.json() as Promise<SearchProfile[]>;
+}
+
+export async function createSearchProfile(payload: SearchProfileCreate): Promise<SearchProfile> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/search-profiles`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("Search profile save failed.");
+  }
+
+  return response.json() as Promise<SearchProfile>;
+}
+
+export async function updateSearchProfileStatus(id: number, active: boolean): Promise<SearchProfile> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/search-profiles/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ active }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Search profile update failed.");
+  }
+
+  return response.json() as Promise<SearchProfile>;
+}
+
+export async function deleteSearchProfile(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/search-profiles/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Search profile delete failed.");
+  }
 }
 
 export async function createPortfolioDeal(payload: AnalyzeResponse): Promise<PortfolioDeal> {

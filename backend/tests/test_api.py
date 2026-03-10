@@ -57,6 +57,53 @@ def test_analyze_endpoint(client: TestClient) -> None:
     assert data["next_action"]
 
 
+def test_settings_endpoints(client: TestClient) -> None:
+    fetched = client.get("/api/v1/settings")
+    assert fetched.status_code == 200
+    assert fetched.json()["preferred_city"] == "Hamburg"
+
+    updated = client.put(
+        "/api/v1/settings",
+        json={
+            "preferred_city": "Hamburg",
+            "max_asking_price": 4200,
+            "min_net_profit": 700,
+            "min_margin_percent": 20,
+            "max_km_benzin": 190000,
+            "max_km_diesel": 175000,
+            "min_year": 2007,
+            "clean_prep_cost": 140,
+            "issue_prep_cost": 240,
+            "transfer_cost": 180,
+            "sales_cost_percent": 7,
+            "exit_discount_percent": 5,
+            "low_risk_discount_percent": 7,
+            "medium_risk_discount_percent": 14,
+            "high_risk_discount_percent": 20,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["min_net_profit"] == 700
+    assert updated.json()["transfer_cost"] == 180
+
+    analyzed = client.post(
+        "/api/v1/analyze",
+        json={
+            "source": "Kleinanzeigen",
+            "city": "Hamburg",
+            "brand": "VW",
+            "model": "Golf",
+            "year": 2006,
+            "km": 178000,
+            "fuel": "Benzin",
+            "asking_price": 1350,
+            "raw_text": "VW Golf 5 1.6 2006, 178000 km, TUV yazin bitiyor, klima sogutmuyor.",
+        },
+    )
+    assert analyzed.status_code == 200
+    assert analyzed.json()["buy_box_status"] in {"review", "out"}
+
+
 def test_watchlist_endpoints(client: TestClient) -> None:
     payload = {
         "source": "Kleinanzeigen",
@@ -181,3 +228,38 @@ def test_portfolio_endpoints(client: TestClient) -> None:
     deleted = client.delete(f"/api/v1/portfolio/{created_body['id']}")
     assert deleted.status_code == 204
     assert client.get("/api/v1/portfolio").json() == []
+
+
+def test_search_profile_endpoints(client: TestClient) -> None:
+    created = client.post(
+        "/api/v1/search-profiles",
+        json={
+            "label": "Hamburg Golf tarama",
+            "source": "Kleinanzeigen",
+            "search_url": "https://www.kleinanzeigen.de/s-autos/hamburg/golf/k0c216l9409",
+            "city": "Hamburg",
+            "max_price": 3500,
+            "min_year": 2006,
+            "min_profit": 600,
+            "notes": "Sadece temiz baslikli ve manuel vites sec.",
+            "active": True,
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["id"] > 0
+
+    listed = client.get("/api/v1/search-profiles")
+    assert listed.status_code == 200
+    assert listed.json()[0]["label"] == "Hamburg Golf tarama"
+
+    toggled = client.patch(
+        f"/api/v1/search-profiles/{created_body['id']}",
+        json={"active": False},
+    )
+    assert toggled.status_code == 200
+    assert toggled.json()["active"] is False
+
+    deleted = client.delete(f"/api/v1/search-profiles/{created_body['id']}")
+    assert deleted.status_code == 204
+    assert client.get("/api/v1/search-profiles").json() == []
