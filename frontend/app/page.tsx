@@ -331,15 +331,17 @@ export default function Page() {
         <div className="heroCard">
           <span>Current milestone</span>
           <strong>operator-first live demo</strong>
-          <p>Hizli intake, saklanan analizler, Hamburg buy-box ve password-protected live URL ayni akista calisiyor.</p>
+          <p>
+            {activePortfolio.length} aktif portfolio deal'i, {buyBoxFitDeals} buy-box fit lead ve {activeSearchProfiles} aktif
+            search profili ayni operator akisi icinde duruyor.
+          </p>
         </div>
       </section>
 
       <section className="dashboardGrid">
         <MetricCard label="Watchlist deals" value={String(watchlist.length)} />
-        <MetricCard label="Portfolio deals" value={String(portfolio.length)} />
+        <MetricCard label="Active portfolio" value={String(activePortfolio.length)} />
         <MetricCard label="Buy-box fit" value={String(buyBoxFitDeals)} />
-        <MetricCard label="Active searches" value={String(activeSearchProfiles)} />
         <MetricCard label="Expected profit" value={`${expectedProfit} EUR`} />
         <MetricCard label="Sold profit" value={`${soldProfit} EUR`} />
       </section>
@@ -378,13 +380,18 @@ export default function Page() {
 
           <div className="formGrid">
             <label className="full">
-              <span>Ilan metni / notlar</span>
+              <span>Quick paste</span>
               <textarea
+                className="quickPaste"
                 value={form.raw_text ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, raw_text: event.target.value }))}
                 placeholder={sampleText}
               />
             </label>
+            <div className="supportText full">
+              Parser yil, km, yakit, fiyat ve ariza ipuclarini bu alandan toplamaya calisir. Link varsa asagidaki gelismis
+              alanda birakman yeterli.
+            </div>
             <label>
               <span>Kaynak</span>
               <select
@@ -411,14 +418,6 @@ export default function Page() {
                 placeholder="1350"
               />
             </label>
-            <label className="full">
-              <span>Ilan linki (opsiyonel)</span>
-              <input
-                value={form.url ?? ""}
-                onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
           </div>
 
           <details className="detailsBlock">
@@ -426,6 +425,14 @@ export default function Page() {
             <p>Parser eksik okursa sadece burada override girmen yeterli.</p>
 
             <div className="formGrid compactForm">
+              <label className="full">
+                <span>Ilan linki</span>
+                <input
+                  value={form.url ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
+                  placeholder="https://..."
+                />
+              </label>
               <label>
                 <span>Marka</span>
                 <input
@@ -652,7 +659,7 @@ export default function Page() {
           <div className="cardHeader">
             <div>
               <h2>Watchlist</h2>
-              <p>Backend tarafinda kalici tutulan ilk secim havuzu.</p>
+              <p>Ilk gorusme ve saha kontrolu bekleyen lead listesi.</p>
             </div>
           </div>
 
@@ -668,48 +675,20 @@ export default function Page() {
           ) : (
             <div className="collection">
               {watchlist.map((deal) => (
-                <article className="savedCard" key={deal.id}>
-                  <div className="badgeRow">
-                    <span className="pill">{deal.source}</span>
-                    <span className="pill">{deal.risk_level}</span>
-                    <span className="pill">{buyBoxLabel(deal.buy_box_status)}</span>
-                    <span className="pill">parser {deal.source_parser}</span>
-                    <span className="pill">{confidenceLabel(deal.confidence_score)}</span>
-                    {deal.verification_required ? <span className="pill">manual check</span> : null}
-                  </div>
-                  <h3>{deal.title}</h3>
-                  <p>
-                    Offer {deal.offer_price} EUR | Net {deal.net_profit} EUR | Margin %{deal.margin_percent}
-                  </p>
-                  <p>Verification: {deal.verification_notes[0] ?? "Ek saha teyidi notu yok."}</p>
-                  <p>Buy-box: {deal.buy_box_notes[0] ?? "Kural notu yok."}</p>
-                  <p>Next step: {deal.next_action}</p>
-                  <p>Message: {deal.recommended_message}</p>
-                  <label className="noteField">
-                    <span>Operator note</span>
-                    <textarea
-                      value={noteDrafts[noteKey("watchlist", deal.id)] ?? deal.operator_note}
-                      onChange={(event) =>
-                        setNoteDrafts((current) => ({
-                          ...current,
-                          [noteKey("watchlist", deal.id)]: event.target.value,
-                        }))
-                      }
-                      placeholder="Satici ne dedi, ne kontrol edeceksin, hedef fiyat ne?"
-                    />
-                  </label>
-                  <div className="inlineActions">
-                    <button className="primaryButton" type="button" onClick={() => void handlePromoteWatchlist(deal)}>
-                      Portfolio'ya tasi
-                    </button>
-                    <button className="secondaryButton" type="button" onClick={() => void handleSaveWatchlistNote(deal.id)}>
-                      Note kaydet
-                    </button>
-                    <button className="secondaryButton" type="button" onClick={() => void handleDeleteWatchlist(deal.id)}>
-                      Sil
-                    </button>
-                  </div>
-                </article>
+                <WatchlistCard
+                  key={deal.id}
+                  deal={deal}
+                  noteValue={noteDrafts[noteKey("watchlist", deal.id)] ?? deal.operator_note}
+                  onNoteChange={(value) =>
+                    setNoteDrafts((current) => ({
+                      ...current,
+                      [noteKey("watchlist", deal.id)]: value,
+                    }))
+                  }
+                  onPromote={() => void handlePromoteWatchlist(deal)}
+                  onSaveNote={() => void handleSaveWatchlistNote(deal.id)}
+                  onDelete={() => void handleDeleteWatchlist(deal.id)}
+                />
               ))}
             </div>
           )}
@@ -719,7 +698,7 @@ export default function Page() {
           <div className="cardHeader">
             <div>
               <h2>Portfolio</h2>
-              <p>Durum takibi artik backend kaydi uzerinden donuyor.</p>
+              <p>Alinmis veya hazirlanan araclarin operasyon paneli.</p>
             </div>
           </div>
 
@@ -735,51 +714,20 @@ export default function Page() {
           ) : (
             <div className="collection">
               {portfolio.map((deal) => (
-                <article className="savedCard" key={deal.id}>
-                  <div className="badgeRow">
-                    <span className="pill">{deal.status}</span>
-                    <span className="pill">{deal.source}</span>
-                    <span className="pill">{buyBoxLabel(deal.buy_box_status)}</span>
-                    <span className="pill">parser {deal.source_parser}</span>
-                    <span className="pill">{confidenceLabel(deal.confidence_score)}</span>
-                  </div>
-                  <h3>{deal.title}</h3>
-                  <p>
-                    Offer {deal.offer_price} EUR | Total {deal.total_cost} EUR | Net {deal.net_profit} EUR
-                  </p>
-                  <p>
-                    {deal.verification_required
-                      ? `Verification: ${deal.verification_notes[0] ?? "Manual kontrol oneriliyor."}`
-                      : "Verification: confidence seviyesi bu analiz icin daha guclu."}
-                  </p>
-                  <p>Buy-box: {deal.buy_box_notes[0] ?? "Kural notu yok."}</p>
-                  <p>Next step: {deal.next_action}</p>
-                  <p>Message: {deal.recommended_message}</p>
-                  <label className="noteField">
-                    <span>Operator note</span>
-                    <textarea
-                      value={noteDrafts[noteKey("portfolio", deal.id)] ?? deal.operator_note}
-                      onChange={(event) =>
-                        setNoteDrafts((current) => ({
-                          ...current,
-                          [noteKey("portfolio", deal.id)]: event.target.value,
-                        }))
-                      }
-                      placeholder="Alindi mi, hangi masraf cikti, sonraki adim ne?"
-                    />
-                  </label>
-                  <div className="inlineActions">
-                    <button className="secondaryButton" type="button" onClick={() => void handleSavePortfolioNote(deal.id)}>
-                      Note kaydet
-                    </button>
-                    <button className="secondaryButton" type="button" onClick={() => void handleCyclePortfolioStatus(deal)}>
-                      Durum degistir
-                    </button>
-                    <button className="secondaryButton" type="button" onClick={() => void handleDeletePortfolio(deal.id)}>
-                      Sil
-                    </button>
-                  </div>
-                </article>
+                <PortfolioCard
+                  key={deal.id}
+                  deal={deal}
+                  noteValue={noteDrafts[noteKey("portfolio", deal.id)] ?? deal.operator_note}
+                  onNoteChange={(value) =>
+                    setNoteDrafts((current) => ({
+                      ...current,
+                      [noteKey("portfolio", deal.id)]: value,
+                    }))
+                  }
+                  onSaveNote={() => void handleSavePortfolioNote(deal.id)}
+                  onCycleStatus={() => void handleCyclePortfolioStatus(deal)}
+                  onDelete={() => void handleDeletePortfolio(deal.id)}
+                />
               ))}
             </div>
           )}
@@ -1090,6 +1038,173 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+type WatchlistCardProps = {
+  deal: SavedDeal;
+  noteValue: string;
+  onNoteChange: (value: string) => void;
+  onPromote: () => void;
+  onSaveNote: () => void;
+  onDelete: () => void;
+};
+
+function WatchlistCard({ deal, noteValue, onNoteChange, onPromote, onSaveNote, onDelete }: WatchlistCardProps) {
+  return (
+    <article className="savedCard savedCardCompact">
+      <div className="savedTop">
+        <div>
+          <div className="badgeRow compactBadgeRow">
+            <span className="pill">{deal.source}</span>
+            <span className="pill">{deal.risk_level}</span>
+            <span className="pill">{buyBoxLabel(deal.buy_box_status)}</span>
+            <span className="pill">{confidenceLabel(deal.confidence_score)}</span>
+            {deal.verification_required ? <span className="pill">manual check</span> : null}
+          </div>
+          <h3>{deal.title}</h3>
+          <p className="savedSubtitle">
+            {deal.city} | {deal.km.toLocaleString("de-DE")} km | {deal.fuel}
+          </p>
+        </div>
+        <div className="dealValue">
+          <span>net</span>
+          <strong>{formatMoney(deal.net_profit)}</strong>
+        </div>
+      </div>
+
+      <div className="quickMetrics">
+        <MetricInline label="offer" value={formatMoney(deal.offer_price)} />
+        <MetricInline label="target" value={formatMoney(deal.target_sale_price)} />
+        <MetricInline label="margin" value={`%${deal.margin_percent}`} />
+      </div>
+
+      <div className="nextStep">
+        <strong>Next</strong>
+        <p>{deal.next_action}</p>
+      </div>
+
+      <p className="compactHint">{verificationSummary(deal)}</p>
+
+      <div className="inlineActions">
+        <button className="primaryButton" type="button" onClick={onPromote}>
+          Portfolio'ya tasi
+        </button>
+        <button className="secondaryButton" type="button" onClick={onDelete}>
+          Sil
+        </button>
+      </div>
+
+      <details className="detailsBlock compactDetails">
+        <summary>Notlar ve detaylar</summary>
+        <p>{deal.recommended_message}</p>
+        <p>Buy-box: {deal.buy_box_notes[0] ?? "Ek buy-box notu yok."}</p>
+        <label className="noteField">
+          <span>Operator note</span>
+          <textarea
+            value={noteValue}
+            onChange={(event) => onNoteChange(event.target.value)}
+            placeholder="Satici ne dedi, ne kontrol edeceksin, hedef fiyat ne?"
+          />
+        </label>
+        <div className="inlineActions">
+          <button className="secondaryButton" type="button" onClick={onSaveNote}>
+            Note kaydet
+          </button>
+        </div>
+      </details>
+    </article>
+  );
+}
+
+type PortfolioCardProps = {
+  deal: PortfolioDeal;
+  noteValue: string;
+  onNoteChange: (value: string) => void;
+  onSaveNote: () => void;
+  onCycleStatus: () => void;
+  onDelete: () => void;
+};
+
+function PortfolioCard({
+  deal,
+  noteValue,
+  onNoteChange,
+  onSaveNote,
+  onCycleStatus,
+  onDelete,
+}: PortfolioCardProps) {
+  return (
+    <article className="savedCard savedCardCompact">
+      <div className="savedTop">
+        <div>
+          <div className="badgeRow compactBadgeRow">
+            <span className="pill">{deal.status}</span>
+            <span className="pill">{deal.source}</span>
+            <span className="pill">{buyBoxLabel(deal.buy_box_status)}</span>
+            <span className="pill">{confidenceLabel(deal.confidence_score)}</span>
+          </div>
+          <h3>{deal.title}</h3>
+          <p className="savedSubtitle">
+            {deal.city} | {deal.km.toLocaleString("de-DE")} km | {deal.fuel}
+          </p>
+        </div>
+        <div className="dealValue">
+          <span>net</span>
+          <strong>{formatMoney(deal.net_profit)}</strong>
+        </div>
+      </div>
+
+      <div className="quickMetrics">
+        <MetricInline label="offer" value={formatMoney(deal.offer_price)} />
+        <MetricInline label="cost" value={formatMoney(deal.total_cost)} />
+        <MetricInline label="target" value={formatMoney(deal.target_sale_price)} />
+      </div>
+
+      <div className="nextStep">
+        <strong>Next</strong>
+        <p>{deal.next_action}</p>
+      </div>
+
+      <p className="compactHint">{verificationSummary(deal)}</p>
+
+      <div className="inlineActions">
+        <button className="primaryButton" type="button" onClick={onCycleStatus}>
+          {nextPortfolioStatusLabel(deal.status)}
+        </button>
+        <button className="secondaryButton" type="button" onClick={onDelete}>
+          Sil
+        </button>
+      </div>
+
+      <details className="detailsBlock compactDetails">
+        <summary>Notlar ve detaylar</summary>
+        <p>{deal.recommended_message}</p>
+        <p>Buy-box: {deal.buy_box_notes[0] ?? "Ek buy-box notu yok."}</p>
+        <label className="noteField">
+          <span>Operator note</span>
+          <textarea
+            value={noteValue}
+            onChange={(event) => onNoteChange(event.target.value)}
+            placeholder="Alindi mi, hangi masraf cikti, sonraki adim ne?"
+          />
+        </label>
+        <div className="inlineActions">
+          <button className="secondaryButton" type="button" onClick={onSaveNote}>
+            Note kaydet
+          </button>
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function MetricInline({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="metricInline">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function confidenceLabel(score: number): string {
   if (score >= 80) {
     return `high confidence ${score}`;
@@ -1112,4 +1227,26 @@ function buyBoxLabel(status: "fit" | "review" | "out"): string {
 
 function noteKey(scope: "watchlist" | "portfolio", id: number): string {
   return `${scope}-${id}`;
+}
+
+function formatMoney(value: number): string {
+  return `${value} EUR`;
+}
+
+function verificationSummary(deal: SavedDeal | PortfolioDeal): string {
+  if (deal.verification_required) {
+    return `Check: ${deal.verification_notes[0] ?? "Manual saha kontrolu oneriliyor."}`;
+  }
+
+  return "Check: Bu analiz daha guclu confidence ile geldi.";
+}
+
+function nextPortfolioStatusLabel(status: PortfolioDeal["status"]): string {
+  if (status === "sourcing") {
+    return "Prep'e gec";
+  }
+  if (status === "prep") {
+    return "Sold'a gec";
+  }
+  return "Sourcing'e don";
 }

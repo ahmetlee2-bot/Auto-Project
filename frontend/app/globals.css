@@ -215,6 +215,17 @@ button {
   line-height: 1.75;
 }
 
+.quickPaste {
+  min-height: 120px;
+}
+
+.supportText {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  margin-top: -4px;
+}
+
 .formActions {
   display: flex;
   gap: 10px;
@@ -404,6 +415,87 @@ button {
   line-height: 1.75;
 }
 
+.savedCardCompact {
+  display: grid;
+  gap: 14px;
+}
+
+.savedTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.savedSubtitle {
+  font-size: 0.8rem;
+}
+
+.compactBadgeRow {
+  margin-bottom: 8px;
+}
+
+.dealValue {
+  min-width: 110px;
+  text-align: right;
+}
+
+.dealValue span,
+.metricInline span,
+.nextStep strong {
+  display: block;
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.dealValue strong {
+  display: block;
+  margin-top: 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.1rem;
+}
+
+.quickMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metricInline {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.metricInline strong {
+  display: block;
+  margin-top: 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+}
+
+.nextStep {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(140, 240, 210, 0.06);
+  border: 1px solid rgba(140, 240, 210, 0.12);
+}
+
+.nextStep p {
+  margin-top: 8px;
+}
+
+.compactHint {
+  font-size: 0.78rem;
+}
+
+.compactDetails {
+  margin-top: 0;
+}
+
 .inlineActions {
   display: flex;
   gap: 10px;
@@ -500,5 +592,18 @@ button {
 
   .formGrid {
     grid-template-columns: 1fr;
+  }
+
+  .savedTop,
+  .quickMetrics {
+    grid-template-columns: 1fr;
+  }
+
+  .savedTop {
+    display: grid;
+  }
+
+  .dealValue {
+    text-align: left;
   }
 }
