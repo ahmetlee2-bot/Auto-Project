@@ -44,6 +44,10 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "Frontend typecheck basarisiz oldu."
   }
+  & $npmCommand run test
+  if ($LASTEXITCODE -ne 0) {
+    throw "Frontend unit testleri basarisiz oldu."
+  }
   & $npmCommand run build
   if ($LASTEXITCODE -ne 0) {
     throw "Frontend build basarisiz oldu."

@@ -6,7 +6,7 @@ This workspace currently contains:
 
 - `autonow.html`: Phase 0 static prototype
 - `AUTONOW_RND_ROADMAP.md`: product and R&D roadmap
-- `frontend/`: Next.js app shell for Phase 1
+- `frontend/`: modular Next.js valuation cockpit for Phase 1
 - `backend/`: FastAPI service shell with the first deal engine
 - `scripts/`: PowerShell runtime and test helpers
 - `docker-compose.yml`: container-based dev runtime
@@ -27,6 +27,7 @@ The current API also returns a confidence score and manual verification notes so
 It now also returns negotiation points, a recommended opening message, and a next action so each analysis can turn into an operator task.
 The latest sprint adds source-aware parsing and a Hamburg-focused buy-box score so each listing can be evaluated against the operator profile instead of generic text rules alone.
 The current build also persists operator settings and saved search profiles so the deal engine can be tuned to your real workflow and future source ingestion.
+The frontend now mirrors the valuation-first reference more closely: premium light-luxury styling, preserved valuation bands, comparables, source selection, operator fit panels, and scenario cards in a backend-ready module structure.
 
 ## Tech direction
 
@@ -200,12 +201,11 @@ Backend tests live in:
 - [test_deal_engine.py](/C:/Users/mmncc/Desktop/Für%20Codex/backend/tests/test_deal_engine.py)
 - [test_api.py](/C:/Users/mmncc/Desktop/Für%20Codex/backend/tests/test_api.py)
 
-Frontend currently uses a lightweight quality gate:
+Frontend quality gate now includes:
 
 - TypeScript typecheck
+- valuation unit tests for estimate, comparables, source mapping, buy-box states, and scenario ordering
 - Next.js production build
-
-This is enough for the current phase because the frontend is still a thin intake shell over the backend.
 
 ## Phase 1 scope
 

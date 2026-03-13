@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AUTONOW",
-  description: "Deal intelligence cockpit for low-budget vehicle flipping.",
+  title: "AUTONOW Select",
+  description: "Valuation-first cockpit for vehicle pricing, operator buy-box review, and comparables.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -13,4 +13,3 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     </html>
   );
 }
-

@@ -1,15 +1,22 @@
 :root {
-  --bg: #071019;
-  --surface: #132233;
-  --surface-2: #182c40;
-  --line: #284158;
-  --text: #edf6ff;
-  --muted: #8ea8be;
-  --mint: #8cf0d2;
-  --cyan: #57c7ff;
-  --yellow: #ffc56f;
-  --red: #ff8f7f;
-  --green: #7cffaa;
+  --bg: #f6f3ed;
+  --surface: rgba(255, 251, 245, 0.78);
+  --surface-strong: rgba(255, 249, 241, 0.92);
+  --surface-muted: rgba(249, 243, 234, 0.72);
+  --ink: #1f2430;
+  --muted: #68717f;
+  --line: rgba(32, 39, 52, 0.09);
+  --line-strong: rgba(32, 39, 52, 0.14);
+  --brand: #c96c4b;
+  --brand-soft: #e8b574;
+  --gold: #b7884f;
+  --navy: #2f3545;
+  --success: #2f7555;
+  --warning: #a46f3f;
+  --shadow: 0 24px 60px rgba(46, 44, 39, 0.1);
+  --radius-xl: 30px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
 }
 
 * {
@@ -21,10 +28,11 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(circle at top left, rgba(87, 199, 255, 0.14), transparent 24%),
-    linear-gradient(180deg, #071019, #0b1320);
-  color: var(--text);
-  font-family: "IBM Plex Mono", monospace;
+    radial-gradient(circle at top left, rgba(201, 108, 75, 0.1), transparent 24%),
+    radial-gradient(circle at top right, rgba(184, 136, 79, 0.14), transparent 22%),
+    linear-gradient(180deg, #f8f5ef 0%, #f2ede6 100%);
+  color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
 }
 
 button,
@@ -38,572 +46,590 @@ button {
   cursor: pointer;
 }
 
-.shell {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 32px 24px 64px;
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  padding: 0.9rem 1rem;
+  outline: none;
 }
 
-.hero {
-  display: grid;
-  grid-template-columns: 1.4fr 0.8fr;
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(201, 108, 75, 0.55);
+  box-shadow: 0 0 0 4px rgba(201, 108, 75, 0.1);
+}
+
+textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.appShell {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 28px 22px 56px;
+}
+
+.glassCard {
+  background: linear-gradient(180deg, var(--surface), var(--surface-strong));
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius-xl);
+}
+
+.topBar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  border-radius: 999px;
+  background: rgba(249, 245, 238, 0.74);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+}
+
+.brandLockup small,
+.heroMetaLabel,
+.eyebrow,
+.sectionEyebrow,
+.topBarPill,
+.field span,
+.summaryCard small,
+.marketCard small,
+.metricMini span,
+.operatorSummary small,
+.messagePanel small,
+.statusCard small,
+.scenarioCard small,
+.opsDrawer summary small,
+.comparableTopline small {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brandLockup strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+  color: var(--navy);
+}
+
+.topBarMeta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topBarPill {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--line);
+}
+
+.heroSection {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
   margin-bottom: 18px;
 }
 
-.hero h1,
-.card h2,
-.resultHero h3,
-.subCard h4 {
-  font-family: "Space Grotesk", sans-serif;
-  letter-spacing: -0.04em;
-}
-
-.hero h1 {
-  font-size: 3rem;
-  line-height: 1.02;
-  margin: 8px 0 14px;
-  max-width: 12ch;
-}
-
-.eyebrow {
-  color: var(--mint);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.7rem;
-}
-
-.lead {
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.85;
-  max-width: 74ch;
-}
-
-.heroCard,
-.card,
-.subCard,
-.metric {
-  background: linear-gradient(180deg, rgba(19, 34, 51, 0.95), rgba(11, 20, 31, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 24px;
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
-}
-
-.heroCard {
+.heroCopy,
+.heroMeta,
+.panelCard,
+.summaryCard,
+.opsDrawer {
   padding: 24px;
+}
+
+.heroCopy h1,
+.panelHeader h2,
+.headlineValue strong,
+.summaryCard strong,
+.statusCard strong,
+.scenarioCard strong,
+.comparableCard strong,
+.operatorSummary strong,
+.heroMeta strong,
+.brandLockup strong {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  letter-spacing: -0.03em;
+}
+
+.heroCopy h1 {
+  margin: 10px 0 14px;
+  font-size: clamp(2.5rem, 5vw, 4.6rem);
+  line-height: 1.02;
+  color: var(--navy);
+}
+
+.heroCopy h1 span {
+  color: var(--gold);
+}
+
+.leadText,
+.heroMeta p,
+.summaryCard p,
+.panelFooter p,
+.helperCopy,
+.statusCard p,
+.scenarioCard p,
+.opsItem p,
+.operatorBody p,
+.comparableCard p,
+.headlineValue p,
+.signalBanner p,
+.messagePanel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.heroMeta {
   display: grid;
   gap: 12px;
   align-content: start;
 }
 
-.heroCard span {
-  color: var(--mint);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
+.heroMeta strong {
+  font-size: 1.8rem;
+  color: var(--navy);
 }
 
-.heroCard strong {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.75rem;
-  line-height: 1.05;
-}
-
-.heroCard p,
-.card p,
-.resultHero p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.75;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 16px;
-}
-
-.dashboardGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.card {
-  padding: 22px;
-}
-
-.intakeNote,
-.detailsBlock {
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.intakeNote {
-  padding: 16px 18px;
-  margin-bottom: 16px;
-}
-
-.intakeNote strong {
-  display: block;
-  margin-bottom: 6px;
-  font-family: "Space Grotesk", sans-serif;
-}
-
-.intakeNote p,
-.detailsBlock p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.75;
-  font-size: 0.82rem;
-}
-
-.cardHeader {
+.heroMetaRow {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
   margin-bottom: 18px;
 }
 
-.cardHeader h2 {
-  margin: 0 0 6px;
-  font-size: 1.35rem;
+.summaryCard strong {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 1.7rem;
+  color: var(--navy);
 }
 
-.formGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.formGrid label {
-  display: grid;
-  gap: 8px;
-}
-
-.formGrid .full {
-  grid-column: 1 / -1;
-}
-
-.formGrid span {
-  color: var(--muted);
-  text-transform: uppercase;
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
-}
-
-.formGrid input,
-.formGrid select,
-.formGrid textarea {
-  width: 100%;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: #0e1824;
-  color: var(--text);
-  padding: 13px 14px;
-  outline: none;
-}
-
-.formGrid textarea {
-  min-height: 160px;
-  resize: vertical;
-  line-height: 1.75;
-}
-
-.quickPaste {
-  min-height: 120px;
-}
-
-.supportText {
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.7;
-  margin-top: -4px;
-}
-
-.formActions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-}
-
-.detailsBlock {
-  margin-top: 16px;
+.feedbackBanner {
+  margin-bottom: 18px;
   padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
 }
 
-.detailsBlock summary,
-.cardSummary {
-  cursor: pointer;
-  list-style: none;
+.feedbackBanner.error {
+  background: rgba(198, 112, 83, 0.09);
+  border-color: rgba(198, 112, 83, 0.18);
+  color: #874d38;
 }
 
-.detailsBlock summary::-webkit-details-marker,
-.cardSummary::-webkit-details-marker {
-  display: none;
+.feedbackBanner.success {
+  background: rgba(68, 132, 102, 0.09);
+  border-color: rgba(68, 132, 102, 0.16);
+  color: #2f7555;
 }
 
-.detailsBlock summary {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1rem;
-}
-
-.detailsBlock .formGrid,
-.detailsBlock .columns {
-  margin-top: 14px;
-}
-
-.compactForm input,
-.compactForm select {
-  padding-block: 12px;
-}
-
-.primaryButton,
-.secondaryButton {
-  border-radius: 16px;
-  padding: 12px 16px;
-}
-
-.primaryButton {
-  border: none;
-  background: linear-gradient(135deg, var(--mint), var(--cyan));
-  color: #051019;
-  font-weight: 700;
-}
-
-.secondaryButton {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--text);
-}
-
-.emptyState,
-.notice,
-.subCard {
-  padding: 18px;
-}
-
-.emptyState {
-  min-height: 320px;
-  border: 1px dashed rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
+.valuationLayout,
+.contentGrid {
   display: grid;
-  place-items: center;
-  text-align: center;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 18px;
+  margin-bottom: 18px;
 }
 
-.emptyState strong {
-  display: block;
-  margin-bottom: 8px;
-}
-
-.compactState {
-  min-height: 180px;
-  margin-top: 16px;
-}
-
-.resultGrid {
+.panelCard {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
-.notice {
-  border-radius: 18px;
-  line-height: 1.75;
-}
-
-.notice strong {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1rem;
-}
-
-.notice p {
-  margin-top: 8px;
-}
-
-.noticebuy {
-  background: rgba(124, 255, 170, 0.08);
-  border: 1px solid rgba(124, 255, 170, 0.16);
-}
-
-.noticecaution,
-.noticeWarning {
-  background: rgba(255, 197, 111, 0.08);
-  border: 1px solid rgba(255, 197, 111, 0.16);
-}
-
-.noticeskip {
-  background: rgba(255, 143, 127, 0.08);
-  border: 1px solid rgba(255, 143, 127, 0.16);
-}
-
-.badgeRow {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 0.72rem;
-}
-
-.metricGrid,
-.columns {
-  display: grid;
-  gap: 12px;
-}
-
-.metricGrid {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-.metric span {
-  display: block;
-  color: var(--muted);
-  font-size: 0.64rem;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-}
-
-.metric strong {
-  display: block;
-  margin-top: 10px;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.45rem;
-}
-
-.columns {
-  grid-template-columns: 1fr 1fr;
-}
-
-.collection {
-  display: grid;
-  gap: 12px;
-}
-
-.savedCard {
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.savedCard h3 {
-  margin: 8px 0;
-  font-family: "Space Grotesk", sans-serif;
-  letter-spacing: -0.04em;
-}
-
-.savedCard p {
-  color: var(--muted);
-  margin: 0 0 6px;
-  line-height: 1.75;
-}
-
-.savedCardCompact {
-  display: grid;
-  gap: 14px;
-}
-
-.savedTop {
+.panelHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
-.savedSubtitle {
-  font-size: 0.8rem;
+.panelHeader h2 {
+  margin: 6px 0 0;
+  font-size: 1.9rem;
+  color: var(--navy);
 }
 
-.compactBadgeRow {
-  margin-bottom: 8px;
-}
-
-.dealValue {
-  min-width: 110px;
-  text-align: right;
-}
-
-.dealValue span,
-.metricInline span,
-.nextStep strong {
-  display: block;
-  color: var(--muted);
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-}
-
-.dealValue strong {
-  display: block;
-  margin-top: 8px;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.1rem;
-}
-
-.quickMetrics {
+.sourceSwitch {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.metricInline {
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
+.sourcePill {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 14px 16px;
+  text-align: left;
 }
 
-.metricInline strong {
+.sourcePill strong {
   display: block;
-  margin-top: 8px;
-  font-family: "Space Grotesk", sans-serif;
   font-size: 1rem;
+  color: var(--navy);
 }
 
-.nextStep {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(140, 240, 210, 0.06);
-  border: 1px solid rgba(140, 240, 210, 0.12);
+.sourcePill span {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
-.nextStep p {
-  margin-top: 8px;
+.sourcePill.active {
+  border-color: rgba(201, 108, 75, 0.35);
+  background: linear-gradient(180deg, rgba(255, 247, 238, 0.95), rgba(252, 244, 236, 0.86));
 }
 
-.compactHint {
-  font-size: 0.78rem;
+.valuationFormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.compactDetails {
-  margin-top: 0;
-}
-
-.inlineActions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-}
-
-.noteField {
+.field {
   display: grid;
   gap: 8px;
-  margin-top: 12px;
 }
 
-.noteField span {
-  color: var(--muted);
-  text-transform: uppercase;
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
+.field.full {
+  grid-column: 1 / -1;
 }
 
-.noteField textarea {
-  width: 100%;
-  min-height: 92px;
-  resize: vertical;
-  border-radius: 16px;
+.panelFooter,
+.actionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.ghostButton {
+  border-radius: 999px;
+  padding: 12px 18px;
+}
+
+.primaryButton {
+  border: none;
+  background: linear-gradient(135deg, var(--brand), var(--brand-soft));
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 16px 36px rgba(201, 108, 75, 0.22);
+}
+
+.ghostButton {
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--navy);
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.signalBanner {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+}
+
+.signalBanner strong {
+  font-size: 1.2rem;
+  color: var(--navy);
+}
+
+.headlineValue {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(47, 53, 69, 0.96), rgba(82, 70, 57, 0.94));
+  color: white;
+}
+
+.headlineValue span,
+.headlineValue p {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.headlineValue strong {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 2.4rem;
+  color: white;
+}
+
+.marketGrid,
+.statusGrid,
+.scenarioGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.marketCard,
+.statusCard,
+.scenarioCard,
+.metricMini,
+.messagePanel,
+.operatorSummary,
+.operatorBody,
+.comparableCard,
+.opsItem {
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: #0e1824;
-  color: var(--text);
-  padding: 12px 14px;
-  line-height: 1.7;
+  background: rgba(255, 255, 255, 0.66);
 }
 
-.subCard h4 {
+.marketCard,
+.statusCard,
+.scenarioCard,
+.metricMini,
+.messagePanel,
+.operatorSummary,
+.operatorBody,
+.comparableCard,
+.opsItem {
+  padding: 16px;
+}
+
+.marketCard strong,
+.statusCard strong,
+.scenarioCard strong,
+.metricMini strong,
+.comparableValues strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.15rem;
+  color: var(--navy);
+}
+
+.metricStrip,
+.scenarioMeta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.operatorGrid {
+  display: grid;
+  grid-template-columns: 0.82fr 1.18fr;
+  gap: 12px;
+}
+
+.operatorSummary strong {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 2rem;
+}
+
+.operatorBody h3,
+.opsDrawer h3 {
   margin: 0 0 10px;
+  font-size: 1rem;
+  color: var(--navy);
 }
 
-.subCard ul {
-  margin: 0;
+.operatorBody ul {
+  margin: 12px 0 0;
   padding-left: 18px;
   color: var(--muted);
   display: grid;
   gap: 8px;
-  line-height: 1.7;
 }
 
-.collapseCard {
-  padding: 0;
-  overflow: hidden;
+.comparablesList,
+.opsDrawerGrid {
+  display: grid;
+  gap: 12px;
 }
 
-.cardSummary {
-  padding: 22px;
+.comparableCard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.cardSummary h2 {
-  margin: 0 0 6px;
-  font-size: 1.35rem;
-  font-family: "Space Grotesk", sans-serif;
-  letter-spacing: -0.04em;
+.comparableTopline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
-.cardSummary p {
-  margin: 0;
+.comparableTopline span {
+  display: inline-flex;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(47, 53, 69, 0.06);
+  color: var(--navy);
+  font-size: 0.78rem;
+}
+
+.comparableValues {
+  min-width: 150px;
+  text-align: right;
+}
+
+.comparableValues small {
+  display: block;
+  margin-top: 8px;
   color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.75;
 }
 
-.collapseCard .formGrid,
-.collapseCard .formActions,
-.collapseCard .collection,
-.collapseCard .emptyState {
-  margin: 0 22px 22px;
+.scenarioMeta {
+  margin-top: 12px;
 }
 
-@media (max-width: 1100px) {
-  .hero,
-  .grid,
-  .dashboardGrid,
-  .metricGrid,
-  .columns {
+.scenarioMeta span {
+  display: inline-flex;
+  justify-content: center;
+  padding: 0.7rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(47, 53, 69, 0.06);
+  color: var(--navy);
+  font-size: 0.86rem;
+}
+
+.tone-fit,
+.tone-positive {
+  background: rgba(76, 133, 99, 0.1);
+  border-color: rgba(76, 133, 99, 0.2);
+}
+
+.tone-review,
+.tone-neutral {
+  background: rgba(183, 136, 79, 0.1);
+  border-color: rgba(183, 136, 79, 0.18);
+}
+
+.tone-out,
+.tone-warning {
+  background: rgba(201, 108, 75, 0.1);
+  border-color: rgba(201, 108, 75, 0.16);
+}
+
+.opsDrawer {
+  margin-top: 6px;
+}
+
+.opsDrawer summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.opsDrawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.opsDrawer summary strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.15rem;
+  color: var(--navy);
+}
+
+.opsDrawer summary span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.opsDrawerGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.opsItem strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--navy);
+}
+
+@media (max-width: 1080px) {
+  .heroSection,
+  .valuationLayout,
+  .contentGrid,
+  .summaryGrid,
+  .operatorGrid,
+  .opsDrawerGrid,
+  .sourceSwitch,
+  .marketGrid,
+  .statusGrid,
+  .scenarioGrid,
+  .metricStrip,
+  .scenarioMeta {
     grid-template-columns: 1fr;
+  }
+
+  .comparableCard,
+  .panelFooter,
+  .actionRow,
+  .opsDrawer summary {
+    display: grid;
+  }
+
+  .comparableValues {
+    text-align: left;
+    min-width: 0;
   }
 }
 
 @media (max-width: 720px) {
-  .shell {
-    padding: 20px 14px 40px;
+  .appShell {
+    padding: 18px 14px 40px;
   }
 
-  .hero h1 {
-    font-size: 2.3rem;
+  .topBar {
+    border-radius: var(--radius-lg);
   }
 
-  .formGrid {
+  .heroCopy h1 {
+    font-size: 2.65rem;
+  }
+
+  .valuationFormGrid {
     grid-template-columns: 1fr;
-  }
-
-  .savedTop,
-  .quickMetrics {
-    grid-template-columns: 1fr;
-  }
-
-  .savedTop {
-    display: grid;
-  }
-
-  .dealValue {
-    text-align: left;
   }
 }
