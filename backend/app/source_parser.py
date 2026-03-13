@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from .reference_data import HAMBURG_CITY_ALIASES, VEHICLE_REFERENCES
@@ -68,10 +69,12 @@ def parse_listing(payload: AnalyzeRequest) -> ParsedListing:
 def _parse_kleinanzeigen(text: str) -> ParsedListing:
     notes = ["Kleinanzeigen parser aktif."]
     price = None
+    normalized = _normalize_text(text)
+
     if re.search(r"\bvb\b", text, flags=re.IGNORECASE):
         notes.append("VB sinyali bulundu; pazarlik payi var.")
         price = _extract_price(text)
-    elif "€" in text or "eur" in text.lower() or "euro" in text.lower():
+    elif "eur" in normalized or "euro" in normalized:
         notes.append("Kleinanzeigen fiyat kalibi yakalandi.")
         price = _extract_price(text)
 
@@ -107,11 +110,11 @@ def _parse_mobile(text: str) -> ParsedListing:
     )
     if km_match:
         km = _parse_compact_number(km_match.group(1))
-        notes.append("Mobile.de kilometer alanı okundu.")
+        notes.append("Mobile.de kilometer alani okundu.")
 
     fuel_match = re.search(
         r"(?:kraftstoff|fuel)[:\s]*(benzin|diesel)",
-        text,
+        _normalize_text(text),
         flags=re.IGNORECASE,
     )
     if fuel_match:
@@ -119,8 +122,8 @@ def _parse_mobile(text: str) -> ParsedListing:
         notes.append("Mobile.de yakit tipi okundu.")
 
     price_match = re.search(
-        r"(?:preis|vb)[:\s]*([\d\.\s,]{3,7})\s*(?:€|eur|euro)",
-        text,
+        r"(?:preis|vb)[:\s]*([\d\.\s,]{3,7})\s*(?:eur|euro)",
+        _normalize_text(text),
         flags=re.IGNORECASE,
     )
     if price_match:
@@ -141,7 +144,7 @@ def _parse_mobile(text: str) -> ParsedListing:
 
 def _parse_facebook(text: str) -> ParsedListing:
     notes = ["Facebook Marketplace parser aktif."]
-    if "vb" in text.lower():
+    if "vb" in _normalize_text(text):
         notes.append("FB Marketplace ilani pazarlik acik olabilir.")
     return ParsedListing(
         asking_price=_extract_price(text),
@@ -163,7 +166,7 @@ def _parse_generic(text: str) -> ParsedListing:
 
 
 def _normalize_source(source: str | None) -> str:
-    return (source or "").strip().lower()
+    return _normalize_text(source or "")
 
 
 def _extract_year(text: str) -> int | None:
@@ -184,18 +187,21 @@ def _extract_km(text: str) -> int | None:
 
 
 def _extract_fuel(text: str) -> str | None:
-    normalized = text.lower()
+    normalized = _normalize_text(text)
     if "diesel" in normalized or "tdi" in normalized or "tdci" in normalized:
         return "Diesel"
     if "benzin" in normalized or "fsi" in normalized:
         return "Benzin"
+    if "hybrid" in normalized:
+        return "Hybrid"
     return None
 
 
 def _extract_price(text: str) -> int | None:
+    normalized = _normalize_text(text)
     match = re.search(
-        r"\b(\d{1,2}(?:[\.\s]\d{3})|\d{3,5})\s*(?:€|eur|euro|vb)\b",
-        text,
+        r"\b(\d{1,2}(?:[\.\s]\d{3})|\d{3,5})\s*(?:eur|euro|vb)\b",
+        normalized,
         flags=re.IGNORECASE,
     )
     if not match:
@@ -204,14 +210,14 @@ def _extract_price(text: str) -> int | None:
 
 
 def _extract_city(text: str) -> str | None:
-    normalized = text.lower()
+    normalized = _normalize_text(text)
     if any(alias in normalized for alias in HAMBURG_CITY_ALIASES):
         return "Hamburg"
     return None
 
 
 def _infer_vehicle(text: str) -> tuple[str | None, str | None]:
-    normalized = text.lower()
+    normalized = _normalize_text(text)
     for item in VEHICLE_REFERENCES:
         if any(keyword in normalized for keyword in item["keywords"]):
             return item["brand"], item["model"]
@@ -236,3 +242,9 @@ def _dedupe_notes(items: list[str]) -> list[str]:
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
+
+
+def _normalize_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    return ascii_text.lower()

@@ -67,3 +67,45 @@ def test_mobile_parser_extracts_structured_fields() -> None:
     assert result.km == 149000
     assert result.year == 2009
     assert result.city == "Hamburg"
+
+
+def test_analyze_listing_hydrates_from_kleinanzeigen_url(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.deal_engine.enrich_request_from_url",
+        lambda payload: (
+            payload.model_copy(
+                update={
+                    "source": "Kleinanzeigen",
+                    "brand": "Skoda",
+                    "model": "Octavia",
+                    "year": 2006,
+                    "km": 150000,
+                    "fuel": "Diesel",
+                    "asking_price": 1650,
+                    "city": "Hamburg",
+                    "raw_text": (
+                        "Skoda Octavia 2 hand 1.9 TDI 105 PS TUEV. Fahrbereit. "
+                        "Motor, Getriebe und Kupplung einwandfrei. Verliert Oel. "
+                        "Querlenker vorne links macht leichte Geraeusche. Preis VB."
+                    ),
+                }
+            ),
+            ["Listing URL otomatik cekildi."],
+        ),
+    )
+
+    result = analyze_listing(
+        AnalyzeRequest(
+            source="Kleinanzeigen",
+            url="https://www.kleinanzeigen.de/s-anzeige/skoda-octavia/123",
+        )
+    )
+
+    assert result.brand == "Skoda"
+    assert result.model == "Octavia"
+    assert result.asking_price == 1650
+    assert result.km == 150000
+    assert result.fuel == "Diesel"
+    assert result.source_parser == "kleinanzeigen"
+    assert "DIY" in " ".join(result.warnings)
+    assert any("Querlenker" in item or "Yag" in item for item in result.warnings)

@@ -1,44 +1,56 @@
 from __future__ import annotations
 
+import unicodedata
 from typing import Any
 
 from .buy_box import assess_buy_box
-from .reference_data import ISSUE_LIBRARY, VEHICLE_REFERENCES
+from .listing_fetcher import enrich_request_from_url
+from .reference_data import ISSUE_LIBRARY, POSITIVE_SIGNAL_LIBRARY, VEHICLE_REFERENCES
 from .schemas import AnalyzeRequest, AnalyzeResponse, AppSettings
 from .source_parser import parse_listing
 
 
 def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = None) -> AnalyzeResponse:
     app_settings = app_settings or AppSettings()
-    raw_text = (payload.raw_text or "").strip()
-    parsed = parse_listing(payload)
+    effective_payload, fetch_notes = enrich_request_from_url(payload)
+    raw_text = (effective_payload.raw_text or "").strip()
+    parsed = parse_listing(effective_payload)
+
+    if fetch_notes:
+        parsed.parser_notes = _dedupe_notes(fetch_notes + parsed.parser_notes)
+        parsed.parser_confidence = _clamp(parsed.parser_confidence + 6, 35, 95)
 
     blob = " ".join(
         str(value)
         for value in [
-            payload.brand,
-            payload.model,
-            payload.year,
-            payload.km,
-            payload.fuel,
-            payload.asking_price,
+            effective_payload.brand,
+            effective_payload.model,
+            effective_payload.year,
+            effective_payload.km,
+            effective_payload.fuel,
+            effective_payload.asking_price,
             raw_text,
         ]
         if value is not None and value != ""
     )
 
-    ref = _find_reference(blob, payload.brand or parsed.brand, payload.model or parsed.model)
-    year = payload.year or parsed.year or (ref["baseline_year"] if ref else 2007)
-    km = payload.km or parsed.km or (ref["baseline_km"] if ref else 160000)
-    fuel = payload.fuel or parsed.fuel or "Benzin"
-    asking_price = payload.asking_price if payload.asking_price is not None else (parsed.asking_price or 0)
-    brand = payload.brand or parsed.brand or (ref["brand"] if ref else "Bilinmiyor")
-    model = payload.model or parsed.model or (ref["model"] if ref else "Model")
-    city = payload.city or parsed.city or "Hamburg"
+    ref = _find_reference(blob, effective_payload.brand or parsed.brand, effective_payload.model or parsed.model)
+    year = effective_payload.year or parsed.year or (ref["baseline_year"] if ref else 2007)
+    km = effective_payload.km or parsed.km or (ref["baseline_km"] if ref else 160000)
+    fuel = effective_payload.fuel or parsed.fuel or "Benzin"
+    asking_price = (
+        effective_payload.asking_price if effective_payload.asking_price is not None else (parsed.asking_price or 0)
+    )
+    brand = effective_payload.brand or parsed.brand or (ref["brand"] if ref else "Bilinmiyor")
+    model = effective_payload.model or parsed.model or (ref["model"] if ref else "Model")
+    city = effective_payload.city or parsed.city or "Hamburg"
 
     detected_issues = _detect_issues(blob)
+    positive_signals = _detect_positive_signals(blob)
 
-    repair_cost = sum(_midpoint(issue["repair_range"]) for issue in detected_issues)
+    repair_cost = sum(_estimate_issue_cost(issue) for issue in detected_issues)
+    service_reserve = _estimate_service_reserve(km=km, fuel=fuel, text=blob)
+    repair_cost += service_reserve
     prep_cost = app_settings.issue_prep_cost if detected_issues else app_settings.clean_prep_cost
     transfer_cost = app_settings.transfer_cost
 
@@ -53,6 +65,7 @@ def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = 
     risk_raw += max(0, 2026 - year) * 1.35
     risk_raw += max(0, (km - 120000) / 12000)
     risk_raw += 0 if asking_price else 12
+    risk_raw -= sum(signal["risk_reduction"] for signal in positive_signals)
     risk_score = _clamp(round(risk_raw), 8, 94)
 
     if risk_score >= 58:
@@ -112,16 +125,25 @@ def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = 
         "Belirgin mekanik sorun sinyali yok" if not detected_issues else "Sorunlar metinden yakalandi",
         "Risk seviyesi dusuk" if risk_level == "low" else "Pazarlikta sorun kalemleri kullanilabilir",
         "Marj flip icin makul" if margin_percent >= 14 else "Kar alani sinirli ama optimize edilebilir",
-        f"{ref['model']} icin referans var" if ref else "Referans piyasa manuel teyit ister",
+        ref.get("liquidity_note", f"{ref['model']} icin referans var") if ref else "Referans piyasa manuel teyit ister",
         f"Parser: {parsed.source_parser}",
     ]
+    strengths.extend(signal["label"] for signal in positive_signals[:2])
 
     warnings = [
-        f"Baslica sorunlar: {', '.join(issue['label'] for issue in detected_issues)}" if detected_issues else "Servis gecmisi ve TUV tarihi teyit edilmeli",
+        (
+            f"Baslica sorunlar: {', '.join(issue['label'] for issue in detected_issues)}"
+            if detected_issues
+            else "Servis gecmisi ve TUV tarihi teyit edilmeli"
+        ),
         "Masraf kalemleri ekspertizle netlesmeli" if repair_cost > 500 else "Masraf kalemleri gorece kontrollu",
         "Yuksek km cikis suresini uzatabilir" if km > 180000 else "KM seviyesi tolere edilebilir",
         f"Beklenen satis suresi: {ref['sell_days'] if ref else '12-24 gun'}",
     ]
+    if service_reserve:
+        warnings.append(f"Yag, filtre ve sivi bakimi icin {service_reserve} EUR DIY servis rezervi eklendi.")
+    if detected_issues:
+        warnings.append(_build_repair_assumption_note(detected_issues))
 
     confidence_score = parsed.parser_confidence + 18
     verification_notes = list(parsed.parser_notes)
@@ -132,19 +154,19 @@ def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = 
     if not asking_price:
         confidence_score -= 18
         verification_notes.append("Istenen fiyat eksik; pazarlik seviyesi sahada teyit edilmeli.")
-    if not payload.brand and not parsed.brand:
+    if not effective_payload.brand and not parsed.brand:
         confidence_score -= 8
         verification_notes.append("Marka bilgisi cikarilamadi; ilan basligini manuel kontrol et.")
-    if not payload.model and not parsed.model:
+    if not effective_payload.model and not parsed.model:
         confidence_score -= 8
         verification_notes.append("Model bilgisi cikarilamadi; yanlis eslesme riski var.")
-    if not payload.year and not parsed.year:
+    if not effective_payload.year and not parsed.year:
         confidence_score -= 6
         verification_notes.append("Model yili net degil; ruhsat veya VIN ile kontrol et.")
-    if not payload.km and not parsed.km:
+    if not effective_payload.km and not parsed.km:
         confidence_score -= 8
         verification_notes.append("KM bilgisi cikarilamadi; gosterge ve servis kaydiyla dogrula.")
-    if not payload.fuel and not parsed.fuel:
+    if not effective_payload.fuel and not parsed.fuel:
         confidence_score -= 4
         verification_notes.append("Yakit tipi default veya zayif cikarimla geldi; ilani tekrar kontrol et.")
     if not raw_text:
@@ -165,6 +187,8 @@ def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = 
     if buy_box_status == "out":
         confidence_score -= 8
         verification_notes.append("Buy-box disinda kaliyor; kriter disi oldugu icin ekstra temkinli ol.")
+    if service_reserve:
+        verification_notes.append("Temel bakim rezervi eklendi; yag, filtre ve sogutma sivilarini sahada netlestir.")
 
     confidence_score = _clamp(confidence_score, 24, 96)
     verification_notes = _dedupe_notes(verification_notes)
@@ -200,11 +224,11 @@ def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = 
     )
 
     return AnalyzeResponse(
-        url=payload.url,
+        url=effective_payload.url,
         brand=brand,
         model=model,
         title=f"{brand} {model} {year}".strip(),
-        source=payload.source,
+        source=effective_payload.source,
         city=city,
         year=year,
         km=km,
@@ -236,7 +260,7 @@ def analyze_listing(payload: AnalyzeRequest, app_settings: AppSettings | None = 
 
 
 def _find_reference(text: str, brand: str | None, model: str | None) -> dict[str, Any] | None:
-    normalized = f"{brand or ''} {model or ''} {text or ''}".lower()
+    normalized = _normalize_text(f"{brand or ''} {model or ''} {text or ''}")
     for item in VEHICLE_REFERENCES:
         if any(keyword in normalized for keyword in item["keywords"]):
             return item
@@ -244,12 +268,37 @@ def _find_reference(text: str, brand: str | None, model: str | None) -> dict[str
 
 
 def _detect_issues(text: str) -> list[dict[str, Any]]:
-    normalized = text.lower()
+    normalized = _normalize_text(text)
     return [issue for issue in ISSUE_LIBRARY if any(keyword in normalized for keyword in issue["keywords"])]
+
+
+def _detect_positive_signals(text: str) -> list[dict[str, Any]]:
+    normalized = _normalize_text(text)
+    return [
+        signal
+        for signal in POSITIVE_SIGNAL_LIBRARY
+        if any(keyword in normalized for keyword in signal["keywords"])
+    ]
 
 
 def _midpoint(pair: tuple[int, int]) -> int:
     return round((pair[0] + pair[1]) / 2)
+
+
+def _estimate_issue_cost(issue: dict[str, Any]) -> int:
+    operator_range = issue.get("operator_range")
+    if operator_range:
+        return _midpoint(operator_range)
+    return _midpoint(issue["repair_range"])
+
+
+def _estimate_service_reserve(*, km: int, fuel: str, text: str) -> int:
+    normalized = _normalize_text(text)
+    if "serviceheft" in normalized or "lueckenlos" in normalized:
+        return 0
+    if km < 140000:
+        return 0
+    return 110 if fuel == "Diesel" else 90
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
@@ -280,18 +329,14 @@ def _build_negotiation_points(
 
     if asking_price:
         discount_gap = max(asking_price - offer_price, 0)
-        points.append(
-            f"Ilan fiyatindan {discount_gap} EUR asagi inmek icin masraf kalemlerini rakamla ac."
-        )
+        points.append(f"Ilan fiyatindan {discount_gap} EUR asagi inmek icin masraf kalemlerini rakamla ac.")
     else:
         points.append("Net fiyat belirtilmemis; once saticidan son fiyat beklentisini yazili al.")
 
     if detected_issues:
         for issue in detected_issues[:2]:
             low, high = issue["repair_range"]
-            points.append(
-                f"{issue['label']} icin {low}-{high} EUR bant verip indirimi bu kalemden iste."
-            )
+            points.append(f"{issue['label']} icin {low}-{high} EUR bant verip indirimi bu kalemden iste.")
     else:
         points.append("Cold start, TUV ve servis gecmisini sorup indirim alanini bunlar uzerinden ac.")
 
@@ -305,6 +350,14 @@ def _build_negotiation_points(
         points.append("Buy-box disi oldugu icin teklifini sert tut ve tavana cikma.")
 
     return _dedupe_notes(points)
+
+
+def _build_repair_assumption_note(detected_issues: list[dict[str, Any]]) -> str:
+    diy_friendly = [issue["label"] for issue in detected_issues if issue.get("operator_range")]
+    if not diy_friendly:
+        return "Masraf hesabi agirlikli olarak piyasa usta fiyatlariyla kuruldu."
+    joined = ", ".join(diy_friendly[:2])
+    return f"{joined} icin DIY / parca agirlikli operator varsayimi kullanildi."
 
 
 def _build_recommended_message(
@@ -343,3 +396,9 @@ def _build_next_action(
     if recommendation == "caution" or verification_required or risk_level != "low":
         return "Sahada kontrol listesiyle ilerle; net teyit olmadan teklif baglama."
     return "Bugun gorusme ayarla, araci soguk calistir ve teklifini ayni ziyaret icinde ver."
+
+
+def _normalize_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    return ascii_text.lower()
