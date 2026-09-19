@@ -1,5 +1,5 @@
 {
-  "name": "autonow-frontend",
+  "name": "autolister-frontend",
   "private": true,
   "version": "0.1.0",
   "scripts": {
@@ -11,7 +11,9 @@
     "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
-    "next": "^15.5.12",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.116.0",
+    "next": "15.5.24",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0b1512"/>
+  <circle cx="1000" cy="-20" r="360" fill="#173b2a"/>
+  <circle cx="1080" cy="80" r="180" fill="#24583b"/>
+  <text x="90" y="245" fill="#8af0b5" font-family="Arial,sans-serif" font-size="92" font-weight="700">AutoLister</text>
+  <text x="94" y="325" fill="#f6f7f5" font-family="Arial,sans-serif" font-size="42">Amazon zu eBay automatisieren</text>
+  <text x="94" y="395" fill="#c5d8ce" font-family="Arial,sans-serif" font-size="28">Listings · Bestand · Preise · Bestellungen</text>
+  <rect x="94" y="470" width="250" height="6" rx="3" fill="#57d58d"/>
+</svg>

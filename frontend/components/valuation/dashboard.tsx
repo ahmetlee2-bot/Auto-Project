@@ -34,6 +34,7 @@ import { ScenarioPanel } from "./scenario-panel";
 import { StatusPanel } from "./status-panel";
 import { SummaryGrid } from "./summary-grid";
 import { ValuationForm } from "./valuation-form";
+import { AuthNav } from "../auth/auth-nav";
 
 const defaultSettings: AppSettings = {
   preferred_city: "Hamburg",
@@ -170,6 +171,7 @@ export function ValuationDashboard() {
           <strong>Valuation cockpit</strong>
         </div>
         <div className="topBarMeta">
+          <AuthNav />
           <span className="topBarPill">balanced premium</span>
           <span className="topBarPill">backend-ready</span>
         </div>
@@ -221,6 +223,23 @@ export function ValuationDashboard() {
         searchProfiles={searchProfiles}
         appSettings={appSettings}
       />
+
+      <section className="storeCta glassCard" aria-label="AutoLister herunterladen">
+        <div>
+          <p className="sectionEyebrow">AutoLister Erweiterung</p>
+          <h2>Amazon-Produkte schneller auf eBay vorbereiten.</h2>
+          <p>Installieren Sie die Chrome-Erweiterung und starten Sie direkt auf einer Produktseite.</p>
+        </div>
+        <a className="primaryButton" href="https://chromewebstore.google.com/detail/phppekchehibeiphdmjifmceoencigee" target="_blank" rel="noopener noreferrer">Chrome hinzufügen ↗</a>
+      </section>
+
+      <footer className="siteFooter">
+        <span>© {new Date().getFullYear()} AutoLister</span>
+        <nav aria-label="Rechtliche Hinweise">
+          <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Datenschutzerklärung</a>
+          <a href="/terms.html">Nutzungsbedingungen</a>
+        </nav>
+      </footer>
     </main>
   );
 }

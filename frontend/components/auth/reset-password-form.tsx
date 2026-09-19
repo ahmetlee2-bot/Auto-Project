@@ -1,0 +1,6 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { createClient } from "../../lib/supabase/client";
+
+export function ResetPasswordForm() { const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); async function submit(event: FormEvent) { event.preventDefault(); setError(""); if (password !== confirm) { setError("Die Passwörter stimmen nicht überein."); return; } setBusy(true); const { error: updateError } = await createClient().auth.updateUser({ password }); if (updateError) setError(updateError.message); else window.location.assign("/dashboard"); setBusy(false); } return <form className="authForm" onSubmit={submit}><label>Neues Passwort<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete="new-password" /></label><label>Passwort wiederholen<input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} required minLength={8} autoComplete="new-password" /></label>{error ? <p className="authError">{error}</p> : null}<button className="primaryButton" disabled={busy}>{busy ? "Bitte warten …" : "Passwort speichern"}</button></form>; }
