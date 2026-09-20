@@ -120,7 +120,40 @@ async function createDraft(input = {}, userId) {
   const offer = await request(userId, 'POST', '/sell/inventory/v1/offer', { sku, marketplaceId, format: 'FIXED_PRICE', availableQuantity: quantity, categoryId: String(input.categoryId || ''), merchantLocationKey: input.merchantLocationKey || process.env.EBAY_MERCHANT_LOCATION_KEY, listingDescription: input.description || '', listingPolicies: input.listingPolicies || {}, pricingSummary: { price: { currency: input.currency || 'EUR', value: String(input.price || '0.00') } } });
   return { ...offer, sku, status: 'DRAFT' };
 }
-async function publishDraft(input = {}, userId) { if (!input.offerId) throw new Error('offerId gerekli.'); return { ...(await request(userId, 'POST', `/sell/inventory/v1/offer/${encodeURIComponent(input.offerId)}/publish`)), status: 'PUBLISHED', publishedAt: new Date().toISOString() }; }
+async function markProductPublished(userId, input, publishResult) {
+  const ebayItemId = String(
+    publishResult?.listingId || publishResult?.itemId || publishResult?.ebayItemId || input.ebayItemId || '',
+  ).trim();
+  const productId = String(input.productId || '').trim();
+  const sku = String(input.sku || input.asin || '').trim().toUpperCase();
+  if (!ebayItemId) throw new Error('eBay yayın yanıtında Item ID bulunamadı; ürün yerel olarak aktif işaretlenmedi.');
+
+  let query = supabaseAdmin.from('products').update({
+    item_id: ebayItemId,
+    status: 'ACTIVE',
+    updated_at: new Date().toISOString(),
+  }).eq('user_id', userId);
+  if (productId) query = query.eq('id', productId);
+  else if (sku) query = query.eq('asin', sku);
+  else throw new Error('Yayınlanan ürünü eşleştirmek için productId veya sku gerekli.');
+
+  const { data, error } = await query.select('id,user_id,asin,title,images,item_id,price,stock,status,updated_at').maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Yayınlanan ürün bu kullanıcıya ait yerel ürün havuzunda bulunamadı.');
+  return data;
+}
+async function publishDraft(input = {}, userId) {
+  if (!input.offerId) throw new Error('offerId gerekli.');
+  const published = await request(userId, 'POST', `/sell/inventory/v1/offer/${encodeURIComponent(input.offerId)}/publish`);
+  const product = await markProductPublished(userId, input, published);
+  return {
+    ...published,
+    status: 'PUBLISHED',
+    publishedAt: new Date().toISOString(),
+    ebay_item_id: product.item_id,
+    product,
+  };
+}
 async function listDrafts(userId) {
   requireUser(userId);
   const query = supabaseAdmin.from('products').select('*').eq('user_id', userId).in('status', ['DRAFT', 'READY']).order('created_at', { ascending: false });
