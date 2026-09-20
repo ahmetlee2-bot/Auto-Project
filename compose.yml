@@ -1,0 +1,128 @@
+name: autolister-platform
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: [container-edge]
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks: [edge]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 80
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run]
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/ahmetlee2-bot/autolister-frontend}:${APP_TAG:-latest}
+    restart: unless-stopped
+    environment: { NODE_ENV: production, PORT: "3000" }
+    ports: ["127.0.0.1:3101:3000"]
+    networks: [edge]
+    mem_limit: 320m
+    cpus: 0.75
+    pids_limit: 160
+    security_opt: [no-new-privileges:true]
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/ahmetlee2-bot/autolister-api}:${APP_TAG:-latest}
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      REDIS_URL: redis://redis:6379/0
+    ports: ["127.0.0.1:3210:3000"]
+    networks: [edge, app-internal]
+    mem_limit: 512m
+    cpus: 0.75
+    pids_limit: 220
+    security_opt: [no-new-privileges:true]
+    depends_on: { redis: { condition: service_healthy } }
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes: [redis-data:/data]
+    networks: [app-internal, automation-internal]
+    mem_limit: 160m
+    cpus: 0.25
+    pids_limit: 80
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 10s, timeout: 3s, retries: 5 }
+    security_opt: [no-new-privileges:true]
+
+  n8n:
+    image: n8nio/n8n:1.113.3
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      N8N_HOST: n8n.autolister-app.de
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.autolister-app.de/
+      N8N_SECURE_COOKIE: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+    volumes: [n8n-data:/home/node/.n8n]
+    ports: ["127.0.0.1:5678:5678"]
+    networks: [edge, automation-internal]
+    mem_limit: 384m
+    cpus: 0.35
+    pids_limit: 180
+    security_opt: [no-new-privileges:true]
+
+  umami-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment: { POSTGRES_DB: umami, POSTGRES_USER: umami, POSTGRES_PASSWORD: "${UMAMI_DB_PASSWORD}" }
+    volumes: [umami-db-data:/var/lib/postgresql/data]
+    networks: [analytics]
+    mem_limit: 320m
+    cpus: 0.35
+    pids_limit: 120
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U umami -d umami"], interval: 10s, timeout: 3s, retries: 5 }
+
+  umami:
+    image: docker.umami.is/umami-software/umami:postgresql-3.3.1
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://umami:${UMAMI_DB_PASSWORD}@umami-db:5432/umami"
+      APP_SECRET: "${UMAMI_APP_SECRET}"
+    ports: ["127.0.0.1:3102:3000"]
+    networks: [edge, analytics]
+    mem_limit: 256m
+    cpus: 0.25
+    pids_limit: 120
+    depends_on: { umami-db: { condition: service_healthy } }
+    security_opt: [no-new-privileges:true]
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1.23.16-alpine
+    restart: unless-stopped
+    volumes: [kuma-data:/app/data]
+    ports: ["127.0.0.1:3103:3001"]
+    networks: [edge, monitoring]
+    mem_limit: 192m
+    cpus: 0.20
+    pids_limit: 120
+    security_opt: [no-new-privileges:true]
+
+networks:
+  edge: { name: autolister-edge }
+  app-internal: { internal: true }
+  automation-internal: { internal: true }
+  analytics: { internal: true }
+  monitoring: { internal: true }
+
+volumes:
+  redis-data:
+  n8n-data:
+  umami-db-data:
+  kuma-data:
