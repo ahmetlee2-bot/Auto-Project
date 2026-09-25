@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "AutoLister – Amazon to eBay",
+  "version": "1.0.3",
+  "description": "Amazon-Produkte sicher erfassen, als eBay-Entwürfe vorbereiten und Preise sowie Bestand überwachen.",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "tabs",
+    "alarms",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.amazon.de/*",
+    "https://*.amazon.com/*",
+    "https://*.amazon.co.uk/*",
+    "https://*.amazon.fr/*",
+    "https://*.amazon.it/*",
+    "https://*.amazon.es/*",
+    "https://*.media-amazon.com/*",
+    "https://*.ssl-images-amazon.com/*",
+    "https://images-na.ssl-images-amazon.com/*",
+    "https://api.autolister-app.de/*",
+    "https://rdwqrygkkzzouiamrxwq.supabase.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Amazon ürününü eBay taslağına aktar",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.amazon.de/*",
+        "https://*.amazon.com/*",
+        "https://*.amazon.co.uk/*",
+        "https://*.amazon.fr/*",
+        "https://*.amazon.it/*",
+        "https://*.amazon.es/*"
+      ],
+      "js": [
+        "seoProcessor.js",
+        "identifierProcessor.js",
+        "descriptionProcessor.js",
+        "listing_builder.js",
+        "amazon_parser.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

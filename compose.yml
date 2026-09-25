@@ -36,13 +36,42 @@ services:
       NODE_ENV: production
       PORT: "3000"
       REDIS_URL: redis://redis:6379/0
+      EBAY_BRIDGE_URL: http://ebay-bridge:3210/api
+      EBAY_BRIDGE_SHARED_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
     ports: ["127.0.0.1:3210:3000"]
     networks: [edge, app-internal]
     mem_limit: 512m
     cpus: 0.75
     pids_limit: 220
     security_opt: [no-new-privileges:true]
-    depends_on: { redis: { condition: service_healthy } }
+    depends_on:
+      redis: { condition: service_healthy }
+      ebay-bridge: { condition: service_healthy }
+
+  ebay-bridge:
+    image: ${BRIDGE_IMAGE:-ghcr.io/ahmetlee2-bot/autolister-ebay-bridge}:${APP_TAG:-latest}
+    restart: unless-stopped
+    env_file: [ebay-bridge.env]
+    environment:
+      PORT: "3210"
+      BRIDGE_BIND_HOST: 0.0.0.0
+      BRIDGE_SHARED_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
+      DATA_FILE: /data/drafts.json
+      ARCHIVE_FILE: /data/drafts-archive.json
+      SERVER_MONITOR_ENABLED: "true"
+      SERVER_MONITOR_INTERVAL_MS: "1800000"
+    volumes: [ebay-bridge-data:/data]
+    networks: [edge, app-internal]
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 160
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3210/api/health',{headers:{'x-autolister-bridge-key':process.env.BRIDGE_SHARED_SECRET}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   redis:
     image: redis:7.4-alpine
@@ -123,6 +152,7 @@ networks:
 
 volumes:
   redis-data:
+  ebay-bridge-data:
   n8n-data:
   umami-db-data:
   kuma-data:

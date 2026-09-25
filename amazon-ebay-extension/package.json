@@ -1,0 +1,15 @@
+{
+  "name": "alltaghaus-amazon-ebay-extension",
+  "version": "0.8.3",
+  "private": true,
+  "scripts": {
+    "start:bridge": "node bridge/server.js",
+    "test": "node tests/processors.test.cjs && node tests/ebay-api-client.test.cjs && node tests/connection.test.cjs && node tests/capture-popup.test.cjs && node tests/background.test.cjs && node tests/gallery.test.cjs && node tests/offscreen-layout.test.cjs && node tests/bridge.test.cjs && node tests/atomic-write.test.cjs && node tests/publish-validation.test.cjs",
+    "check": "node --check seoProcessor.js && node --check priceCalculator.js && node --check identifierProcessor.js && node --check descriptionProcessor.js && node --check listing_builder.js && node --check amazon_parser.js && node --check imageProcessor.js && node --check listingValidator.js && node --check content.js && node --check background.js && node --check popup.js && node --check options.js && node --check bridge/supabase.js && node --check bridge/repositories.js && node --check bridge/ebay_api_client.js && node --check bridge/server.js",
+    "verify:release": "npm test && npm run check && node tests/release-readiness.test.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "sharp": "^0.35.4"
+  }
+}

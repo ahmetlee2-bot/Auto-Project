@@ -37,5 +37,8 @@ app.use('/api/v1', api);
 app.use((error, _req, res, _next) => { console.error('API error:', error.message); res.status(error.status || 500).json({ error: error.status && error.status < 500 ? error.message : 'Sunucu hatası.' }); });
 
 const port = Number(process.env.PORT || 3000);
-if (require.main === module) app.listen(port, () => console.log(`Backend listening on port ${port}`));
+if (require.main === module) app.listen(port, () => {
+  console.log(`Backend listening on port ${port}`);
+  require('./services/ebay-reconciliation.service').startReconciliation();
+});
 module.exports = app;

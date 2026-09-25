@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "start:prod": "node src/server.js",
-    "build": "node --check src/server.js && node --check src/config/supabase.js && node --check src/middleware/auth.js && node --check src/controllers/auth.controller.js && node --check src/controllers/ebay.controller.js && node --check src/controllers/listing.controller.js && node --check src/controllers/automation.controller.js && node --check src/services/email.service.js && node --check src/services/ebay.service.js && node --check src/services/automation.service.js && node --check src/services/storage.service.js && node --check src/routes/api.js",
+    "build": "node --check src/server.js && node --check src/config/supabase.js && node --check src/middleware/auth.js && node --check src/controllers/auth.controller.js && node --check src/controllers/ebay.controller.js && node --check src/controllers/listing.controller.js && node --check src/controllers/automation.controller.js && node --check src/services/email.service.js && node --check src/services/ebay.service.js && node --check src/services/ebay-bridge.service.js && node --check src/services/ebay-reconciliation.service.js && node --check src/services/automation.service.js && node --check src/services/storage.service.js && node --check src/routes/api.js",
     "check": "node --check src/server.js && node --check src/config/supabase.js && node --check src/routes/api.js && node --check src/controllers/auth.controller.js && node --check src/services/email.service.js"
   },
   "dependencies": {

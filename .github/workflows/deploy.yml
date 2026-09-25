@@ -27,6 +27,9 @@ jobs:
           - name: autolister-api
             context: ./backend
             file: ./backend/Dockerfile
+          - name: autolister-ebay-bridge
+            context: ./amazon-ebay-extension
+            file: ./amazon-ebay-extension/Dockerfile.bridge
 
     steps:
       - name: Checkout

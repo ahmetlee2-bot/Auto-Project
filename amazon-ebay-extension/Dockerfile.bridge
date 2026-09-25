@@ -1,0 +1,10 @@
+FROM node:22-bookworm-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY bridge ./bridge
+RUN mkdir -p /data && chown node:node /data
+ENV NODE_ENV=production PORT=3210 BRIDGE_BIND_HOST=0.0.0.0 DATA_FILE=/data/drafts.json ARCHIVE_FILE=/data/drafts-archive.json
+USER node
+EXPOSE 3210
+CMD ["node", "bridge/server.js"]
