@@ -95,7 +95,9 @@ function preparedProduct() {
 
 async function activeAmazonTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !/^https:\/\/[^/]*amazon\./i.test(tab.url || "") || !asinFromUrl(tab.url)) throw new Error("Bitte eine Amazon-Produktseite öffnen.");
+  let hostname = "";
+  try { hostname = new URL(tab?.url || "").hostname.toLowerCase(); } catch {}
+  if (!tab?.id || !(hostname === "amazon.de" || hostname.endsWith(".amazon.de")) || !asinFromUrl(tab.url)) throw new Error("Bitte eine Amazon.de Produktseite öffnen.");
   return tab;
 }
 

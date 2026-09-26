@@ -221,15 +221,7 @@ async function ensureSettings() {
 }
 
 async function ensureAlarm() {
-  const settings = await ensureSettings();
-  const existing = await chrome.alarms.get(MONITOR_ALARM);
-  if (!existing || existing.periodInMinutes !== settings.monitorIntervalMinutes) {
-    await chrome.alarms.clear(MONITOR_ALARM);
-    await chrome.alarms.create(MONITOR_ALARM, {
-      delayInMinutes: 1,
-      periodInMinutes: settings.monitorIntervalMinutes,
-    });
-  }
+  await chrome.alarms.clear(MONITOR_ALARM);
 }
 
 async function purgeLegacyLocalDrafts() {
@@ -445,11 +437,8 @@ async function legacyMonitorProductsDisabled() {
 
 async function createDraft(product) {
   const settings = await ensureSettings();
-  const gallery = await buildProcessedGallery(product, settings);
   const listing = {
     ...product,
-    ebayDescription: mandatoryListingDescription(product),
-    processedImageData: gallery.images.map(({ dataUrl, mimeType, cropRatio, width, height }) => ({ dataUrl, mimeType, cropRatio, width, height })),
     marketplaceId: settings.marketplaceId,
     currency: settings.currency,
     categoryId: settings.categoryId,
@@ -461,7 +450,7 @@ async function createDraft(product) {
     },
     autoPublish: settings.autoPublish === true,
   };
-  await recordPipelineEvent({ stage: 'SERVER_UPLOAD', message: 'Ürün ve işlenmiş galeri sunucuya aktarılıyor.' });
+  await recordPipelineEvent({ stage: 'SERVER_UPLOAD', message: 'Ürün URL’si ve seçenekler sunucuya aktarılıyor; ürün ve görseller sunucuda işleniyor.' });
   return globalThis.AutoListerCloud.createEbayDraft(listing);
 }
 

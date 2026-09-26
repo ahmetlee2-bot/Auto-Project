@@ -65,31 +65,16 @@
     return { ...result, status: result.product.status, draftId: result.product.id, savedToCloud: true };
   }
   async function createEbayDraft(product) {
-    const saved = await saveProduct(product);
-    const draft = await request('/ebay/draft', {
-      sourceId: product.asin,
+    const draft = await request('/ebay/import-amazon', {
       amazonUrl: product.sourceUrl || `https://www.amazon.de/dp/${product.asin}`,
-      title: product.ebayTitle || product.suggestedTitle || product.title,
-      description: product.ebayDescription || product.descriptionHtml || product.description || '',
-      price: product.salePrice,
-      quantity: product.quantity,
-      itemSpecifics: product.itemSpecifics || {},
-      ean: product.ean || '',
-      marketplaceId: product.marketplaceId || 'EBAY_DE',
-      currency: product.currency || 'EUR',
-      categoryId: product.categoryId || '',
-      merchantLocationKey: product.merchantLocationKey || '',
-      listingPolicies: product.listingPolicies || {},
-      processedImageData: product.processedImageData || [],
-      imageRightsConfirmed: product.imageRightsConfirmed === true,
-      autoPublish: product.autoPublish === true,
       targetMarginPercent: product.targetMarginPercent,
-      manualSalePrice: product.manualSalePrice,
-      sourcePriceText: product.priceText || '',
-      desiredQuantity: 1,
+      manualSalePrice: product.manualSalePrice || null,
+      quantity: product.quantity === undefined ? 1 : product.quantity,
+      autoPublish: product.autoPublish === true,
+      imageRightsConfirmed: product.imageRightsConfirmed === true,
     });
-    if (!draft.jobId) throw new Error('Sunucu eBay işini kabul etmedi.');
-    return { ...saved, ...draft, status: 'PROCESSING', serverQueued: true };
+    if (!draft.jobId) throw new Error('Der AutoLister-Server hat den Auftrag nicht bestätigt.');
+    return { ...draft, status: 'PROCESSING', serverQueued: true };
   }
   globalThis.AutoListerCloud = {
     request, saveProduct, createEbayDraft, logout,

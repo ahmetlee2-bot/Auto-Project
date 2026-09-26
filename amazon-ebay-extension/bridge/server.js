@@ -45,6 +45,18 @@ function persistDraftJobs() {
 }
 const debugEvents = [];
 const monitorState = { enabled: process.env.SERVER_MONITOR_ENABLED === "true", lastRunAt: null, checked: 0, changed: 0, errors: 0 };
+for (const storedJob of readRecords(jobsFile).slice(-100)) {
+  if (!storedJob?.jobId) continue;
+  if (storedJob.status === "RUNNING") {
+    Object.assign(storedJob, {
+      status: "FAILED",
+      message: "Der Serverauftrag wurde durch einen Serverneustart unterbrochen. Bitte erneut starten.",
+      completedAt: Date.now(),
+    });
+  }
+  draftJobs.set(storedJob.jobId, storedJob);
+}
+persistDraftJobs();
 
 function debugEvent(stage, data = {}) {
   const event = { at: new Date().toISOString(), stage, ...data };
@@ -765,7 +777,10 @@ async function buildAmazonDraft(input) {
   if (input.imageRightsConfirmed !== true) throw new Error('Görseller için kullanım hakkı onayı gereklidir.');
   const product = await fetchAmazonProduct(input);
   const targetMarginPercent = Number(input.targetMarginPercent ?? 20);
-  const price = salePriceForSource(product.price, targetMarginPercent);
+  const manualSalePrice = String(input.manualSalePrice || '').trim().replace(',', '.');
+  const price = manualSalePrice
+    ? (/^\d+(?:\.\d{1,2})?$/.test(manualSalePrice) && Number(manualSalePrice) > 0 ? Number(manualSalePrice).toFixed(2) : null)
+    : salePriceForSource(product.price, targetMarginPercent);
   if (!price) throw new Error('Hedef kâr marjı geçersiz.');
   const requestedQuantity = Number(input.quantity ?? 1);
   if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 99) throw new Error('Adet 1-99 arasında olmalıdır.');
@@ -785,6 +800,7 @@ async function buildAmazonDraft(input) {
     sourceUrl: product.url,
     sourcePrice: product.price,
     targetMarginPercent,
+    manualSalePrice: manualSalePrice || null,
     title: product.title,
     description: importedDescription(product),
     processedImageData,
