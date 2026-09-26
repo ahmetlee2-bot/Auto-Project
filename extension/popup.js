@@ -12,7 +12,7 @@ function asinFromUrl(value) {
 const elements = {
   productName: document.querySelector("#productName"), productMeta: document.querySelector("#productMeta"),
   sourcePrice: document.querySelector("#sourcePrice"), salePrice: document.querySelector("#salePrice"),
-  profitMargin: document.querySelector("#profitMargin"), listNow: document.querySelector("#listNow"),
+  profitMargin: document.querySelector("#profitMargin"), listNow: document.querySelector("#listNow"), imageRights: document.querySelector("#imageRightsConfirmed"),
   openDashboard: document.querySelector("#openDashboard"),
   manualPrice: document.querySelector("#manualPrice"),
   status: document.querySelector("#status"), log: document.querySelector("#log"), activityDot: document.querySelector("#activityDot"),
@@ -43,7 +43,7 @@ function addLog(message, state = "pending") {
 }
 
 function setBusy(busy) {
-  elements.listNow.disabled = busy || !authenticated || !currentProduct;
+  elements.listNow.disabled = busy || !authenticated || !currentProduct || !elements.imageRights.checked;
   elements.activityDot.classList.toggle("busy", busy);
   elements.listNow.classList.toggle("is-loading", busy);
   elements.listNow.querySelector(".button-label").textContent = busy ? "Wird übertragen …" : "Auf eBay listen";
@@ -86,7 +86,7 @@ function preparedProduct() {
     manualSalePrice: elements.manualPrice.value.trim() ? salePrice : null,
     quantity: currentProduct.lowStock || currentProduct.inStock === false ? 0 : 1,
     targetMarginPercent: Number(elements.profitMargin.value),
-    imageRightsConfirmed: true,
+    imageRightsConfirmed: elements.imageRights.checked,
   };
   const readiness = globalThis.AlltaghausListing?.validateListing(product);
   if (readiness && !readiness.ready) throw new Error(readiness.blockers[0]);
@@ -147,6 +147,10 @@ async function ensureActiveProduct() {
 
 async function listProduct() {
   if (busy) return;
+  if (!elements.imageRights.checked) {
+    setStatus("Bitte bestätige zuerst die Nutzungsrechte an den Produktbildern.", true);
+    return;
+  }
   busy = true;
   setBusy(true);
   elements.log.replaceChildren();
@@ -192,6 +196,7 @@ elements.manualPrice.addEventListener("input", () => {
   void chrome.storage.local.set({ manualPrices });
   renderPreview(currentProduct);
 });
+elements.imageRights.addEventListener("change", () => setBusy(busy));
 elements.profitMargin.addEventListener("input", () => {
   void chrome.storage.local.set({ autoListerMargin: Number(elements.profitMargin.value) });
   if (!currentProduct) return;

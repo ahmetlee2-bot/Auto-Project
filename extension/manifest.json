@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoLister – Amazon to eBay",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Amazon-Produkte sicher erfassen, als eBay-Entwürfe vorbereiten und Preise sowie Bestand überwachen.",
   "minimum_chrome_version": "120",
   "permissions": [
