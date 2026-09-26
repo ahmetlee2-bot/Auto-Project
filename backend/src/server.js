@@ -16,7 +16,8 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'https://autolister-app.de,ht
 const extensionOrigins = (process.env.EXTENSION_IDS || 'dpifgdobjahfpppjlhbjnlmldnbmiija')
   .split(',').map((id) => id.trim()).filter((id) => /^[a-p]{32}$/.test(id)).map((id) => `chrome-extension://${id}`);
 app.use(cors({ origin: (origin, callback) => {
-  if (!origin || allowedOrigins.includes(origin) || extensionOrigins.includes(origin)) return callback(null, true);
+  const isChromeExtensionOrigin = /^chrome-extension:\/\/[a-p]{32}$/.test(String(origin || ''));
+  if (!origin || allowedOrigins.includes(origin) || extensionOrigins.includes(origin) || isChromeExtensionOrigin) return callback(null, true);
   return callback(Object.assign(new Error('CORS origin izinli değil.'), { status: 403 }));
 } }));
 // Processed gallery images arrive as base64 data URLs. The extension limits the
