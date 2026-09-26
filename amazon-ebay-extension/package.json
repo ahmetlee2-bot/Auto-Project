@@ -1,6 +1,6 @@
 {
   "name": "alltaghaus-amazon-ebay-extension",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "start:bridge": "node bridge/server.js",

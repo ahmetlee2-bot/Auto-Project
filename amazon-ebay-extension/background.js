@@ -9,7 +9,6 @@ const priceTools = globalThis.AlltaghausPrice || {
   },
 };
 
-const MONITOR_ALARM = "amazon-product-monitor";
 const IMAGE_PIPELINE_VERSION = 8;
 const REFERENCE_BADGE_LAYOUT = "REFERENCE_BADGE_LAYOUT_V2";
 const MAIN_IMAGE_MIN_DIMENSION = 1200;
@@ -240,10 +239,6 @@ async function ensureSettings() {
   return settings;
 }
 
-async function ensureAlarm() {
-  await chrome.alarms.clear(MONITOR_ALARM);
-}
-
 async function purgeLegacyLocalDrafts() {
   const { localDrafts = [], trackedProducts = {} } = await chrome.storage.local.get(["localDrafts", "trackedProducts"]);
   const retainedDrafts = localDrafts.filter((draft) => !/^AMZ-/i.test(String(draft.sku || "")));
@@ -254,9 +249,8 @@ async function purgeLegacyLocalDrafts() {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => { void ensureAlarm(); void purgeLegacyLocalDrafts(); });
-chrome.runtime.onStartup.addListener(() => { void ensureAlarm(); void purgeLegacyLocalDrafts(); });
-void ensureAlarm();
+chrome.runtime.onInstalled.addListener(() => { void purgeLegacyLocalDrafts(); });
+chrome.runtime.onStartup.addListener(() => { void purgeLegacyLocalDrafts(); });
 
 function decodeHtml(value) {
   return value
@@ -360,7 +354,6 @@ async function trackProduct(product) {
     },
   };
   await chrome.storage.local.set({ trackedProducts });
-  await ensureAlarm();
   return trackedProducts[product.asin];
 }
 
@@ -548,10 +541,6 @@ async function refreshPublishedDraftFromOpenAmazonTab(draftId, sourceId) {
   return { ...body, processedImageCount: gallery.images.length };
 }
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === MONITOR_ALARM) void monitorProducts();
-});
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.action === "PROCESS_GALLERY_IMAGES") {
     ensureSettings().then((settings) => processGalleryImages(message.urls, { customImageOverlay: settings.customImageOverlay }))
@@ -623,7 +612,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         };
         await chrome.storage.local.set({ legacyMappings, trackedProducts });
         mapping.cloud = await syncLegacyMappingWithBackend(mapping);
-        await ensureAlarm();
         return mapping;
       }
       case "REMOVE_LEGACY_MAPPING": {
@@ -642,7 +630,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case "SAVE_SETTINGS": {
         const settings = { ...DEFAULT_SETTINGS, ...(message.settings ?? {}), settingsVersion: SETTINGS_VERSION };
         await chrome.storage.local.set({ settings });
-        await ensureAlarm();
         return settings;
       }
       case "CLEAR_MONITOR_CHANGES":

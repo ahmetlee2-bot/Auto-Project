@@ -1,29 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Alltaghaus Amazon to eBay",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Extract Amazon product data, prepare eBay drafts, and monitor price and stock changes.",
   "minimum_chrome_version": "120",
   "permissions": [
     "tabs",
-    "alarms",
     "storage",
     "scripting"
   ],
   "host_permissions": [
     "https://*.amazon.de/*",
-    "https://*.amazon.com/*",
-    "https://*.amazon.co.uk/*",
-    "https://*.amazon.fr/*",
-    "https://*.amazon.it/*",
-    "https://*.amazon.es/*",
     "https://*.media-amazon.com/*",
     "https://*.ssl-images-amazon.com/*",
-    "https://*.ebay.com/*",
-    "https://*.vercel.app/*",
     "https://images-na.ssl-images-amazon.com/*",
     "https://api.autolister-app.de/*",
-    "https://autolister-app.de/*",
     "https://rdwqrygkkzzouiamrxwq.supabase.co/*"
   ],
   "background": {
@@ -52,12 +43,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.amazon.de/*",
-        "https://*.amazon.com/*",
-        "https://*.amazon.co.uk/*",
-        "https://*.amazon.fr/*",
-        "https://*.amazon.it/*",
-        "https://*.amazon.es/*"
+        "https://*.amazon.de/*"
       ],
       "js": [
         "seoProcessor.js",
