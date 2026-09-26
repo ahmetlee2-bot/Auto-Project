@@ -668,6 +668,40 @@ function htmlMeta(html, property) {
   return '';
 }
 
+function decodeAmazonHtml(value) {
+  return String(value || '')
+    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function fullSizeAmazonImage(value) {
+  const safe = amazonImageUrl(String(value || '').replace(/\\u0026/g, '&').replace(/\\\//g, '/'));
+  if (!safe) return '';
+  return safe.replace(/\._[A-Z0-9_,]+_\.(jpe?g|png|webp)$/i, '.$1');
+}
+
+function readAmazonPageFallback(html) {
+  const title = decodeAmazonHtml(html.match(/id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)?.[1]);
+  const priceText = html.match(/class=["'][^"']*a-price[^"']*["'][^>]*>[\s\S]{0,700}?class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)/i)?.[1] || '';
+  const brand = decodeAmazonHtml(html.match(/id=["']bylineInfo["'][^>]*>([\s\S]*?)<\/a>/i)?.[1])
+    .replace(/^Besuche den\s+/i, '').replace(/-Store$/i, '').trim();
+  const bulletBlock = html.match(/id=["']feature-bullets["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i)?.[1] || '';
+  const description = [...bulletBlock.matchAll(/<span[^>]*class=["'][^"']*a-list-item[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi)]
+    .map((match) => decodeAmazonHtml(match[1])).filter(Boolean).slice(0, 8).join(' ');
+  const candidates = [];
+  for (const match of html.matchAll(/data-a-dynamic-image=["']([^"']+)["']/gi)) {
+    const decoded = match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+    try { candidates.push(...Object.keys(JSON.parse(decoded))); } catch { /* Ignore malformed attributes. */ }
+  }
+  for (const match of html.matchAll(/["'](?:hiRes|large|mainUrl)["']\s*:\s*["'](https:\\?\/\\?\/[^"']+)["']/gi)) candidates.push(match[1]);
+  const images = [...new Set(candidates.map(fullSizeAmazonImage).filter(Boolean))].slice(0, 12);
+  const availability = decodeAmazonHtml(html.match(/id=["']availability["'][^>]*>([\s\S]*?)<\/(?:div|span)>/i)?.[1]);
+  const inStock = /derzeit nicht verfügbar|currently unavailable|nicht auf lager/i.test(availability)
+    ? false : /auf lager|lieferbar|in stock/i.test(availability) ? true : null;
+  return { title, price: parseSourcePrice(priceText), brand, description, images, inStock };
+}
+
 async function fetchAmazonProduct(input) {
   const canonical = canonicalAmazonInput(input.amazonUrl || input.asin);
   const response = await fetch(canonical.url, {
@@ -682,14 +716,16 @@ async function fetchAmazonProduct(input) {
   const html = await response.text();
   if (/captcha|robot check|automated access/i.test(html)) throw new Error('Amazon sunucu erişimi için robot doğrulaması istedi.');
   const schema = readAmazonProductSchema(html);
-  const title = schema.title || sanitizeEbayText(htmlMeta(html, 'og:title')).replace(/\s*:\s*Amazon\.de.*$/i, '');
-  const description = schema.description || sanitizeEbayText(htmlMeta(html, 'og:description')) || title;
+  const fallback = readAmazonPageFallback(html);
+  const title = schema.title || sanitizeEbayText(htmlMeta(html, 'og:title')).replace(/\s*:\s*Amazon\.de.*$/i, '') || sanitizeEbayText(fallback.title);
+  const description = schema.description || sanitizeEbayText(htmlMeta(html, 'og:description')) || sanitizeEbayText(fallback.description) || title;
   const fallbackImage = htmlMeta(html, 'og:image');
-  const images = [...new Set([...schema.images, fallbackImage].map(amazonImageUrl).filter(Boolean))].slice(0, 12);
+  const images = [...new Set([...schema.images, ...fallback.images, fallbackImage].map(fullSizeAmazonImage).filter(Boolean))].slice(0, 12);
+  const price = schema.price || fallback.price;
   if (!title) throw new Error('Amazon ürün başlığı sunucu tarafından okunamadı.');
-  if (!schema.price) throw new Error('Amazon ürün fiyatı sunucu tarafından okunamadı.');
+  if (!price) throw new Error('Amazon ürün fiyatı sunucu tarafından okunamadı.');
   if (!images.length) throw new Error('Amazon ürün görselleri sunucu tarafından okunamadı.');
-  return { ...canonical, ...schema, title, description, images };
+  return { ...canonical, ...schema, price, inStock: schema.inStock ?? fallback.inStock, brand: schema.brand || fallback.brand, title, description, images };
 }
 
 async function processAmazonImage(imageUrl, index) {
