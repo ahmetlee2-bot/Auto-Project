@@ -1,16 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Alltaghaus Amazon to eBay",
-  "version": "0.8.5",
+  "version": "1.0.1",
   "description": "Extract Amazon product data, prepare eBay drafts, and monitor price and stock changes.",
   "minimum_chrome_version": "120",
   "permissions": [
     "tabs",
     "alarms",
     "storage",
-    "scripting",
-    "offscreen",
-    "declarativeNetRequest"
+    "scripting"
   ],
   "host_permissions": [
     "https://*.amazon.de/*",
