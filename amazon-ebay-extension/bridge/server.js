@@ -596,13 +596,22 @@ function readAmazonProductSchema(html) {
       if (!product) continue;
       const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
       const availability = String(offer?.availability || '');
+      const brand = typeof product.brand === 'string' ? product.brand : product.brand?.name;
+      const images = (Array.isArray(product.image) ? product.image : [product.image])
+        .flatMap((value) => typeof value === 'string' ? [value] : value?.url ? [value.url] : [])
+        .filter(Boolean);
       return {
         price: parseSourcePrice(offer?.price),
         inStock: /(?:^|\/)InStock$/i.test(availability) ? true : /(?:^|\/)(?:OutOfStock|SoldOut|Discontinued)$/i.test(availability) ? false : null,
+        title: sanitizeEbayText(product.name || ''),
+        description: sanitizeEbayText(product.description || ''),
+        brand: sanitizeEbayText(brand || ''),
+        ean: product.gtin13 || product.gtin8 || product.ean || '',
+        images,
       };
     } catch { /* Ignore malformed source metadata. */ }
   }
-  return { price: null, inStock: null };
+  return { price: null, inStock: null, title: '', description: '', brand: '', ean: '', images: [] };
 }
 
 async function fetchAmazonSnapshot(draft) {
@@ -621,6 +630,137 @@ async function fetchAmazonSnapshot(draft) {
   const quantityMatch = availability.match(/nur noch\s+(\d+)\s+(?:stück|artikel)/i);
   if (schema.price === null && inStock === null) throw new Error('Amazon fiyat veya stok bilgisi güvenilir biçimde okunamadı.');
   return { price: schema.price, inStock, stockQuantity: quantityMatch ? Number(quantityMatch[1]) : null, checkedAt: new Date().toISOString() };
+}
+
+function canonicalAmazonInput(value) {
+  const raw = String(value || '').trim();
+  const directAsin = raw.match(/^([A-Z0-9]{10})$/i)?.[1];
+  if (directAsin) return { asin: directAsin.toUpperCase(), url: `https://www.amazon.de/dp/${directAsin.toUpperCase()}` };
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw new Error('Geçerli bir Amazon.de ürün URLsi veya ASIN gerekli.'); }
+  if (parsed.protocol !== 'https:' || !/(^|\.)amazon\.de$/i.test(parsed.hostname) || parsed.username || parsed.password) {
+    throw new Error('Yalnızca HTTPS Amazon.de ürün bağlantıları kabul edilir.');
+  }
+  const asin = parsed.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1];
+  if (!asin) throw new Error('Amazon bağlantısında geçerli bir ASIN bulunamadı.');
+  return { asin: asin.toUpperCase(), url: `https://www.amazon.de/dp/${asin.toUpperCase()}` };
+}
+
+function amazonImageUrl(value) {
+  try {
+    const parsed = new URL(String(value || ''));
+    if (parsed.protocol !== 'https:' || !/(^|\.)(?:media-amazon\.com|ssl-images-amazon\.com)$/i.test(parsed.hostname)) return '';
+    parsed.search = '';
+    return parsed.href;
+  } catch { return ''; }
+}
+
+function htmlMeta(html, property) {
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["']`, 'i'),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["']`, 'i'),
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  }
+  return '';
+}
+
+async function fetchAmazonProduct(input) {
+  const canonical = canonicalAmazonInput(input.amazonUrl || input.asin);
+  const response = await fetch(canonical.url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+      'Accept-Language': 'de-DE,de;q=0.9,en;q=0.6',
+      Accept: 'text/html,application/xhtml+xml',
+    },
+    redirect: 'manual', signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) throw new Error(`Amazon ürün sayfası HTTP ${response.status} döndürdü.`);
+  const html = await response.text();
+  if (/captcha|robot check|automated access/i.test(html)) throw new Error('Amazon sunucu erişimi için robot doğrulaması istedi.');
+  const schema = readAmazonProductSchema(html);
+  const title = schema.title || sanitizeEbayText(htmlMeta(html, 'og:title')).replace(/\s*:\s*Amazon\.de.*$/i, '');
+  const description = schema.description || sanitizeEbayText(htmlMeta(html, 'og:description')) || title;
+  const fallbackImage = htmlMeta(html, 'og:image');
+  const images = [...new Set([...schema.images, fallbackImage].map(amazonImageUrl).filter(Boolean))].slice(0, 12);
+  if (!title) throw new Error('Amazon ürün başlığı sunucu tarafından okunamadı.');
+  if (!schema.price) throw new Error('Amazon ürün fiyatı sunucu tarafından okunamadı.');
+  if (!images.length) throw new Error('Amazon ürün görselleri sunucu tarafından okunamadı.');
+  return { ...canonical, ...schema, title, description, images };
+}
+
+async function processAmazonImage(imageUrl, index) {
+  const safeUrl = amazonImageUrl(imageUrl);
+  if (!safeUrl) throw new Error('Amazon görsel adresi güvenli değil.');
+  const response = await fetch(safeUrl, { redirect: 'follow', signal: AbortSignal.timeout(30000) });
+  if (!response.ok || !amazonImageUrl(response.url)) throw new Error(`Amazon görseli alınamadı (HTTP ${response.status}).`);
+  const declaredBytes = Number(response.headers.get('content-length') || 0);
+  if (declaredBytes > 15_000_000) throw new Error('Amazon görseli boyut sınırını aşıyor.');
+  const source = Buffer.from(await response.arrayBuffer());
+  if (source.length > 15_000_000) throw new Error('Amazon görseli boyut sınırını aşıyor.');
+  const output = await sharp(source, { failOn: 'error' })
+    .rotate()
+    .flatten({ background: '#ffffff' })
+    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: false })
+    .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
+    .toBuffer({ resolveWithObject: true });
+  return {
+    dataUrl: `data:image/jpeg;base64,${output.data.toString('base64')}`,
+    width: output.info.width,
+    height: output.info.height,
+    mimeType: 'image/jpeg',
+    pixelHash: crypto.createHash('sha256').update(output.data).digest('hex'),
+    pipelineVersion: 9,
+    overlayApplied: false,
+    sourceUrl: safeUrl,
+    index,
+  };
+}
+
+function importedDescription(product) {
+  const text = sanitizeEbayText(product.description || product.title).slice(0, 1600);
+  return `<div style="font-family:Arial,sans-serif;line-height:1.6"><h2>Produktbeschreibung</h2><p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p><p>Neuware. Schneller Versand aus Deutschland.</p></div>`;
+}
+
+async function buildAmazonDraft(input) {
+  if (input.imageRightsConfirmed !== true) throw new Error('Görseller için kullanım hakkı onayı gereklidir.');
+  const product = await fetchAmazonProduct(input);
+  const targetMarginPercent = Number(input.targetMarginPercent ?? 20);
+  const price = salePriceForSource(product.price, targetMarginPercent);
+  if (!price) throw new Error('Hedef kâr marjı geçersiz.');
+  const requestedQuantity = Number(input.quantity ?? 1);
+  if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 99) throw new Error('Adet 1-99 arasında olmalıdır.');
+  const processedImageData = [];
+  for (const [index, image] of product.images.entries()) {
+    try { processedImageData.push(await processAmazonImage(image, index)); }
+    catch (error) { debugEvent('AMAZON_IMAGE_SKIPPED', { asin: product.asin, index, message: error.message }); }
+    if (processedImageData.length >= 12) break;
+  }
+  if (!processedImageData.length) throw new Error('Hiçbir Amazon görseli sunucuda işlenemedi.');
+  const itemSpecifics = {};
+  if (product.brand) itemSpecifics.Marke = [product.brand];
+  return validateDraft({
+    sourceId: product.asin,
+    asin: product.asin,
+    amazonUrl: product.url,
+    sourceUrl: product.url,
+    sourcePrice: product.price,
+    targetMarginPercent,
+    title: product.title,
+    description: importedDescription(product),
+    processedImageData,
+    imageRightsConfirmed: true,
+    price,
+    quantity: product.inStock === false ? 0 : requestedQuantity,
+    desiredQuantity: requestedQuantity,
+    currency: 'EUR',
+    ean: product.ean,
+    itemSpecifics,
+    autoPublish: input.autoPublish === true,
+  });
 }
 
 async function monitorPublishedProducts() {
@@ -1201,6 +1341,62 @@ async function publishEbayDraft(stored) {
   };
 }
 
+async function executeDraft(draft) {
+  const drafts = readDrafts();
+  const existing = drafts.find((item) => item.sku === draft.sku || item.sourceId === draft.sourceId);
+  const canReplaceExisting = existing
+    && existing.status !== "PUBLISHED"
+    && (draft.imageUrls.length > 0 || draft.processedImageData.length > 0);
+  if (existing && !canReplaceExisting) {
+    return {
+      draftId: existing.id,
+      offerId: existing.offerId || null,
+      stage: existing.stage || "OFFER_READY",
+      mode: existing.mode || mode,
+      status: existing.status || "UNPUBLISHED",
+      listingId: existing.listingId || null,
+      sku: existing.sku,
+      created: false,
+    };
+  }
+  if (!draft.imageUrls.length && !draft.processedImageData.length) throw new Error("En az bir islenmis gorsel gerekli.");
+  const id = existing?.id || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const ebay = mode === "api" ? await createEbayDraft(draft) : { offerId: `mock-${draft.sku}`, stage: "OFFER_READY" };
+  const stored = { id, ...draft, ...ebay, mode, status: "UNPUBLISHED", createdAt: new Date().toISOString() };
+  const latest = readDrafts();
+  const savedIndex = latest.findIndex((item) => item.id === id);
+  if (savedIndex >= 0) latest[savedIndex] = stored;
+  else latest.unshift(stored);
+  writeDrafts(latest);
+  if (draft.autoPublish === true) {
+    const published = await publishEbayDraft(stored);
+    const current = readDrafts();
+    const publishIndex = current.findIndex((item) => item.id === id);
+    if (publishIndex < 0) throw new Error("Yayınlanan taslak sunucu havuzunda bulunamadı.");
+    current[publishIndex] = published;
+    writeDrafts(current);
+    return {
+      draftId: id,
+      offerId: published.offerId || null,
+      listingId: published.listingId || null,
+      status: published.status,
+      stage: "PUBLISHED",
+      sku: published.sku,
+      created: !existing,
+    };
+  }
+  return {
+    draftId: id,
+    offerId: ebay.offerId || null,
+    stage: ebay.stage,
+    mode,
+    status: stored.status,
+    sku: stored.sku,
+    created: !existing,
+    replaced: Boolean(existing),
+  };
+}
+
 const server = http.createServer(async (request, response) => {
   const cors = corsHeaders(request);
   if (request.method === "OPTIONS") return send(response, 204, {}, cors);
@@ -1325,68 +1521,32 @@ const server = http.createServer(async (request, response) => {
       const job = draftJobs.get(url.pathname.split("/").pop());
       return send(response, job ? 200 : 404, job || { message: "Taslak işlemi bulunamadı; Dashboard durumunu kontrol edin." }, cors);
     }
+    if (request.method === "POST" && url.pathname === "/api/ebay/import-amazon") {
+      const input = await readJson(request);
+      const canonical = canonicalAmazonInput(input.amazonUrl || input.asin);
+      for (const [id, job] of draftJobs) {
+        if (job.status !== "RUNNING" && Date.now() - job.startedAt > 3600000) draftJobs.delete(id);
+      }
+      const running = [...draftJobs.values()].find((job) => job.sourceId === canonical.asin && job.status === "RUNNING");
+      if (running) return send(response, 202, { jobId: running.jobId, sourceId: canonical.asin, status: running.status }, cors);
+      const jobId = crypto.randomUUID();
+      const job = { jobId, sourceId: canonical.asin, status: "RUNNING", stage: "AMAZON_IMPORT", startedAt: Date.now() };
+      draftJobs.set(jobId, job);
+      persistDraftJobs();
+      void buildAmazonDraft({ ...input, amazonUrl: canonical.url }).then((draft) => input.dryRun === true
+        ? { stage: "AMAZON_READY", sourceId: draft.sourceId, title: draft.title, price: draft.price, quantity: draft.quantity, imageCount: draft.processedImageData.length, created: false }
+        : executeDraft(draft)).then((result) => {
+        Object.assign(job, { status: "SUCCEEDED", stage: result.stage, result, completedAt: Date.now() });
+        persistDraftJobs();
+      }).catch((error) => {
+        Object.assign(job, { status: "FAILED", message: error.message, error: toPublicError(error), completedAt: Date.now() });
+        persistDraftJobs();
+      });
+      return send(response, 202, { jobId, sourceId: canonical.asin, status: job.status }, cors);
+    }
     if (request.method === "POST" && url.pathname === "/api/ebay/drafts") {
       const draft = validateDraft(await readJson(request));
-      const execute = async () => {
-      const drafts = readDrafts();
-      const existing = drafts.find((item) => item.sku === draft.sku || item.sourceId === draft.sourceId);
-      const canReplaceExisting = existing
-        && existing.status !== "PUBLISHED"
-        && (draft.imageUrls.length > 0 || draft.processedImageData.length > 0);
-      if (existing && !canReplaceExisting) {
-        return {
-          draftId: existing.id,
-          offerId: existing.offerId || null,
-          stage: existing.stage || "OFFER_READY",
-          mode: existing.mode || mode,
-          status: existing.status || "UNPUBLISHED",
-          listingId: existing.listingId || null,
-          sku: existing.sku,
-          created: false,
-        };
-      }
-      if (!draft.imageUrls.length && !draft.processedImageData.length) {
-        throw new Error("En az bir islenmis gorsel gerekli.");
-      }
-      const id = existing?.id || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const ebay = mode === "api"
-        ? await createEbayDraft(draft)
-        : { offerId: `mock-${draft.sku}`, stage: "OFFER_READY" };
-      const stored = { id, ...draft, ...ebay, mode, status: "UNPUBLISHED", createdAt: new Date().toISOString() };
-      // Re-read after network operations so concurrent products are not lost.
-      const latest = readDrafts();
-      const savedIndex = latest.findIndex((item) => item.id === id);
-      if (savedIndex >= 0) latest[savedIndex] = stored;
-      else latest.unshift(stored);
-      writeDrafts(latest);
-      if (draft.autoPublish === true) {
-        const published = await publishEbayDraft(stored);
-        const current = readDrafts();
-        const publishIndex = current.findIndex((item) => item.id === id);
-        if (publishIndex < 0) throw new Error("Yayınlanan taslak sunucu havuzunda bulunamadı.");
-        current[publishIndex] = published;
-        writeDrafts(current);
-        return {
-          draftId: id,
-          offerId: published.offerId || null,
-          listingId: published.listingId || null,
-          status: published.status,
-          stage: "PUBLISHED",
-          sku: published.sku,
-          created: !existing,
-        };
-      }
-      return {
-        draftId: id,
-        offerId: ebay.offerId || null,
-        stage: ebay.stage,
-        mode,
-        status: stored.status,
-        sku: stored.sku,
-        created: !existing,
-        replaced: Boolean(existing),
-      };
-      };
+      const execute = () => executeDraft(draft);
       if (url.searchParams.get("async") === "1") {
         for (const [id, job] of draftJobs) {
           if (job.status !== "RUNNING" && Date.now() - job.startedAt > 3600000) draftJobs.delete(id);

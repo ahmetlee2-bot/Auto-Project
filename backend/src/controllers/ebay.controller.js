@@ -15,6 +15,7 @@ const sendBridge = (path, options) => async (req, res) => {
   }
 };
 exports.draft = sendBridge('/ebay/drafts?async=1', { method: 'POST' });
+exports.importAmazon = sendBridge('/ebay/import-amazon', { method: 'POST', timeoutMs: 30000 });
 exports.publish = sendBridge('/ebay/drafts/publish', { method: 'POST', timeoutMs: 120000 });
 exports.draftJob = sendBridge((req) => bridge.jobPath(req.params.jobId));
 exports.draftJobs = sendBridge('/ebay/draft-jobs');
