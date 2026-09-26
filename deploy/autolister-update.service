@@ -1,0 +1,8 @@
+[Unit]
+Description=Update AutoLister application containers
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/autolister-update
