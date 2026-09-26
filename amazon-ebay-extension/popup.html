@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AutoLister</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <section id="authView" class="auth-view" aria-labelledby="loginTitle">
+        <header class="brand-header"><span class="brand-mark" aria-hidden="true">A</span><div><p class="eyebrow">AMAZON → EBAY.DE</p><h1>AutoLister</h1></div></header>
+        <div class="auth-card">
+          <div class="section-heading"><p class="eyebrow">SICHERER ZUGANG</p><h2 id="loginTitle">AutoLister anmelden</h2><p>Verwende dein Konto von autolister-app.de.</p></div>
+          <form id="cloudLogin" novalidate>
+            <label for="cloudEmail">E-Mail-Adresse</label>
+            <input id="cloudEmail" type="email" autocomplete="username" placeholder="name@unternehmen.de" required />
+            <label for="cloudPassword">Passwort</label>
+            <input id="cloudPassword" type="password" autocomplete="current-password" placeholder="Dein Passwort" required />
+            <button id="cloudLoginButton" class="primary-button" type="submit"><span>Anmelden</span><span class="button-spinner" aria-hidden="true"></span></button>
+          </form>
+          <p id="authMessage" class="auth-message" role="status" aria-live="polite" hidden></p>
+          <p class="auth-footnote">Deine Zugangsdaten werden ausschließlich zur Anmeldung bei deinem AutoLister-Konto verwendet.</p>
+        </div>
+      </section>
+
+      <section id="workspaceView" hidden aria-labelledby="workspaceTitle">
+        <header class="workspace-header"><div class="brand-lockup"><span class="brand-mark" aria-hidden="true">A</span><div><p class="eyebrow">AMAZON → EBAY.DE</p><h1 id="workspaceTitle">AutoLister</h1></div></div><div class="account-menu"><span id="cloudEmailLabel" title="Angemeldetes Konto"></span><button id="cloudLogout" class="icon-button" type="button" aria-label="Abmelden" title="Abmelden">↗</button></div></header>
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden><span id="noticeIcon" aria-hidden="true">i</span><p id="status">Produktdaten werden geladen …</p><button id="dismissNotice" type="button" aria-label="Hinweis schließen">×</button></div>
+        <section class="product-card product-summary" aria-live="polite"><div class="summary-top"><span id="systemState" class="status-badge" data-state="loading"><i></i>Produktdaten werden geladen</span><span class="extension-version">v0.8.5 · Server</span></div><h2 id="productName">Amazon-Produktseite öffnen</h2><p id="productMeta">Öffne eine unterstützte Amazon.de Produktseite; Verarbeitung und eBay-Auftrag laufen auf dem AutoLister-Server.</p></section>
+        <section class="form-card" aria-label="Preis- und Margenkalkulation">
+          <div class="form-heading"><div><p class="eyebrow">KALKULATION</p><h2>Preis &amp; Marge</h2></div><span class="calculator-label">EUR</span></div>
+          <div class="pricing-grid">
+            <label class="field-card field-readonly"><span>Amazon-Preis</span><strong id="sourcePrice">—</strong><small>Quellpreis</small></label>
+            <label class="field-card" for="profitMargin"><span>Gewinnmarge</span><div class="input-wrap"><input id="profitMargin" type="number" min="0" max="89" step="1" value="20" inputmode="decimal" aria-label="Gewinnmarge in Prozent" /><b>%</b></div><small>Zielmarge</small></label>
+            <label class="field-card field-result"><span>eBay-Preis</span><strong id="salePrice">—</strong><small>Automatisch berechnet</small></label>
+            <label class="field-card" for="manualPrice"><span>Eigener eBay-Preis</span><div class="input-wrap"><input id="manualPrice" type="text" inputmode="decimal" placeholder="Automatisch" aria-label="Eigener eBay-Preis" /><b>€</b></div><small>Optional</small></label>
+          </div>
+          <label class="rights-check"><input id="imageRightsConfirmed" type="checkbox" /><span>Ich bestätige, dass ich die Nutzungsrechte an den Produktbildern habe.</span></label>
+          <button id="listNow" class="primary-button save-button" type="button" disabled><span class="button-label">Auf eBay listen</span><span class="button-spinner" aria-hidden="true"></span><span class="button-arrow" aria-hidden="true">→</span></button>
+          <button id="openDashboard" class="secondary-button" type="button">Web-Dashboard öffnen <span aria-hidden="true">↗</span></button>
+        </section>
+        <section class="activity-card" aria-label="Verarbeitungsstatus"><div class="activity-heading"><span>AKTIVITÄT</span><i id="activityDot" aria-hidden="true"></i></div><ol id="log" class="activity-log"></ol><p id="emptyLog" class="empty-log">Bereit für die nächste Amazon-Produktseite.</p></section>
+      </section>
+    </main>
+    <script src="priceCalculator.js"></script>
+    <script src="descriptionProcessor.js"></script>
+    <script src="listing_builder.js"></script>
+    <script src="listingValidator.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
