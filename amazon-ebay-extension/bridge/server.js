@@ -994,6 +994,9 @@ function completeRequiredAspects(stored, rules) {
       if (/^(unbranded|generic|unbekannt|n\/?a)$/iu.test(value)) value = "";
     }
     if (normalized === "farbton") value = explicitShadeFromDraft({ ...stored, itemSpecifics: aspects });
+    if (normalized === "zeitschriftentitel") {
+      value = firstAspectValue(aspects, new Set(["zeitschriftentitel", "magazintitel", "tit", "title"])) || String(stored.title || "").trim();
+    }
     if (!value) continue;
     aspects[required] = [value];
     provided.add(normalized);
