@@ -953,6 +953,7 @@ function normalizeAspectName(value) {
 function categoryOverrideForTitle(title) {
   const normalized = String(title || "").toLocaleLowerCase("de-DE");
   if (/baby\s*-?\s*feuchttücher|babyfeuchttücher|babytücher/.test(normalized)) return "115328";
+  if (/\b3d[- ]?druck(?:er|bett)?\b|3d[- ]?printing|3d printer|sprühkleber|haftmittel/.test(normalized)) return "183063";
   return "";
 }
 
@@ -991,9 +992,6 @@ function completeRequiredAspects(stored, rules) {
       if (/^(unbranded|generic|unbekannt|n\/?a)$/iu.test(value)) value = "";
     }
     if (normalized === "farbton") value = explicitShadeFromDraft({ ...stored, itemSpecifics: aspects });
-    if (normalized === "zeitschriftentitel") {
-      value = firstAspectValue(aspects, new Set(["zeitschriftentitel", "magazintitel", "tit", "title"])) || String(stored.title || "").trim();
-    }
     if (!value) continue;
     aspects[required] = [value];
     provided.add(normalized);
