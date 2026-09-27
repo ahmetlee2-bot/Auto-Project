@@ -693,25 +693,21 @@ function fullSizeAmazonImage(value) {
   return safe.replace(/\._[A-Z0-9_,]+_\.(jpe?g|png|webp)$/i, '.$1');
 }
 
+const listingQuality = require('./listing-quality');
 function readAmazonPageFallback(html) {
   const title = decodeAmazonHtml(html.match(/id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)?.[1]);
   const priceText = html.match(/class=["'][^"']*a-price[^"']*["'][^>]*>[\s\S]{0,700}?class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)/i)?.[1] || '';
   const brand = decodeAmazonHtml(html.match(/id=["']bylineInfo["'][^>]*>([\s\S]*?)<\/a>/i)?.[1])
     .replace(/^Besuche den\s+/i, '').replace(/-Store$/i, '').trim();
   const bulletBlock = html.match(/id=["']feature-bullets["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i)?.[1] || '';
-  const description = [...bulletBlock.matchAll(/<span[^>]*class=["'][^"']*a-list-item[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi)]
-    .map((match) => decodeAmazonHtml(match[1])).filter(Boolean).slice(0, 8).join(' ');
-  const candidates = [];
-  for (const match of html.matchAll(/data-a-dynamic-image=["']([^"']+)["']/gi)) {
-    const decoded = match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-    try { candidates.push(...Object.keys(JSON.parse(decoded))); } catch { /* Ignore malformed attributes. */ }
-  }
-  for (const match of html.matchAll(/["'](?:hiRes|large|mainUrl)["']\s*:\s*["'](https:\\?\/\\?\/[^"']+)["']/gi)) candidates.push(match[1]);
-  const images = [...new Set(candidates.map(fullSizeAmazonImage).filter(Boolean))].slice(0, 12);
+  const highlights = [...bulletBlock.matchAll(/<span[^>]*class=["'][^"']*a-list-item[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi)]
+    .map((match) => listingQuality.text(match[1])).filter(Boolean).slice(0, 8);
+  const description = highlights.join(' ');
+  const images = listingQuality.galleryImages(html);
   const availability = decodeAmazonHtml(html.match(/id=["']availability["'][^>]*>([\s\S]*?)<\/(?:div|span)>/i)?.[1]);
   const inStock = /derzeit nicht verfügbar|currently unavailable|nicht auf lager/i.test(availability)
     ? false : /auf lager|lieferbar|in stock/i.test(availability) ? true : null;
-  return { title, price: parseSourcePrice(priceText), brand, description, images, inStock };
+  return { title, price: parseSourcePrice(priceText), brand, description, highlights, images, inStock };
 }
 
 async function fetchAmazonProduct(input) {
@@ -732,12 +728,12 @@ async function fetchAmazonProduct(input) {
   const title = schema.title || sanitizeEbayText(htmlMeta(html, 'og:title')).replace(/\s*:\s*Amazon\.de.*$/i, '') || sanitizeEbayText(fallback.title);
   const description = schema.description || sanitizeEbayText(htmlMeta(html, 'og:description')) || sanitizeEbayText(fallback.description) || title;
   const fallbackImage = htmlMeta(html, 'og:image');
-  const images = [...new Set([...schema.images, ...fallback.images, fallbackImage].map(fullSizeAmazonImage).filter(Boolean))].slice(0, 12);
+  const images = fallback.images;
   const price = schema.price || fallback.price;
   if (!title) throw new Error('Amazon ürün başlığı sunucu tarafından okunamadı.');
   if (!price) throw new Error('Amazon ürün fiyatı sunucu tarafından okunamadı.');
   if (!images.length) throw new Error('Amazon ürün görselleri sunucu tarafından okunamadı.');
-  return { ...canonical, ...schema, price, inStock: schema.inStock ?? fallback.inStock, brand: schema.brand || fallback.brand, title, description, images };
+  return { ...canonical, ...schema, price, inStock: schema.inStock ?? fallback.inStock, brand: schema.brand || fallback.brand, title, description, highlights: fallback.highlights, images };
 }
 
 async function processAmazonImage(imageUrl, index) {
@@ -749,11 +745,13 @@ async function processAmazonImage(imageUrl, index) {
   if (declaredBytes > 15_000_000) throw new Error('Amazon görseli boyut sınırını aşıyor.');
   const source = Buffer.from(await response.arrayBuffer());
   if (source.length > 15_000_000) throw new Error('Amazon görseli boyut sınırını aşıyor.');
+  const metadata = await sharp(source).metadata();
+  if (!metadata.width || !metadata.height || Math.min(metadata.width, metadata.height) < 500) throw new Error('Kaynak görsel 500x500 pikselden küçük; büyütme uygulanmadı.');
   const output = await sharp(source, { failOn: 'error' })
     .rotate()
     .flatten({ background: '#ffffff' })
-    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: false })
-    .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
+    .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 96, chromaSubsampling: '4:4:4' })
     .toBuffer({ resolveWithObject: true });
   return {
     dataUrl: `data:image/jpeg;base64,${output.data.toString('base64')}`,
@@ -769,8 +767,7 @@ async function processAmazonImage(imageUrl, index) {
 }
 
 function importedDescription(product) {
-  const text = sanitizeEbayText(product.description || product.title).slice(0, 1600);
-  return `<div style="font-family:Arial,sans-serif;line-height:1.6"><h2>Produktbeschreibung</h2><p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p><p>Neuware. Schneller Versand aus Deutschland.</p></div>`;
+  return listingQuality.description(product);
 }
 
 async function buildAmazonDraft(input) {
@@ -786,7 +783,7 @@ async function buildAmazonDraft(input) {
   if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 99) throw new Error('Adet 1-99 arasında olmalıdır.');
   const processedImageData = [];
   for (const [index, image] of product.images.entries()) {
-    try { processedImageData.push(await processAmazonImage(image, index)); }
+    try { const result = await processAmazonImage(image, index); if (!processedImageData.some(item => item.pixelHash === result.pixelHash)) processedImageData.push(result); }
     catch (error) { debugEvent('AMAZON_IMAGE_SKIPPED', { asin: product.asin, index, message: error.message }); }
     if (processedImageData.length >= 12) break;
   }
@@ -801,7 +798,7 @@ async function buildAmazonDraft(input) {
     sourcePrice: product.price,
     targetMarginPercent,
     manualSalePrice: manualSalePrice || null,
-    title: product.title,
+    title: listingQuality.title(product),
     description: importedDescription(product),
     processedImageData,
     imageRightsConfirmed: true,

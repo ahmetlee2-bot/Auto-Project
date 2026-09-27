@@ -1,0 +1,12 @@
+const assert = require('node:assert/strict');
+const q = require('../bridge/listing-quality');
+const raw = 'https://m.media-amazon.com/images/I/product.jpg';
+assert.equal(q.cleanImageUrl('https://m.media-amazon.com/images/I/product._AC_US40_.jpg'), raw);
+assert.equal(q.cleanImageUrl('https://evil.example/images/I/product.jpg'), '');
+assert.deepEqual(q.galleryImages(`<div id="imageBlock"><img src="${raw}"><img src="${raw.replace('.jpg', '._SL75_.jpg')}"></div><div id="related"><img src="https://m.media-amazon.com/images/I/unrelated.jpg"></div>`), [raw]);
+const html = q.description({title:'<script>alert(1)</script>Test', description:'<a href="https://evil.example">Text</a><iframe>bad</iframe>', highlights:['<b>80ml</b>']});
+assert.doesNotMatch(html, /<script|<iframe|href=|alert\(1\)/i);
+assert.match(html, /<li>80ml<\/li>/);
+const title = q.title({brand:'3DLAC',title:'3DLAC 3DLAC 80ml Adhesive Stick for 3D Printing'});
+assert.ok(title.length <= 80); assert.equal((title.match(/3DLAC/g)||[]).length, 1);
+console.log('Quality regression checks passed');
