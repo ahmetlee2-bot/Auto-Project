@@ -518,10 +518,13 @@ function xmlValue(xml, tag) {
 function xmlItems(xml) {
   return [...String(xml).matchAll(/<Item>([\s\S]*?)<\/Item>/gi)].map((match) => {
     const item = match[1];
+    const imageUrls = [...item.matchAll(/<(?:[A-Za-z0-9_]+:)?(?:GalleryURL|PictureURL)\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_]+:)?(?:GalleryURL|PictureURL)>/gi)]
+      .map((entry) => entry[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim())
+      .filter((url) => /^https:\/\/i\.ebayimg\.com\//i.test(url));
     return {
       sku: xmlValue(item, "SKU"), offerId: "", listingId: xmlValue(item, "ItemID"), status: "PUBLISHED",
       title: xmlValue(item, "Title"), quantity: Number(xmlValue(item, "QuantityAvailable") || xmlValue(item, "Quantity") || 0),
-      price: xmlValue(item, "CurrentPrice") || xmlValue(item, "StartPrice") || "0.00", currency: "EUR", imageUrls: [], source: "trading",
+      price: xmlValue(item, "CurrentPrice") || xmlValue(item, "StartPrice") || "0.00", currency: "EUR", imageUrls: [...new Set(imageUrls)].slice(0, 12), source: "trading",
     };
   });
 }
