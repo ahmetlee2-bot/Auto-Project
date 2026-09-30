@@ -15,6 +15,11 @@ export function OAuthCallback({ code }: { code: string }) {
       .auth.getSession()
       .then(({ data, error: sessionError }) => {
         if (sessionError || !data.session) {
+          console.error("[AutoLister OAuth] session not established", {
+            name: sessionError?.name ?? "NoSession",
+            code: sessionError?.code,
+            message: sessionError?.message,
+          });
           setError("Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.");
           return;
         }
