@@ -31,7 +31,11 @@ export async function middleware(request: NextRequest) {
       );
     }
 
-    return response;
+    const cleanUrl = request.nextUrl.clone();
+    cleanUrl.searchParams.delete("code");
+    const redirect = NextResponse.redirect(cleanUrl);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   const { data } = await supabase.auth.getClaims();
