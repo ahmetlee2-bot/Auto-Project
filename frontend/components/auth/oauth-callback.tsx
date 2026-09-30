@@ -12,22 +12,15 @@ export function OAuthCallback({ code }: { code: string }) {
     started.current = true;
 
     void createClient()
-      .auth.exchangeCodeForSession(code)
-      .then(({ error: exchangeError }) => {
-        if (exchangeError) {
-          console.error("[AutoLister OAuth] code exchange failed", {
-            name: exchangeError.name,
-            code: exchangeError.code,
-          });
+      .auth.getSession()
+      .then(({ data, error: sessionError }) => {
+        if (sessionError || !data.session) {
           setError("Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.");
           return;
         }
         window.location.replace("/dashboard");
       })
-      .catch((cause: unknown) => {
-        console.error("[AutoLister OAuth] code exchange threw", {
-          name: cause instanceof Error ? cause.name : "UnknownError",
-        });
+      .catch(() => {
         setError("Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.");
       });
   }, [code]);
