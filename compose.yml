@@ -25,6 +25,10 @@ services:
       PORT: "3000"
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in the server .env}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in the server .env}
+      LEGAL_COMPANY: ${LEGAL_COMPANY:-}
+      LEGAL_ADDRESS: ${LEGAL_ADDRESS:-}
+      LEGAL_EMAIL: ${LEGAL_EMAIL:-}
+      LEGAL_VAT_ID: ${LEGAL_VAT_ID:-}
     ports: ["127.0.0.1:3101:3000"]
     networks: [edge]
     mem_limit: 320m

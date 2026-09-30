@@ -1,31 +1,30 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./saas.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://autolister-app.de"),
   title: {
-    default: "AutoLister – Amazon zu eBay automatisieren | autolister-app.de",
+    default: "AutoLister — 1-Klick Amazon zu eBay Dropshipping & Cloud-Sync",
     template: "%s | AutoLister",
   },
-  description:
-    "AutoLister automatisiert Amazon-zu-eBay-Listings, synchronisiert Bestand und Preise und hilft Online-Händlern, schneller zu verkaufen.",
+  description: "Amazon-Produktdaten für eBay-Listings vorbereiten, Entwürfe prüfen und Server-Aufträge im AutoLister Dashboard verfolgen.",
+  icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }], apple: "/apple-touch-icon.png" },
   keywords: ["AutoLister", "Amazon zu eBay", "eBay Automation", "eBay Listings", "Bestand synchronisieren"],
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "de_DE",
     url: "https://autolister-app.de/",
     siteName: "AutoLister",
-    title: "AutoLister – Amazon zu eBay automatisieren",
-    description:
-      "Produkte schneller bei eBay listen, Bestand synchronisieren und Bestellungen zentral verwalten.",
-    images: [{ url: "/og-image.svg", width: 1200, height: 630, alt: "AutoLister – Amazon zu eBay Automation" }],
+    title: "AutoLister — Amazon zu eBay in einem Cloud-Workflow",
+    description: "Produkte importieren, eBay-Entwürfe prüfen und Server-Aufträge zentral verfolgen.",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "AutoLister Dashboard und Cloud-Workflow" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "AutoLister – Amazon zu eBay automatisieren",
-    description: "eBay Listings, Bestände, Preise und Bestellungen in einem Dashboard.",
-    images: ["/og-image.svg"],
+    title: "AutoLister — Amazon zu eBay in einem Cloud-Workflow",
+    description: "Produktimport, eBay-Listings und Server-Aufträge in einem Dashboard.",
+    images: ["/og-image.png"],
   },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
   verification: {

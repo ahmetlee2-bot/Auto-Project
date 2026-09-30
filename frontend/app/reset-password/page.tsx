@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ResetPasswordForm } from "../../components/auth/reset-password-form";
-export default function ResetPasswordPage() { return <main className="authShell"><div className="authCard"><Link className="authBrand" href="/">AutoLister</Link><p className="sectionEyebrow">Neues Passwort</p><h1>Passwort festlegen.</h1><p>Wähle ein neues Passwort für dein AutoLister-Konto.</p><ResetPasswordForm /><p className="authSwitch"><Link href="/login">Zum Login</Link></p></div></main>; }
+import { AuthShell } from "../../components/auth/auth-shell";
+export const metadata: Metadata = { title: "Passwort festlegen", robots: { index: false, follow: false } };
+export default function ResetPasswordPage() { return <AuthShell eyebrow="NEUES PASSWORT" title="Passwort festlegen" description="Wähle ein neues Passwort für dein AutoLister-Konto."><ResetPasswordForm /><p className="authHelper"><Link href="/login">← Zum Login</Link></p></AuthShell>; }
