@@ -8,23 +8,23 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     { cookies: { getAll: () => request.cookies.getAll(), setAll: (values) => values.forEach(({ name, value, options }) => { request.cookies.set(name, value); response = NextResponse.next({ request }); response.cookies.set(name, value, options); }) } },
   );
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
-
   // Supabase returns the OAuth authorization code to redirectTo. Exchange it
-  // in middleware before protecting /dashboard, then remove it from the URL.
+  // before checking dashboard access so the same response can set the session
+  // cookies that the dashboard server component reads.
   const code = request.nextUrl.searchParams.get("code");
   if (request.nextUrl.pathname.startsWith("/dashboard") && code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      const cleanUrl = request.nextUrl.clone();
-      cleanUrl.searchParams.delete("code");
-      const redirect = NextResponse.redirect(cleanUrl);
-      response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
-      return redirect;
+    if (error) {
+      return NextResponse.redirect(
+        new URL("/login?oauth=callback_failed", request.nextUrl.origin),
+      );
     }
+
+    return response;
   }
 
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
   if (request.nextUrl.pathname.startsWith("/dashboard") && !claims) {
     const url = request.nextUrl.clone(); url.pathname = "/login"; url.searchParams.set("next", request.nextUrl.pathname); return NextResponse.redirect(url);
   }
