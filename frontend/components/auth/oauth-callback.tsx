@@ -15,12 +15,19 @@ export function OAuthCallback({ code }: { code: string }) {
       .auth.exchangeCodeForSession(code)
       .then(({ error: exchangeError }) => {
         if (exchangeError) {
+          console.error("[AutoLister OAuth] code exchange failed", {
+            name: exchangeError.name,
+            code: exchangeError.code,
+          });
           setError("Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.");
           return;
         }
         window.location.replace("/dashboard");
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
+        console.error("[AutoLister OAuth] code exchange threw", {
+          name: cause instanceof Error ? cause.name : "UnknownError",
+        });
         setError("Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.");
       });
   }, [code]);
