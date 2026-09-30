@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AnalyzeResponse, AppSettings, PortfolioDeal, SavedDeal, SearchProfile } from "../../lib/api";
+import type {
+  AnalyzeResponse,
+  AppSettings,
+  PortfolioDeal,
+  SavedDeal,
+  SearchProfile,
+} from "../../lib/api";
 import {
   analyzeListing,
   createPortfolioDeal,
@@ -55,7 +61,9 @@ const defaultSettings: AppSettings = {
 };
 
 export function ValuationDashboard() {
-  const [form, setForm] = useState<ValuationFormState>(createInitialFormState());
+  const [form, setForm] = useState<ValuationFormState>(
+    createInitialFormState(),
+  );
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [watchlist, setWatchlist] = useState<SavedDeal[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioDeal[]>([]);
@@ -64,7 +72,7 @@ export function ValuationDashboard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [lastUpdatedLabel, setLastUpdatedLabel] = useState("not synced yet");
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState("Noch nicht synchronisiert");
 
   useEffect(() => {
     void refreshData();
@@ -87,27 +95,38 @@ export function ValuationDashboard() {
 
   async function refreshData() {
     try {
-      const [watchlistData, portfolioData, settingsData, searchProfileData] = await Promise.all([
-        fetchWatchlist(),
-        fetchPortfolio(),
-        fetchAppSettings(),
-        fetchSearchProfiles(),
-      ]);
+      const [watchlistData, portfolioData, settingsData, searchProfileData] =
+        await Promise.all([
+          fetchWatchlist(),
+          fetchPortfolio(),
+          fetchAppSettings(),
+          fetchSearchProfiles(),
+        ]);
 
       setWatchlist(watchlistData);
       setPortfolio(portfolioData);
       setAppSettings(settingsData);
       setSearchProfiles(searchProfileData);
       setForm((current) => applyPreferredCity(current, settingsData));
-      setLastUpdatedLabel(new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }));
+      setLastUpdatedLabel(
+        new Date().toLocaleTimeString("de-DE", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      );
       setError("");
     } catch (loadError) {
       console.error(loadError);
-      setError("Backend collection verileri okunamadi. Local valuation preview yine calisiyor.");
+      setError(
+        "Backend-Daten konnten nicht geladen werden. Die lokale Schätzung ist weiterhin verfügbar.",
+      );
     }
   }
 
-  function updateField<K extends keyof ValuationFormState>(field: K, value: ValuationFormState[K]) {
+  function updateField<K extends keyof ValuationFormState>(
+    field: K,
+    value: ValuationFormState[K],
+  ) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
@@ -116,7 +135,9 @@ export function ValuationDashboard() {
     setNotice("");
 
     if (!form.rawText.trim() && !form.url.trim()) {
-      setError("Backend analyze icin listing text veya listing URL gerekli.");
+      setError(
+        "Gib einen Angebotstext oder eine URL ein, damit die Analyse starten kann.",
+      );
       return;
     }
 
@@ -124,10 +145,10 @@ export function ValuationDashboard() {
     try {
       const response = await analyzeListing(toAnalyzeRequest(form));
       setResult(response);
-      setNotice("Operator analyze tamamlandi.");
+      setNotice("Die Analyse ist abgeschlossen.");
     } catch (analyzeError) {
       console.error(analyzeError);
-      setError("Operator analyze su anda ulasilabilir degil.");
+      setError("Die Analyse ist derzeit nicht erreichbar.");
     } finally {
       setIsLoading(false);
     }
@@ -140,11 +161,11 @@ export function ValuationDashboard() {
 
     try {
       await createWatchlistDeal(result);
-      setNotice("Deal watchlist'e kaydedildi.");
+      setNotice("Das Angebot wurde in der Merkliste gespeichert.");
       await refreshData();
     } catch (saveError) {
       console.error(saveError);
-      setError("Watchlist kaydi olusturulamadi.");
+      setError("Das Angebot konnte nicht in der Merkliste gespeichert werden.");
     }
   }
 
@@ -155,11 +176,11 @@ export function ValuationDashboard() {
 
     try {
       await createPortfolioDeal(result);
-      setNotice("Deal portfolio'ya kaydedildi.");
+      setNotice("Das Angebot wurde im Portfolio gespeichert.");
       await refreshData();
     } catch (saveError) {
       console.error(saveError);
-      setError("Portfolio kaydi olusturulamadi.");
+      setError("Das Angebot konnte nicht im Portfolio gespeichert werden.");
     }
   }
 
@@ -167,13 +188,13 @@ export function ValuationDashboard() {
     <main className="appShell">
       <header className="topBar">
         <div className="brandLockup">
-          <small>AUTONOW Select</small>
-          <strong>Valuation cockpit</strong>
+          <small>AutoLister</small>
+          <strong>Fahrzeugbewertung</strong>
         </div>
         <div className="topBarMeta">
           <AuthNav />
-          <span className="topBarPill">balanced premium</span>
-          <span className="topBarPill">backend-ready</span>
+          <span className="topBarPill">Kaufanalyse</span>
+          <span className="topBarPill">Servergestützt</span>
         </div>
       </header>
 
@@ -195,7 +216,9 @@ export function ValuationDashboard() {
           onFieldChange={updateField}
           onSourceChange={(source) => updateField("source", source)}
           onAnalyze={() => void handleAnalyze()}
-          onSample={() => setForm(createSampleFormState(appSettings.preferred_city))}
+          onSample={() =>
+            setForm(createSampleFormState(appSettings.preferred_city))
+          }
         />
 
         <MarketPanel
@@ -208,7 +231,11 @@ export function ValuationDashboard() {
       </section>
 
       <section className="contentGrid">
-        <OperatorPanel result={result} estimate={estimate} localSignal={localSignal} />
+        <OperatorPanel
+          result={result}
+          estimate={estimate}
+          localSignal={localSignal}
+        />
         <ComparablesPanel comparables={comparables} />
       </section>
 
@@ -224,19 +251,38 @@ export function ValuationDashboard() {
         appSettings={appSettings}
       />
 
-      <section className="storeCta glassCard" aria-label="AutoLister herunterladen">
+      <section
+        className="storeCta glassCard"
+        aria-label="AutoLister herunterladen"
+      >
         <div>
           <p className="sectionEyebrow">AutoLister Erweiterung</p>
           <h2>Amazon-Produkte schneller auf eBay vorbereiten.</h2>
-          <p>Installieren Sie die Chrome-Erweiterung und starten Sie direkt auf einer Produktseite.</p>
+          <p>
+            Installieren Sie die Chrome-Erweiterung und starten Sie direkt auf
+            einer Produktseite.
+          </p>
         </div>
-        <a className="primaryButton" href="https://chromewebstore.google.com/detail/phppekchehibeiphdmjifmceoencigee" target="_blank" rel="noopener noreferrer">Chrome hinzufügen ↗</a>
+        <a
+          className="primaryButton"
+          href="https://chromewebstore.google.com/detail/phppekchehibeiphdmjifmceoencigee"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Chrome hinzufügen ↗
+        </a>
       </section>
 
       <footer className="siteFooter">
         <span>© {new Date().getFullYear()} AutoLister</span>
         <nav aria-label="Rechtliche Hinweise">
-          <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Datenschutzerklärung</a>
+          <a
+            href="/privacy-policy.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Datenschutzerklärung
+          </a>
           <a href="/terms.html">Nutzungsbedingungen</a>
         </nav>
       </footer>

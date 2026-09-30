@@ -105,7 +105,7 @@ input[type="checkbox"] {
 .primaryButton {
   border: 1px solid #2563eb;
   background: #2563eb;
-  color: #fff;
+  color: #fff !important;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
 }
 .primaryButton:hover:not(:disabled) {
@@ -1862,5 +1862,284 @@ input[type="checkbox"] {
   }
   .productTableHead {
     display: none;
+  }
+}
+
+/* Support, onboarding and OAuth setup */
+.siteNav .contactLink,
+.mobileMenu .contactLink,
+.marketingFooter .contactLink {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.siteNav .contactLink:hover,
+.mobileMenu .contactLink:hover,
+.marketingFooter .contactLink:hover {
+  color: #2563eb;
+}
+.mobileMenu .contactLink {
+  padding: 11px 12px;
+  text-align: left;
+}
+.marketingFooter .contactLink {
+  text-decoration: none;
+}
+.contactOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(15 23 42 / 55%);
+  backdrop-filter: blur(5px);
+}
+.contactDialog {
+  position: relative;
+  width: min(100%, 510px);
+  padding: 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgb(15 23 42 / 25%);
+}
+.contactDialog h2 {
+  margin: 13px 36px 10px 0;
+  color: #0f172a;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  letter-spacing: -0.045em;
+}
+.contactDialog > p {
+  color: #64748b;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+.contactClose {
+  position: absolute;
+  top: 14px;
+  right: 15px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #475569;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.contactEmailRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.contactEmailRow > a {
+  color: #1d4ed8;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.contactEmailRow .secondaryButton {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+.contactDialog .contactResponseNote {
+  margin-bottom: 4px;
+  font-size: 0.82rem;
+}
+.contactCopyFeedback {
+  display: block;
+  min-height: 1.2em;
+  color: #047857;
+  font-size: 0.8rem;
+}
+.feedbackSection {
+  padding-top: 36px;
+}
+.feedbackCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: linear-gradient(115deg, #eff6ff, #fff 65%);
+}
+.feedbackIcon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 1.4rem;
+}
+.feedbackCard strong {
+  color: #0f172a;
+  font-size: 1rem;
+}
+.feedbackCard p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 0.87rem;
+  line-height: 1.6;
+}
+.feedbackCard .primaryButton {
+  color: #fff !important;
+  font-weight: 700;
+}
+.oauthSetupDetails {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.77rem;
+  line-height: 1.5;
+}
+.oauthSetupDetails summary {
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+}
+.oauthSetupDetails p {
+  margin: 0;
+}
+.oauthSetupDetails code {
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d4ed8;
+  overflow-wrap: anywhere;
+}
+.setupGuide {
+  display: grid;
+  gap: 16px;
+}
+.setupSteps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.setupStep {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #fff;
+}
+.setupStepHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.setupStepNumber {
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.setupStep h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+.setupStep p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.83rem;
+  line-height: 1.6;
+}
+.setupCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #475569;
+  font-size: 0.77rem;
+  line-height: 1.45;
+}
+.setupCheck input {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.setupStep .primaryButton,
+.setupStep .secondaryButton {
+  width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+.setupStatus {
+  width: fit-content;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.setupStatus.connected {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+.setupFeedback {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.setupFootnote {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+.setupImportAction {
+  display: grid;
+  gap: 12px;
+}
+.setupImportAction .mappingInputs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 760px) {
+  .setupSteps {
+    grid-template-columns: 1fr;
+  }
+  .feedbackCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .feedbackCard .primaryButton {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 480px) {
+  .contactDialog {
+    padding: 26px 20px;
+  }
+  .contactEmailRow {
+    align-items: stretch;
+  }
+  .setupImportAction .mappingInputs {
+    grid-template-columns: 1fr;
   }
 }

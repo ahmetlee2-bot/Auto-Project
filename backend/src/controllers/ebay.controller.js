@@ -1,7 +1,4 @@
-const ebay = require('../services/ebay.service');
 const bridge = require('../services/ebay-bridge.service');
-const wrap = (handler) => async (req, res) => { try { res.json(await handler(req)); } catch (error) { res.status(400).json({ error: error.message }); } };
-exports.authUrl = wrap(() => ebay.authUrl());
 const sendBridge = (path, options) => async (req, res) => {
   try {
     const result = await bridge.request(req.userId, typeof path === 'function' ? path(req) : path, {
@@ -14,6 +11,8 @@ const sendBridge = (path, options) => async (req, res) => {
     res.status(error.status || 500).json({ error: error.message, code: error.code || '', stage: error.stage || '', requestId: error.requestId || '', details: error.details || [] });
   }
 };
+exports.authUrl = sendBridge('/ebay/oauth/authorize-url');
+exports.connectionStatus = sendBridge('/ebay/status', { timeoutMs: 20000 });
 exports.draft = sendBridge('/ebay/drafts?async=1', { method: 'POST' });
 exports.importAmazon = sendBridge('/ebay/import-amazon', { method: 'POST', timeoutMs: 30000 });
 exports.publish = sendBridge('/ebay/drafts/publish', { method: 'POST', timeoutMs: 120000 });

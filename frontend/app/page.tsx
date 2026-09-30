@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { AuthNav } from "../components/auth/auth-nav";
 import { BrandMark } from "../components/brand-mark";
+import { ContactSupport } from "../components/contact-support";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
@@ -17,7 +18,7 @@ const features = [
   },
   {
     number: "02",
-    title: "Saubere Listings",
+    title: "Saubere eBay-Angebote",
     text: "Titel, Bilder und Produktdetails in einem klaren Prüfablauf bearbeiten.",
     icon: "▦",
   },
@@ -29,7 +30,7 @@ const features = [
   },
   {
     number: "04",
-    title: "Cloud Operations",
+    title: "Cloud-Abläufe",
     text: "Bestand, Bestellungen und Server-Aufträge im Dashboard überwachen.",
     icon: "◎",
   },
@@ -65,12 +66,13 @@ export default function Page() {
         operatingSystem: "Web, Chrome",
         url: "https://autolister-app.de/",
         description:
-          "Amazon-Produktdaten für eBay-Listings vorbereiten und Abläufe auf dem Server überwachen.",
+          "Amazon-Produktdaten für eBay-Angebote vorbereiten und Abläufe auf dem Server überwachen.",
       },
       {
         "@type": "Organization",
         name: "AutoLister",
         url: "https://autolister-app.de/",
+        logo: "https://autolister-app.de/icon-512.png",
         email: "contact.autolister@gmail.com",
       },
       {
@@ -98,6 +100,7 @@ export default function Page() {
               <a href="#cloud">Cloud-Vorteil</a>
               <a href="#preise">Preise</a>
               <a href="#faq">FAQ</a>
+              <ContactSupport />
             </nav>
             <AuthNav />
             <details className="mobileMenu">
@@ -110,6 +113,7 @@ export default function Page() {
                 <a href="#cloud">Cloud-Vorteil</a>
                 <a href="#preise">Preise</a>
                 <a href="#faq">FAQ</a>
+                <ContactSupport />
                 <Link href="/login">Anmelden</Link>
                 <Link href="/register">Jetzt starten</Link>
               </nav>
@@ -174,7 +178,7 @@ export default function Page() {
                     ↗ <span>Amazon Import</span>
                   </div>
                   <div className="previewSidebarItem">
-                    ◎ <span>eBay Listings</span>
+                    ◎ <span>eBay-Angebote</span>
                   </div>
                   <div className="previewSidebarItem">
                     ◫ <span>Marge &amp; Bestand</span>
@@ -192,7 +196,7 @@ export default function Page() {
                   </div>
                   <div className="previewKpis">
                     <div>
-                      <small>eBay Listings</small>
+                      <small>eBay-Angebote</small>
                       <strong>Aktiv</strong>
                       <span>Aktuelle Angebote</span>
                     </div>
@@ -202,7 +206,7 @@ export default function Page() {
                       <span>Entwürfe prüfen</span>
                     </div>
                     <div>
-                      <small>Cloud Sync</small>
+                      <small>Cloud-Synchronisierung</small>
                       <strong>24/7</strong>
                       <span>Serverseitiger Ablauf</span>
                     </div>
@@ -237,7 +241,7 @@ export default function Page() {
           <section className="trustBar" aria-label="Technologie">
             <div className="sectionWrap trustBarInner">
               <span>ENTWICKELT FÜR VERLÄSSLICHE ABLÄUFE</span>
-              <b>Hetzner Cloud Altyapısı</b>
+              <b>High-Performance Cloud-Infrastruktur (Hetzner)</b>
               <b>eBay API</b>
               <b>Chrome-Erweiterung</b>
               <b>HTTPS</b>
@@ -269,6 +273,35 @@ export default function Page() {
                   <p>{feature.text}</p>
                 </article>
               ))}
+            </div>
+          </section>
+
+          <section className="sectionWrap marketingSection feedbackSection">
+            <div className="sectionIntro">
+              <span className="sectionKicker">GEMEINSAM BESSER WERDEN</span>
+              <h2>Deine Erfahrung hilft uns weiter.</h2>
+              <p>
+                Wir sammeln gerade Rückmeldungen von AutoLister-Nutzern. Wenn du
+                den Produktimport oder das Dashboard ausprobiert hast, freuen
+                wir uns über deine ehrliche Einschätzung.
+              </p>
+            </div>
+            <div className="feedbackCard">
+              <span className="feedbackIcon" aria-hidden="true">
+                ✦
+              </span>
+              <div>
+                <strong>Dein Feedback, unverfälscht.</strong>
+                <p>
+                  Teile mit uns, was gut funktioniert und was wir verbessern
+                  sollten. Öffentliche Kundenstimmen zeigen wir erst nach
+                  ausdrücklicher Freigabe.
+                </p>
+              </div>
+              <ContactSupport
+                label="Feedback senden"
+                className="primaryButton"
+              />
             </div>
           </section>
 
@@ -433,7 +466,7 @@ export default function Page() {
                 <Link href="/impressum">Impressum</Link>
                 <Link href="/datenschutz">Datenschutz</Link>
                 <a href="/terms.html">AGB</a>
-                <a href="mailto:contact.autolister@gmail.com">Kontakt</a>
+                <ContactSupport />
               </nav>
             </div>
           </div>

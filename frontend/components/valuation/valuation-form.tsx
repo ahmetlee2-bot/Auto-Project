@@ -1,11 +1,22 @@
 import type { ReactNode } from "react";
 import type { ValuationFormState } from "../../lib/valuation";
-import { cityOptions, fuelOptions, sourceOptions, transmissionOptions, type FuelOption, type SourceKey, type TransmissionOption } from "../../lib/valuation";
+import {
+  cityOptions,
+  fuelOptions,
+  sourceOptions,
+  transmissionOptions,
+  type FuelOption,
+  type SourceKey,
+  type TransmissionOption,
+} from "../../lib/valuation";
 
 type ValuationFormProps = {
   form: ValuationFormState;
   isLoading: boolean;
-  onFieldChange: <K extends keyof ValuationFormState>(field: K, value: ValuationFormState[K]) => void;
+  onFieldChange: <K extends keyof ValuationFormState>(
+    field: K,
+    value: ValuationFormState[K],
+  ) => void;
   onSourceChange: (source: SourceKey) => void;
   onAnalyze: () => void;
   onSample: () => void;
@@ -23,15 +34,19 @@ export function ValuationForm({
     <section className="panelCard glassCard">
       <div className="panelHeader">
         <div>
-          <p className="sectionEyebrow">Vehicle intake</p>
-          <h2>Arac bilgisi ve source secimi</h2>
+          <p className="sectionEyebrow">Fahrzeugdaten</p>
+          <h2>Fahrzeug und Datenquelle</h2>
         </div>
         <button className="ghostButton" type="button" onClick={onSample}>
-          Sample
+          Beispieldaten laden
         </button>
       </div>
 
-      <div className="sourceSwitch" role="radiogroup" aria-label="Source selection">
+      <div
+        className="sourceSwitch"
+        role="radiogroup"
+        aria-label="Datenquelle auswählen"
+      >
         {sourceOptions.map((option) => {
           const active = form.source === option.key;
           return (
@@ -49,28 +64,43 @@ export function ValuationForm({
       </div>
 
       <div className="valuationFormGrid">
-        <Field label="Brand">
-          <input value={form.brand} onChange={(event) => onFieldChange("brand", event.target.value)} />
+        <Field label="Marke">
+          <input
+            value={form.brand}
+            onChange={(event) => onFieldChange("brand", event.target.value)}
+          />
         </Field>
-        <Field label="Model">
-          <input value={form.model} onChange={(event) => onFieldChange("model", event.target.value)} />
+        <Field label="Modell">
+          <input
+            value={form.model}
+            onChange={(event) => onFieldChange("model", event.target.value)}
+          />
         </Field>
-        <Field label="Year">
+        <Field label="Baujahr">
           <input
             type="number"
             value={form.year}
-            onChange={(event) => onFieldChange("year", Number(event.target.value) || 0)}
+            onChange={(event) =>
+              onFieldChange("year", Number(event.target.value) || 0)
+            }
           />
         </Field>
-        <Field label="KM">
+        <Field label="Kilometerstand">
           <input
             type="number"
             value={form.km}
-            onChange={(event) => onFieldChange("km", Number(event.target.value) || 0)}
+            onChange={(event) =>
+              onFieldChange("km", Number(event.target.value) || 0)
+            }
           />
         </Field>
-        <Field label="Fuel">
-          <select value={form.fuel} onChange={(event) => onFieldChange("fuel", event.target.value as FuelOption)}>
+        <Field label="Kraftstoff">
+          <select
+            value={form.fuel}
+            onChange={(event) =>
+              onFieldChange("fuel", event.target.value as FuelOption)
+            }
+          >
             {fuelOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -78,10 +108,15 @@ export function ValuationForm({
             ))}
           </select>
         </Field>
-        <Field label="Transmission">
+        <Field label="Getriebe">
           <select
             value={form.transmission}
-            onChange={(event) => onFieldChange("transmission", event.target.value as TransmissionOption)}
+            onChange={(event) =>
+              onFieldChange(
+                "transmission",
+                event.target.value as TransmissionOption,
+              )
+            }
           >
             {transmissionOptions.map((option) => (
               <option key={option} value={option}>
@@ -90,8 +125,11 @@ export function ValuationForm({
             ))}
           </select>
         </Field>
-        <Field label="City">
-          <select value={form.city} onChange={(event) => onFieldChange("city", event.target.value)}>
+        <Field label="Stadt">
+          <select
+            value={form.city}
+            onChange={(event) => onFieldChange("city", event.target.value)}
+          >
             {cityOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -99,21 +137,23 @@ export function ValuationForm({
             ))}
           </select>
         </Field>
-        <Field label="Asking price">
+        <Field label="Angebotspreis">
           <input
             type="number"
             value={form.askingPrice}
-            onChange={(event) => onFieldChange("askingPrice", Number(event.target.value) || 0)}
+            onChange={(event) =>
+              onFieldChange("askingPrice", Number(event.target.value) || 0)
+            }
           />
         </Field>
-        <Field label="Listing text" full>
+        <Field label="Inseratstext" full>
           <textarea
             value={form.rawText}
             onChange={(event) => onFieldChange("rawText", event.target.value)}
-            placeholder="Ilan aciklamasini buraya birak. Backend operator analizi bunu kullanir."
+            placeholder="Füge hier den Text des Inserats ein. Er wird für die Serveranalyse verwendet."
           />
         </Field>
-        <Field label="Listing URL" full>
+        <Field label="Inserat-URL" full>
           <input
             value={form.url}
             onChange={(event) => onFieldChange("url", event.target.value)}
@@ -123,9 +163,17 @@ export function ValuationForm({
       </div>
 
       <div className="panelFooter">
-        <p>Local valuation anlik guncellenir. Canli operator signal icin backend analyze tetiklenir.</p>
-        <button className="primaryButton" type="button" onClick={onAnalyze} disabled={isLoading}>
-          {isLoading ? "Operator analiz calisiyor..." : "Operator analizi calistir"}
+        <p>
+          Die lokale Schätzung wird sofort aktualisiert. Für eine Serveranalyse
+          klicke auf „Fahrzeug analysieren“.
+        </p>
+        <button
+          className="primaryButton"
+          type="button"
+          onClick={onAnalyze}
+          disabled={isLoading}
+        >
+          {isLoading ? "Analyse läuft …" : "Fahrzeug analysieren"}
         </button>
       </div>
     </section>

@@ -17,43 +17,43 @@ export function OperatorDesk({ watchlist, portfolio, searchProfiles, appSettings
     <details className="opsDrawer glassCard">
       <summary>
         <div>
-          <small>Backend readiness</small>
-          <strong>Operator collections ve runtime snapshot</strong>
+          <small>Serverstatus</small>
+          <strong>Gespeicherte Angebote und aktuelle Daten</strong>
         </div>
-        <span>{watchlist.length} watch / {activePortfolio.length} active</span>
+        <span>{watchlist.length} vorgemerkt / {activePortfolio.length} aktiv</span>
       </summary>
 
       <div className="opsDrawerGrid">
         <section>
-          <h3>Watchlist snapshot</h3>
-          {recentWatchlist.length === 0 ? <p>No watchlist deal yet.</p> : null}
+          <h3>Merkliste</h3>
+          {recentWatchlist.length === 0 ? <p>Noch keine Angebote vorgemerkt.</p> : null}
           {recentWatchlist.map((deal) => (
             <article className="opsItem" key={`watch-${deal.id}`}>
               <strong>{deal.title}</strong>
-              <p>Offer {deal.offer_price} EUR / Net {deal.net_profit} EUR</p>
+              <p>Angebot {deal.offer_price} EUR / Netto {deal.net_profit} EUR</p>
             </article>
           ))}
         </section>
 
         <section>
-          <h3>Aktif portfolio</h3>
-          {recentPortfolio.length === 0 ? <p>No active portfolio deal yet.</p> : null}
+          <h3>Aktives Portfolio</h3>
+          {recentPortfolio.length === 0 ? <p>Noch keine aktiven Angebote.</p> : null}
           {recentPortfolio.map((deal) => (
             <article className="opsItem" key={`portfolio-${deal.id}`}>
               <strong>{deal.title}</strong>
-              <p>{deal.status} / Net {deal.net_profit} EUR</p>
+              <p>{deal.status} / Netto {deal.net_profit} EUR</p>
             </article>
           ))}
         </section>
 
         <section>
-          <h3>Settings ve search profiles</h3>
+          <h3>Einstellungen und Suchprofile</h3>
           <article className="opsItem">
-            <strong>Preferred city</strong>
+            <strong>Bevorzugte Stadt</strong>
             <p>{appSettings.preferred_city}</p>
           </article>
           <article className="opsItem">
-            <strong>Min profit target</strong>
+            <strong>Mindestgewinn</strong>
             <p>{appSettings.min_net_profit} EUR</p>
           </article>
           {activeProfiles.map((profile) => (

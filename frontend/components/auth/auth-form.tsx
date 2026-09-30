@@ -3,6 +3,14 @@
 import { FormEvent, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
+const siteUrl = (
+  process.env.NEXT_PUBLIC_SITE_URL || "https://autolister-app.de"
+).replace(/\/$/, "");
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const googleCallbackUrl = supabaseUrl
+  ? `${supabaseUrl.replace(/\/$/, "")}/auth/v1/callback`
+  : "";
+
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -61,7 +69,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     setError("");
     const { error: oauthError } = await createClient().auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
+      options: { redirectTo: `${siteUrl}/dashboard` },
     });
     if (oauthError) setError(oauthError.message);
   }
@@ -122,6 +130,20 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       >
         Mit Google fortfahren
       </button>
+      {mode === "login" && googleCallbackUrl ? (
+        <details className="oauthSetupDetails">
+          <summary>Google OAuth konfigurieren</summary>
+          <p>
+            Diese Weiterleitungs-URI in Google Cloud unter „Autorisierte
+            Weiterleitungs-URIs“ eintragen:
+          </p>
+          <code>{googleCallbackUrl}</code>
+          <p>
+            Supabase leitet nach erfolgreicher Anmeldung an{" "}
+            <code>{siteUrl}/dashboard</code> zurück.
+          </p>
+        </details>
+      ) : null}
     </form>
   );
 }

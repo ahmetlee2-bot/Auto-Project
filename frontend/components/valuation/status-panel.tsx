@@ -9,8 +9,8 @@ export function StatusPanel({ cards }: StatusPanelProps) {
     <section className="panelCard glassCard">
       <div className="panelHeader">
         <div>
-          <p className="sectionEyebrow">Status cards</p>
-          <h2>Durum ozeti</h2>
+          <p className="sectionEyebrow">Statusübersicht</p>
+          <h2>Aktueller Stand</h2>
         </div>
       </div>
 

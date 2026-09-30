@@ -11,7 +11,9 @@ import {
   type ValuationFormState,
 } from "../lib/valuation";
 
-function buildForm(overrides: Partial<ValuationFormState> = {}): ValuationFormState {
+function buildForm(
+  overrides: Partial<ValuationFormState> = {},
+): ValuationFormState {
   return {
     ...createInitialFormState(),
     rawText: "VW Golf 1.6, Hamburg, TUV yeni",
@@ -34,8 +36,8 @@ test("calculateEstimate preserves valuation bands and operator cost outputs", ()
     resale: 3930,
     netProfit: -1000,
     margin: -20,
-    dealTag: "Pahali gorunuyor",
-    risk: "Dusuk",
+    dealTag: "Zu teuer",
+    risk: "Niedrig",
   });
 });
 
@@ -47,7 +49,7 @@ test("comparables keep the three-band market structure from the reference", () =
   assert.equal(comparables.length, 3);
   assert.deepEqual(
     comparables.map((item) => item.tag),
-    ["Ust bant", "Orta piyasa", "Alt bant"],
+    ["Oberes Marktsegment", "Mittleres Marktsegment", "Unteres Marktsegment"],
   );
   assert.deepEqual(
     comparables.map((item) => item.source),
@@ -63,7 +65,7 @@ test("scenario cases stay ordered as conservative, base, upside", () => {
 
   assert.deepEqual(
     scenarios.map((scenario) => scenario.title),
-    ["Conservative", "Base case", "Upside"],
+    ["Konservativ", "Basisszenario", "Optimistisch"],
   );
   assert.ok(scenarios[2].netProfit >= scenarios[1].netProfit);
   assert.ok(scenarios[1].netProfit >= scenarios[0].netProfit);
@@ -74,9 +76,18 @@ test("local buy-box signal distinguishes fit, review and out states", () => {
   const reviewForm = buildForm({ askingPrice: 3900 });
   const outForm = buildForm({ askingPrice: 4700 });
 
-  assert.equal(getLocalBuyBoxSignal(fitForm, calculateEstimate(fitForm)).status, "fit");
-  assert.equal(getLocalBuyBoxSignal(reviewForm, calculateEstimate(reviewForm)).status, "review");
-  assert.equal(getLocalBuyBoxSignal(outForm, calculateEstimate(outForm)).status, "out");
+  assert.equal(
+    getLocalBuyBoxSignal(fitForm, calculateEstimate(fitForm)).status,
+    "fit",
+  );
+  assert.equal(
+    getLocalBuyBoxSignal(reviewForm, calculateEstimate(reviewForm)).status,
+    "review",
+  );
+  assert.equal(
+    getLocalBuyBoxSignal(outForm, calculateEstimate(outForm)).status,
+    "out",
+  );
 });
 
 test("source adapters keep frontend labels while mapping backend request sources", () => {
@@ -84,8 +95,14 @@ test("source adapters keep frontend labels while mapping backend request sources
     key: "Kleinanzeigen",
     label: "Kleinanzeigen",
     analyzeSource: "Kleinanzeigen",
-    hint: "Fastest parser path for the current backend.",
+    hint: "Direkte Analyse über die aktuelle Schnittstelle.",
   });
-  assert.equal(toAnalyzeRequest(buildForm({ source: "AutoScout24" })).source, "Mobile.de");
-  assert.equal(toAnalyzeRequest(buildForm({ source: "Marketplace" })).source, "Facebook Marketplace");
+  assert.equal(
+    toAnalyzeRequest(buildForm({ source: "AutoScout24" })).source,
+    "Mobile.de",
+  );
+  assert.equal(
+    toAnalyzeRequest(buildForm({ source: "Marketplace" })).source,
+    "Facebook Marketplace",
+  );
 });

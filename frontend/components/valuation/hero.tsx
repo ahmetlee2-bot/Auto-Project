@@ -4,27 +4,30 @@ type HeroProps = {
   lastUpdatedLabel: string;
 };
 
-export function Hero({ preferredCity, activeSourceLabel, lastUpdatedLabel }: HeroProps) {
+export function Hero({
+  preferredCity,
+  activeSourceLabel,
+  lastUpdatedLabel,
+}: HeroProps) {
   return (
     <section className="heroSection">
       <div className="heroCopy glassCard">
-        <p className="eyebrow">Dengeli premium theme / valuation-first cockpit</p>
+        <p className="eyebrow">Marktwert und Angebote im Überblick</p>
         <h1>
-          AUTONOW Select ile <span>degerleme</span>, operator call ve comparables ayni panelde.
+          Fahrzeugbewertung, Kaufrahmen und Marktvergleiche in einer Übersicht.
         </h1>
         <p className="leadText">
-          Mevcut valuation mantigi korunuyor. Form state, piyasa bandi, hizli satis seviyesi, alim tavani,
-          operator buy-box, kaynak secimi, status kartlari ve scenario testleri backend'e hazir bir arayuze
-          tasiniyor.
+          Vergleiche Fahrzeugdaten und Marktpreise, prüfe geschätzte Kosten und
+          behalte mögliche Kaufpreise in einer klaren Übersicht im Blick.
         </p>
       </div>
 
       <div className="heroMeta glassCard">
-        <span className="heroMetaLabel">Current lane</span>
+        <span className="heroMetaLabel">Datenquelle</span>
         <strong>{activeSourceLabel}</strong>
-        <p>{preferredCity} odakli operator varsayimlariyla canli preview.</p>
+        <p>Marktübersicht für {preferredCity}.</p>
         <div className="heroMetaRow">
-          <span>Last refresh</span>
+          <span>Zuletzt aktualisiert</span>
           <span>{lastUpdatedLabel}</span>
         </div>
       </div>

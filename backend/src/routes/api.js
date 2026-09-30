@@ -18,6 +18,7 @@ router.post('/auth/resend-otp', authLimiter, authController.resendOtp);
 router.get('/auth/google', authController.google);
 router.use(['/ebay', '/listings', '/automation'], requireAuth);
 router.get('/ebay/auth-url', ebayController.authUrl);
+router.get('/ebay/connection-status', ebayController.connectionStatus);
 router.post('/ebay/draft', ebayController.draft);
 router.post('/ebay/import-amazon', ebayController.importAmazon);
 router.get('/ebay/draft-jobs/:jobId', ebayController.draftJob);

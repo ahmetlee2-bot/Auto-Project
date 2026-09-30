@@ -39,9 +39,7 @@ export function AuthShell({
             </li>
           </ul>
         </div>
-        <div className="authValueFoot">
-          AutoLister · Cloud Operations für eBay
-        </div>
+        <div className="authValueFoot">AutoLister · Cloud-Abläufe für eBay</div>
       </aside>
       <section className="authFormPanel">
         <div className="authFormWrap">

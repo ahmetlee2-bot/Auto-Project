@@ -10,57 +10,103 @@ type MarketPanelProps = {
   onSavePortfolio: () => void;
 };
 
-export function MarketPanel({ estimate, result, localSignal, onSaveWatchlist, onSavePortfolio }: MarketPanelProps) {
+export function MarketPanel({
+  estimate,
+  result,
+  localSignal,
+  onSaveWatchlist,
+  onSavePortfolio,
+}: MarketPanelProps) {
   const operatorHeadline = result ? result.summary : localSignal.title;
   const operatorBody = result ? result.next_action : localSignal.nextStep;
   const risk = result ? result.risk_level : estimate.risk;
-  const recommendation = result ? buyBoxLabel(result.buy_box_status) : buyBoxLabel(localSignal.status);
+  const recommendation = result
+    ? buyBoxLabel(result.buy_box_status)
+    : buyBoxLabel(localSignal.status);
 
   return (
     <section className="panelCard glassCard">
       <div className="panelHeader">
         <div>
-          <p className="sectionEyebrow">Market output</p>
-          <h2>Piyasa sonucu ve deal tag</h2>
+          <p className="sectionEyebrow">Marktanalyse</p>
+          <h2>Marktwert und Kaufempfehlung</h2>
         </div>
       </div>
 
-      <div className={`signalBanner tone-${result ? result.buy_box_status : localSignal.status}`}>
+      <div
+        className={`signalBanner tone-${result ? result.buy_box_status : localSignal.status}`}
+      >
         <small>{recommendation}</small>
         <strong>{operatorHeadline}</strong>
         <p>{operatorBody}</p>
       </div>
 
       <div className="headlineValue">
-        <span>Fair market</span>
+        <span>Geschätzter Marktwert</span>
         <strong>{formatCurrency(estimate.fair)}</strong>
-        <p>Risk {risk} / Net preview {formatCurrency(result ? result.net_profit : estimate.netProfit)}</p>
+        <p>
+          Risiko {risk} / geschätzter Nettogewinn{" "}
+          {formatCurrency(result ? result.net_profit : estimate.netProfit)}
+        </p>
       </div>
 
       <div className="marketGrid">
-        <MarketCard label="Piyasa bandi" value={`${formatCurrency(estimate.low)} - ${formatCurrency(estimate.high)}`} />
-        <MarketCard label="Hizli satis" value={formatCurrency(estimate.fastSale)} />
-        <MarketCard label="Akilli alim tavani" value={formatCurrency(estimate.buyBox)} />
-        <MarketCard label="Risk seviyesi" value={risk} />
+        <MarketCard
+          label="Marktpreisspanne"
+          value={`${formatCurrency(estimate.low)} – ${formatCurrency(estimate.high)}`}
+        />
+        <MarketCard
+          label="Preis für schnellen Verkauf"
+          value={formatCurrency(estimate.fastSale)}
+        />
+        <MarketCard
+          label="Empfohlener Höchstpreis"
+          value={formatCurrency(estimate.buyBox)}
+        />
+        <MarketCard label="Risikostufe" value={risk} />
       </div>
 
       <div className="metricStrip">
-        <MetricMini label="Prep" value={formatCurrency(estimate.prep)} />
-        <MetricMini label="Fees" value={formatCurrency(estimate.fees)} />
-        <MetricMini label="Resale" value={formatCurrency(estimate.resale)} />
-        <MetricMini label="Margin" value={`%${result ? result.margin_percent : estimate.margin}`} />
+        <MetricMini
+          label="Aufbereitung"
+          value={formatCurrency(estimate.prep)}
+        />
+        <MetricMini label="Gebühren" value={formatCurrency(estimate.fees)} />
+        <MetricMini
+          label="Wiederverkauf"
+          value={formatCurrency(estimate.resale)}
+        />
+        <MetricMini
+          label="Marge"
+          value={`${result ? result.margin_percent : estimate.margin} %`}
+        />
       </div>
 
       <div className="actionRow">
-        <button className="primaryButton" type="button" onClick={onSaveWatchlist} disabled={!result}>
-          Watchlist'e kaydet
+        <button
+          className="primaryButton"
+          type="button"
+          onClick={onSaveWatchlist}
+          disabled={!result}
+        >
+          In der Merkliste speichern
         </button>
-        <button className="ghostButton" type="button" onClick={onSavePortfolio} disabled={!result}>
-          Portfolio'ya kaydet
+        <button
+          className="ghostButton"
+          type="button"
+          onClick={onSavePortfolio}
+          disabled={!result}
+        >
+          Im Portfolio speichern
         </button>
       </div>
 
-      {!result ? <p className="helperCopy">Kaydetme aksiyonlari backend analyze sonucu geldikten sonra aktif olur.</p> : null}
+      {!result ? (
+        <p className="helperCopy">
+          Speicheraktionen werden verfügbar, sobald die Analyse abgeschlossen
+          ist.
+        </p>
+      ) : null}
     </section>
   );
 }
