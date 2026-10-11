@@ -70,12 +70,12 @@ export default async function RootLayout({
   const savedLocale = (await cookies()).get("autolister-language")?.value;
   const locale: Locale = savedLocale === "en" || savedLocale === "tr" ? savedLocale : "de";
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html lang={locale} className="dark scroll-smooth" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.ico" />
         <link rel="alternate icon" href="/favicon.ico" />
       </head>
-      <body>
+      <body className="bg-[#0B0F17] text-slate-100 min-h-screen antialiased selection:bg-blue-500 selection:text-white">
         <ThemeProvider>
           <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
         </ThemeProvider>

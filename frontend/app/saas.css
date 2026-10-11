@@ -784,7 +784,7 @@ input[type="checkbox"] {
   border-top: 1px solid #cbd5e1;
   padding-top: 22px;
 }
-.stepGrid article span {
+.stepGrid article > .stepNumber {
   display: grid;
   place-items: center;
   width: 35px;
@@ -890,12 +890,12 @@ input[type="checkbox"] {
 .faqList summary::-webkit-details-marker {
   display: none;
 }
-.faqList summary span {
+.faqList summary > .faqToggleIcon {
   color: #2563eb;
   font-size: 1.2rem;
   line-height: 0.8;
 }
-.faqList details[open] summary span {
+.faqList details[open] summary > .faqToggleIcon {
   transform: rotate(45deg);
 }
 .faqList p {
@@ -2450,6 +2450,179 @@ html.dark,
 .selectedPlanNotice > span { color: #2563eb; font-size: .84rem; font-weight: 750; }
 .selectedPlanNotice small { color: var(--muted); font-size: .73rem; line-height: 1.45; }
 .dark .selectedPlanNotice { border-color: #263f6c; background: rgba(37, 99, 235, .13); }
+
+/* Stable dark surfaces for the marketing and authentication experience. */
+html.dark,
+html.dark body {
+  min-height: 100%;
+  background: #0b0f17;
+  color: #f1f5f9;
+}
+html.dark body { min-height: 100vh; }
+.dark .marketingPage { background: #0b0f17; color: #f1f5f9; }
+.dark .trustBar,
+.dark .cloudSection,
+.dark .pricingSection,
+.dark .marketingFooter {
+  border-color: #1e293b;
+  background: #0f172a;
+}
+.dark .cloudSection { background: rgba(15, 23, 42, .62); }
+.dark .sectionIntro h2 span,
+.dark .sectionIntro p,
+.dark .cloudGrid p,
+.dark .pricingGrid p,
+.dark .footerCta p { color: #cbd5e1; }
+.dark .sectionKicker,
+.dark .textLink,
+.dark .authPanelEyebrow { color: #93c5fd; }
+.dark .featureCard,
+.dark .feedbackCard,
+.dark .cloudFlow,
+.dark .pricingCard,
+.dark .planCard,
+.dark .comparisonCard,
+.dark .comparisonControl,
+.dark .leadFormCard,
+.dark .timeSavedBar,
+.dark .faqList details {
+  border-color: #263449;
+  background: rgba(15, 23, 42, .72);
+  color: #e2e8f0;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .18);
+}
+.dark .featureCard p,
+.dark .pricingCard p,
+.dark .pricingCard ul,
+.dark .planCard p,
+.dark .planFeatures,
+.dark .faqList p,
+.dark .footerBottom p { color: #cbd5e1; }
+.dark .featureIcon,
+.dark .flowIcon { background: rgba(37, 99, 235, .18); color: #93c5fd; }
+.dark .cloudFlow { border-color: #263449; }
+.dark .cloudFlow > div {
+  border-color: #334155;
+  background: #111c2e;
+  color: #f1f5f9;
+}
+.dark .cloudFlow .flowActive {
+  border-color: #1d4ed8;
+  background: rgba(30, 58, 95, .55);
+}
+.dark .cloudFlow small { color: #a8b4c7; }
+.dark .stepGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.dark .stepGrid article.stepCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 100%;
+  padding: 24px;
+  border: 1px solid #263449;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, .72);
+}
+.dark .stepGrid .stepNumber {
+  position: static;
+  display: grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  margin: 0 0 16px;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(37, 99, 235, .2);
+  color: #93c5fd;
+  font-weight: 800;
+}
+.dark .stepGrid h3 { margin: 0 0 9px; color: #f8fafc; line-height: 1.4; }
+.dark .stepGrid p { color: #cbd5e1; line-height: 1.65; }
+.dark .faqList { border-color: #263449; }
+.dark .faqList details { border: 0; border-bottom: 1px solid #263449; border-radius: 0; background: transparent; box-shadow: none; }
+.dark .faqList summary { color: #f1f5f9; line-height: 1.5; }
+.dark .faqList summary:hover { color: #60a5fa; }
+.dark .faqList summary > .faqToggleIcon { color: #cbd5e1; }
+.dark .faqList p { color: #cbd5e1; }
+.dark .pricingTag { color: #93c5fd; }
+.dark .pricingDivider,
+.dark .planFeatures li { border-color: #334155; background-color: #334155; }
+.dark .planFeatures li { background: transparent; }
+.dark .pricingFootnote { color: #94a3b8; }
+.dark .billingSwitch { border-color: #334155; background: #0f172a; }
+.dark .billingSwitch button { color: #cbd5e1; }
+.dark .billingSwitch button.active { background: #2563eb; color: #fff; }
+.dark .footerCta { border-color: #263449; }
+.dark .footerBottom nav a,
+.dark .footerBottom nav .contactLink { color: #cbd5e1; }
+.dark .footerBottom nav a:hover,
+.dark .footerBottom nav .contactLink:hover { color: #93c5fd; }
+.dark .secondaryButton,
+.dark .quietButton,
+.dark .ghostButton,
+.dark .googleButton {
+  border-color: #334155;
+  background: #0f172a;
+  color: #f1f5f9;
+  box-shadow: none;
+}
+.dark .secondaryButton:hover,
+.dark .quietButton:hover,
+.dark .ghostButton:hover,
+.dark .googleButton:hover {
+  border-color: #475569;
+  background: #1e293b;
+  color: #fff;
+}
+.dark .authSplitShell { background: #0b0f17; }
+.dark .authFormPanel { background: #0b0f17; color: #f1f5f9; }
+.dark .authFormWrap h1,
+.dark .authForm label { color: #f1f5f9; }
+.dark .authPanelDescription,
+.dark .authHelper { color: #cbd5e1; }
+.dark .authModeTabs {
+  border-color: #1e293b;
+  background: #0f172a;
+}
+.dark .authModeTabs a,
+.dark .authModeTabs span { color: #94a3b8; }
+.dark .authModeTabs .active {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: none;
+}
+.dark .authModeTabs .active > span,
+.dark .authModeTabs .active > a { color: #fff; }
+.dark .authForm input,
+.dark .authForm select,
+.dark .authForm textarea,
+.dark .leadForm input:not([type="checkbox"]),
+.dark .leadForm select,
+.dark .leadForm textarea {
+  border-color: #334155;
+  background: rgba(15, 23, 42, .8);
+  color: #fff;
+}
+.dark .authForm input::placeholder,
+.dark .leadForm input::placeholder,
+.dark .leadForm textarea::placeholder { color: #64748b; }
+.dark .authDivider::before,
+.dark .authDivider::after { background: #334155; }
+.dark .authHelper a { color: #93c5fd; }
+.dark .oauthSetupDetails {
+  border-color: #334155;
+  background: #0f172a;
+  color: #cbd5e1;
+}
+.dark .oauthSetupDetails summary { color: #f1f5f9; }
+.dark .oauthSetupDetails code {
+  border-color: #334155;
+  background: #111c2e;
+  color: #bfdbfe;
+}
+.dark .selectedPlanNotice { color: #e2e8f0; }
+.dark .selectedPlanNotice > span { color: #93c5fd; }
+
 @media (max-width: 900px) {
   .pricingPlanGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .planCard:last-child { grid-column: 1 / -1; }
@@ -2464,4 +2637,88 @@ html.dark,
   .timeSavedBar { align-items: stretch; flex-direction: column; }
   .timeSavedBar .primaryButton { width: 100%; }
   .leadSection { gap: 18px; }
+}
+@media (max-width: 700px) {
+  .dark .stepGrid { grid-template-columns: 1fr; gap: 16px; }
+}
+
+/* The public pages keep their dark palette even when an older light preference is stored. */
+.marketingPage { background: #0b0f17; color: #f1f5f9; }
+.marketingPage .brandMark { color: #f1f5f9; }
+.marketingPage .siteHeader { border-color: #263449; background: rgba(11, 15, 23, .94); }
+.marketingPage .cloudSection,
+.marketingPage .pricingSection,
+.marketingPage .marketingFooter {
+  border-color: #263449;
+  background: #0f172a;
+}
+.marketingPage .cloudSection { background: #101a2b; }
+.marketingPage .sectionIntro h2,
+.marketingPage .sectionIntro h2 > span,
+.marketingPage .cloudGrid h2,
+.marketingPage .pricingGrid h2,
+.marketingPage .footerCta h2 { color: #f8fafc; }
+.marketingPage .sectionIntro p,
+.marketingPage .cloudGrid p,
+.marketingPage .pricingGrid p,
+.marketingPage .footerCta p { color: #cbd5e1; }
+.marketingPage .cloudFlow,
+.marketingPage .featureCard,
+.marketingPage .feedbackCard,
+.marketingPage .planCard,
+.marketingPage .pricingCard,
+.marketingPage .leadFormCard {
+  border-color: #263449;
+  background: #111c2e;
+  color: #f1f5f9;
+}
+.marketingPage .cloudFlow > div { border-color: #334155; background: #142138; color: #f1f5f9; }
+.marketingPage .cloudFlow > .flowActive { border-color: #2563eb; background: #182f50; }
+.marketingPage .cloudFlow small,
+.marketingPage .planCard p,
+.marketingPage .planFeatures,
+.marketingPage .pricingFootnote { color: #cbd5e1; }
+.marketingPage .stepGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.marketingPage .stepGrid > .stepCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #263449;
+  border-radius: 18px;
+  background: #111c2e;
+}
+.marketingPage .stepCard > .stepNumber {
+  position: static;
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  margin: 0 0 16px;
+  border-radius: 12px;
+  background: rgba(37, 99, 235, .22);
+  color: #93c5fd;
+}
+.marketingPage .stepCard h3,
+.marketingPage .stepCard h3 > span { color: #f8fafc; line-height: 1.4; }
+.marketingPage .stepCard p,
+.marketingPage .stepCard p > span { color: #cbd5e1; line-height: 1.65; }
+.marketingPage .stepCard h3 > span,
+.marketingPage .stepCard p > span { display: inline; width: auto; height: auto; padding: 0; background: transparent; }
+.marketingPage .faqList { border-color: #334155; }
+.marketingPage .faqList details { border-color: #334155; background: transparent; }
+.marketingPage .faqList summary,
+.marketingPage .faqList .faqQuestion { color: #f1f5f9; }
+.marketingPage .faqList summary:hover,
+.marketingPage .faqList summary:hover .faqQuestion { color: #93c5fd; }
+.marketingPage .faqList p { color: #cbd5e1; }
+.marketingPage .footerCta { border-color: #334155; }
+.marketingPage .quietButton,
+.marketingPage .secondaryButton { border-color: #334155; background: #172338; color: #f1f5f9; }
+.marketingPage .quietButton:hover,
+.marketingPage .secondaryButton:hover { border-color: #475569; background: #1e293b; color: #fff; }
+@media (max-width: 700px) {
+  .marketingPage .stepGrid { grid-template-columns: 1fr; gap: 16px; }
 }

@@ -362,22 +362,22 @@ export default function Page() {
               </p>
             </div>
             <div className="stepGrid">
-              <article>
-                <span>1</span>
+              <article className="stepCard">
+                <span className="stepNumber">1</span>
                 <h3><LocaleMessage de="Produkt auswählen" en="Choose a product" tr="Ürün seç" /></h3>
                 <p>
                   <LocaleMessage de="Amazon.de-URL oder ASIN eingeben und Produktdaten erfassen." en="Enter an Amazon.de URL or ASIN to capture product data." tr="Ürün verilerini almak için Amazon.de URL'si veya ASIN gir." />
                 </p>
               </article>
-              <article>
-                <span>2</span>
+              <article className="stepCard">
+                <span className="stepNumber">2</span>
                 <h3><LocaleMessage de="Details prüfen" en="Review the details" tr="Ayrıntıları incele" /></h3>
                 <p>
                   <LocaleMessage de="Titel, Bilder, Merkmale und Zielmarge vor der Veröffentlichung kontrollieren." en="Check the title, images, item specifics, and target margin before publishing." tr="Yayınlamadan önce başlığı, görselleri, ürün özelliklerini ve hedef marjı kontrol et." />
                 </p>
               </article>
-              <article>
-                <span>3</span>
+              <article className="stepCard">
+                <span className="stepNumber">3</span>
                 <h3><LocaleMessage de="Auf eBay bringen" en="Publish on eBay" tr="eBay'de yayınla" /></h3>
                 <p>
                   <LocaleMessage de="Entwurf veröffentlichen und den Status im Dashboard verfolgen." en="Publish your draft and track its status in the dashboard." tr="Taslağını yayınla ve durumunu panelden takip et." />
@@ -409,8 +409,8 @@ export default function Page() {
               {questions.map(({ q, a }) => (
                 <details key={q}>
                   <summary>
-                    <LocaleMessage de={q} en={questions.find((item) => item.q === q)?.enQ ?? q} tr={questions.find((item) => item.q === q)?.trQ ?? q} />
-                    <span aria-hidden="true">＋</span>
+                    <LocaleMessage className="faqQuestion" de={q} en={questions.find((item) => item.q === q)?.enQ ?? q} tr={questions.find((item) => item.q === q)?.trQ ?? q} />
+                    <span className="faqToggleIcon" aria-hidden="true">＋</span>
                   </summary>
                   <p><LocaleMessage de={a} en={questions.find((item) => item.a === a)?.enA ?? a} tr={questions.find((item) => item.a === a)?.trA ?? a} /></p>
                 </details>
