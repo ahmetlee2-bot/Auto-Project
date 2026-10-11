@@ -6,6 +6,7 @@
 
 - Sunucu kökündeki `.env` içinde `EBAY_BRIDGE_SHARED_SECRET` için rastgele en az 32 baytlık değer ve `EBAY_LEGACY_OWNER_USER_ID` için eBay hesabına sahip AutoLister kullanıcı UUID'si bulunmalıdır.
 - Sunucu kökündeki `.env` içinde `WHATSAPP_LEAD_NUMBER` değerini de uluslararası ülke koduyla ve yalnızca rakam kullanarak tanımlayın. Değer frontend container'ına runtime ortam değişkeni olarak aktarılır; `NEXT_PUBLIC_` değişkeni veya imajı yeniden derleme gerekmez. Ziyaretçi formu gönderdiğinde WhatsApp mesaj taslağı bu numaraya yönlenir ve ziyaretçi mesajı WhatsApp'ta kendisi gönderir.
+- Ana alan adında `/api/` yolunu başka servise yönlendiren bir Nginx kuralı varsa, bu kuraldan önce `location = /api/lead` istisnasını frontend'in `3101` portuna yönlendirin. Lead API, Next.js frontend içinde çalışır. Değişiklikten önce `nginx -t`, ardından `systemctl reload nginx` çalıştırın.
 - Sunucu kökündeki `ebay-bridge.env` dosyası yerel köprüde kullanılan Production eBay OAuth ve satıcı ayarlarını içerir. `EBAY_MODE=api`, `EBAY_ENV=production`, `EBAY_CREDENTIAL_ENV=production`, geçerli refresh token ve otomatik yayın isteniyorsa `ALLOW_LIVE_PUBLISH=true` gerekir.
 - Bu iki dosya Git'e eklenmez. `EBAY_BRIDGE_SHARED_SECRET` iki container'a Compose tarafından aktarılır. Köprü yalnızca `app-internal` Docker ağına bağlıdır; dışarıya port açılmaz.
 
