@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
+import { useLocale } from "../../lib/locale";
+import { translate } from "../../lib/messages";
 
 const siteUrl = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://autolister-app.de"
@@ -12,6 +14,7 @@ const googleCallbackUrl = supabaseUrl
   : "";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
+  const { locale } = useLocale();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +41,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         );
         const result = await response.json().catch(() => ({}));
         if (!response.ok || !result.success)
-          throw new Error(result.error || "Registrierung fehlgeschlagen.");
+          throw new Error(result.error || (locale === "de" ? "Registrierung fehlgeschlagen." : locale === "en" ? "Registration failed." : "Kayıt başarısız oldu."));
         window.location.assign(
           `/verify-email?email=${encodeURIComponent(normalizedEmail)}`,
         );
@@ -51,7 +54,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       if (result.error)
         throw new Error(
           result.error.message.includes("Email not confirmed")
-            ? "Bitte bestätige zuerst deine E-Mail-Adresse."
+            ? locale === "de" ? "Bitte bestätige zuerst deine E-Mail-Adresse." : locale === "en" ? "Please verify your email address first." : "Lütfen önce e-posta adresini doğrula."
             : result.error.message,
         );
       window.location.assign("/dashboard");
@@ -59,7 +62,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Anmeldung derzeit nicht verfügbar.",
+          : locale === "de" ? "Anmeldung derzeit nicht verfügbar." : locale === "en" ? "Sign-in is currently unavailable." : "Giriş şu anda kullanılamıyor.",
       );
     } finally {
       setBusy(false);
@@ -77,7 +80,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     <form className="authForm" onSubmit={submit}>
       {mode === "register" ? (
         <label>
-          Vor- und Nachname
+          {translate(locale, "Vor- und Nachname")}
           <input
             type="text"
             value={fullName}
@@ -89,7 +92,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         </label>
       ) : null}
       <label>
-        E-Mail-Adresse
+        {translate(locale, "E-Mail-Adresse")}
         <input
           type="email"
           value={email}
@@ -99,7 +102,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         />
       </label>
       <label>
-        Passwort
+        {translate(locale, "Passwort")}
         <input
           type="password"
           value={password}
@@ -116,19 +119,19 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       ) : null}
       <button className="primaryButton" disabled={busy}>
         {busy
-          ? "Bitte warten …"
+          ? locale === "de" ? "Bitte warten …" : locale === "en" ? "Please wait …" : "Lütfen bekle …"
           : mode === "login"
-            ? "Anmelden"
-            : "Konto erstellen"}
+            ? translate(locale, "Anmelden")
+            : translate(locale, "Konto erstellen")}
       </button>
-      <span className="authDivider">oder</span>
+      <span className="authDivider">{translate(locale, "oder")}</span>
       <button
         className="googleButton"
         type="button"
         disabled={busy}
         onClick={() => void google()}
       >
-        Mit Google fortfahren
+        {translate(locale, "Mit Google fortfahren")}
       </button>
       {mode === "login" && googleCallbackUrl ? (
         <details className="oauthSetupDetails">

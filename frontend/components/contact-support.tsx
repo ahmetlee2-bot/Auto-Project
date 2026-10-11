@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale } from "../lib/locale";
+import { translate } from "../lib/messages";
 
 const supportEmail = "contact.autolister@gmail.com";
 
@@ -13,6 +15,7 @@ export function ContactSupport({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { locale } = useLocale();
 
   useEffect(() => {
     if (!open) return;
@@ -36,7 +39,7 @@ export function ContactSupport({
   return (
     <>
       <button className={className} type="button" onClick={() => setOpen(true)}>
-        {label}
+        {label === "Kontakt" ? translate(locale, "Kontakt") : label}
       </button>
       {open ? (
         <div
@@ -55,15 +58,15 @@ export function ContactSupport({
             <button
               className="contactClose"
               type="button"
-              aria-label="Schließen"
+        aria-label={translate(locale, "Schließen")}
               onClick={() => setOpen(false)}
             >
               ×
             </button>
-            <span className="sectionKicker">WIR HELFEN GERNE</span>
-            <h2 id="contact-title">Kontaktiere unser Support-Team</h2>
+            <span className="sectionKicker">{translate(locale, "WIR HELFEN GERNE")}</span>
+            <h2 id="contact-title">{translate(locale, "Kontaktiere unser Support-Team")}</h2>
             <p>
-              Schreib uns, wenn du Fragen zu AutoLister oder deinem Konto hast.
+              {translate(locale, "Schreib uns, wenn du Fragen zu AutoLister oder deinem Konto hast.")}
             </p>
             <div className="contactEmailRow">
               <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
@@ -72,14 +75,14 @@ export function ContactSupport({
                 type="button"
                 onClick={() => void copyEmail()}
               >
-                {copied ? "Kopiert ✓" : "E-Mail kopieren"}
+                {copied ? translate(locale, "Kopiert ✓") : translate(locale, "E-Mail kopieren")}
               </button>
             </div>
             <p className="contactResponseNote">
-              Wir antworten in der Regel innerhalb von 24 Stunden.
+              {translate(locale, "Wir antworten in der Regel innerhalb von 24 Stunden.")}
             </p>
             <span className="contactCopyFeedback" aria-live="polite">
-              {copied ? "E-Mail-Adresse wurde kopiert." : ""}
+              {copied ? translate(locale, "E-Mail-Adresse wurde kopiert.") : ""}
             </span>
           </section>
         </div>

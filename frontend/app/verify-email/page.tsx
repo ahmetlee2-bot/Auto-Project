@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { VerifyEmailForm } from "../../components/auth/verify-email-form";
 import { AuthShell } from "../../components/auth/auth-shell";
+import { LocaleMessage } from "../../components/locale-message";
 
 export default async function VerifyEmailPage({
   searchParams,
@@ -14,15 +15,15 @@ export default async function VerifyEmailPage({
     <AuthShell
       eyebrow="E-MAIL BESTÄTIGEN"
       title="Fast geschafft"
-      description={`Wir haben einen 6-stelligen Code an ${email || "deine E-Mail-Adresse"} gesendet.`}
+      description={<LocaleMessage de={`Wir haben einen 6-stelligen Code an ${email || "deine E-Mail-Adresse"} gesendet.`} en={`We sent a 6-digit code to ${email || "your email address"}.`} tr={`${email || "E-posta adresine"} 6 haneli bir kod gönderdik.`} />}
     >
       {email ? (
         <VerifyEmailForm email={email} />
       ) : (
-        <p className="authError">Keine E-Mail-Adresse angegeben.</p>
+        <p className="authError"><LocaleMessage de="Keine E-Mail-Adresse angegeben." en="No email address was provided." tr="E-posta adresi belirtilmedi." /></p>
       )}
       <p className="authHelper">
-        <Link href="/login">← Zurück zum Login</Link>
+        <Link href="/login"><LocaleMessage de="← Zurück zum Login" en="← Back to sign in" tr="← Girişe dön" /></Link>
       </p>
     </AuthShell>
   );

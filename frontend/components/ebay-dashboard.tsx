@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
+import { HeaderPreferences } from "./header-preferences";
+import { useLocale } from "../lib/locale";
+import { translate } from "../lib/messages";
 
 type Draft = {
   id: string;
@@ -73,22 +76,23 @@ const API_BASE = (
 
 function ProductThumbnail({ src, title }: { src?: string; title?: string }) {
   const [failed, setFailed] = useState(false);
+  const { locale } = useLocale();
   if (!src || failed)
     return (
       <div
         className="productPlaceholder"
         role="img"
-        aria-label={`${title || "Produkt"}: kein Bild verfügbar`}
+        aria-label={`${title || (locale === "de" ? "Produkt" : locale === "en" ? "Product" : "Ürün")}: ${locale === "de" ? "kein Bild verfügbar" : locale === "en" ? "image unavailable" : "görsel bulunamadı"}`}
       >
         <span aria-hidden="true">▧</span>
-        <small>Bild nicht verfügbar</small>
+        <small>{translate(locale, "Bild nicht verfügbar")}</small>
       </div>
     );
   return (
     <img
       className="productThumbnail"
       src={src}
-      alt={title || "Produktbild"}
+      alt={title || translate(locale, "Bild nicht verfügbar")}
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
@@ -98,6 +102,8 @@ function ProductThumbnail({ src, title }: { src?: string; title?: string }) {
 }
 
 export function EbayDashboard({ email }: { email: string }) {
+  const { locale } = useLocale();
+  const tr = (text: string) => translate(locale, text);
   const [activeTab, setActiveTab] = useState("server-import");
   const [copiedItemId, setCopiedItemId] = useState("");
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -373,36 +379,37 @@ export function EbayDashboard({ email }: { email: string }) {
   const inventory = automation?.inventory;
   const tracking = automation?.tracking;
   const tabs = [
-    ["server-import", "Amazon-Import"],
-    ["jobs", "Server-Aufträge"],
-    ["live", "Aktive eBay-Angebote"],
-    ["pool", "Produktpool"],
-    ["automation", "Synchronisation"],
-    ["matcher", "Amazon-Zuordnung"],
-    ["archive", "Archiv"],
-    ["settings", "Einstellungen"],
+    ["server-import", tr("Amazon-Import")],
+    ["jobs", tr("Server-Aufträge")],
+    ["live", tr("Aktive eBay-Angebote")],
+    ["pool", tr("Produktpool")],
+    ["automation", tr("Synchronisation")],
+    ["matcher", tr("Amazon-Zuordnung")],
+    ["archive", tr("Archiv")],
+    ["settings", tr("Einstellungen")],
   ];
   return (
     <main className="webDashboard">
       <header className="dashboardHeader">
         <div>
           <span className="sectionEyebrow">AUTOLISTER · EBAY.DE</span>
-          <h1>Verwaltungsübersicht</h1>
+          <h1>{tr("Verwaltungsübersicht")}</h1>
           <p className="dashboardSubtitle">
-            Angebote, Server-Aufträge und Lagerbestand an einem Ort.
+            {tr("Angebote, Server-Aufträge und Lagerbestand an einem Ort.")}
           </p>
         </div>
         <div className="dashboardUser">
+          <HeaderPreferences />
           <span
             className={
               error ? "dashboardHealth dashboardHealthWarn" : "dashboardHealth"
             }
           >
             {error
-              ? "Prüfung erforderlich"
+              ? tr("Prüfung erforderlich")
               : busy
-                ? "Synchronisierung läuft"
-                : "System ist bereit"}
+                ? tr("Synchronisierung läuft")
+                : tr("System ist bereit")}
           </span>
           <details className="dashboardAccount">
             <summary>
@@ -415,7 +422,7 @@ export function EbayDashboard({ email }: { email: string }) {
             <div className="dashboardAccountMenu">
               <span>{email}</span>
               <button type="button" onClick={() => void logout()}>
-                Ausloggen
+                {tr("Ausloggen")}
               </button>
             </div>
           </details>
@@ -423,15 +430,15 @@ export function EbayDashboard({ email }: { email: string }) {
       </header>
       <section className="dashboardStats">
         <article>
-          <span>Wartende Produkte</span>
+          <span>{tr("Wartende Produkte")}</span>
           <strong>{drafts.length}</strong>
         </article>
         <article>
-          <span>Gelistet auf eBay</span>
+          <span>{tr("Gelistet auf eBay")}</span>
           <strong>{listedCount ?? "—"}</strong>
         </article>
         <article>
-          <span>Synchronisierungswarnungen</span>
+          <span>{tr("Synchronisierungswarnungen")}</span>
           <strong>
             {inventory ? inventory.lowStock + inventory.outOfStock : "—"}
           </strong>
@@ -441,7 +448,7 @@ export function EbayDashboard({ email }: { email: string }) {
       <nav
         className="dashboardTabs"
         role="tablist"
-        aria-label="Dashboard Bereiche"
+        aria-label={locale === "de" ? "Dashboard Bereiche" : locale === "en" ? "Dashboard sections" : "Panel bölümleri"}
       >
         {tabs.map(([id, label]) => (
           <button
@@ -459,17 +466,15 @@ export function EbayDashboard({ email }: { email: string }) {
       {activeTab === "server-import" ? (
         <section id="server-import" className="dashboardCard">
           <div>
-            <p className="sectionEyebrow">SERVERVERARBEITUNG</p>
-            <h2>Amazon-Produkt ohne Erweiterung verarbeiten</h2>
+            <p className="sectionEyebrow">{tr("SERVERVERARBEITUNG")}</p>
+            <h2>{tr("Amazon-Produkt ohne Erweiterung verarbeiten")}</h2>
             <p className="emptyDashboard">
-              Amazon.de URL oder ASIN eingeben. Der Server liest das Produkt,
-              verarbeitet die Bilder, berechnet den Preis und führt den
-              eBay-Auftrag unabhängig von diesem Gerät aus.
+              {tr("Amazon.de URL oder ASIN eingeben. Der Server liest das Produkt, verarbeitet die Bilder, berechnet den Preis und führt den eBay-Auftrag unabhängig von diesem Gerät aus.")}
             </p>
           </div>
           <div className="mappingInputs">
             <label>
-              Amazon.de URL oder ASIN
+              {tr("Amazon.de URL oder ASIN")}
               <input
                 value={importAmazonUrl}
                 onChange={(event) => setImportAmazonUrl(event.target.value)}
@@ -477,7 +482,7 @@ export function EbayDashboard({ email }: { email: string }) {
               />
             </label>
             <label>
-              Zielmarge %
+              {tr("Zielmarge %")}
               <input
                 inputMode="decimal"
                 value={importMargin}
@@ -485,7 +490,7 @@ export function EbayDashboard({ email }: { email: string }) {
               />
             </label>
             <label>
-              Stückzahl
+              {tr("Stückzahl")}
               <input
                 inputMode="numeric"
                 value={importQuantity}
@@ -502,7 +507,7 @@ export function EbayDashboard({ email }: { email: string }) {
                   setImageRightsConfirmed(event.target.checked)
                 }
               />{" "}
-              Ich bestätige die Nutzungsrechte der Produktbilder.
+              {tr("Ich bestätige die Nutzungsrechte der Produktbilder.")}
             </label>
             <label>
               <input
@@ -510,7 +515,7 @@ export function EbayDashboard({ email }: { email: string }) {
                 checked={importAutoPublish}
                 onChange={(event) => setImportAutoPublish(event.target.checked)}
               />{" "}
-              Nach erfolgreicher Prüfung automatisch bei eBay veröffentlichen.
+              {tr("Nach erfolgreicher Prüfung automatisch bei eBay veröffentlichen.")}
             </label>
             <button
               className="primaryButton"
@@ -530,10 +535,10 @@ export function EbayDashboard({ email }: { email: string }) {
           <div className="dashboardCardHeading">
             <div>
               <p className="sectionEyebrow">SERVER</p>
-              <h2>eBay-Aufträge</h2>
+              <h2>{tr("eBay-Aufträge")}</h2>
             </div>
             <button className="quietButton" onClick={() => void refresh()}>
-              Aktualisieren
+              {tr("Aktualisieren")}
             </button>
           </div>
           {jobs.length ? (
@@ -552,7 +557,7 @@ export function EbayDashboard({ email }: { email: string }) {
               ))}
             </ul>
           ) : (
-            <p className="emptyDashboard">Keine Server-Aufträge vorhanden.</p>
+            <p className="emptyDashboard">{tr("Keine Server-Aufträge vorhanden.")}</p>
           )}
         </section>
       ) : null}
@@ -561,22 +566,22 @@ export function EbayDashboard({ email }: { email: string }) {
           <article className="dashboardCard">
             <div className="dashboardCardHeading">
               <div>
-                <p className="sectionEyebrow">Lagerbestand & Preis</p>
-                <h2>Synchronisationsmotor</h2>
+                <p className="sectionEyebrow">{tr("Lagerbestand & Preis")}</p>
+                <h2>{tr("Synchronisationsmotor")}</h2>
               </div>
               <button className="quietButton" onClick={() => void refresh()}>
-                Aktualisieren
+                {tr("Aktualisieren")}
               </button>
             </div>
             <div className="moduleMetrics">
               <span>
-                <b>{inventory?.total ?? "—"}</b> Produkte überwacht
+                <b>{inventory?.total ?? "—"}</b> {tr("Produkte überwacht")}
               </span>
               <span>
-                <b>{inventory?.lowStock ?? "—"}</b> Niedriger Bestand
+                <b>{inventory?.lowStock ?? "—"}</b> {tr("Niedriger Bestand")}
               </span>
               <span>
-                <b>{inventory?.outOfStock ?? "—"}</b> Nicht verfügbar
+                <b>{inventory?.outOfStock ?? "—"}</b> {tr("Nicht verfügbar")}
               </span>
             </div>
             {inventory?.attention?.length ? (
@@ -589,12 +594,12 @@ export function EbayDashboard({ email }: { email: string }) {
                 ))}
               </ul>
             ) : (
-              <p className="emptyDashboard">Keine Bestandswarnungen.</p>
+              <p className="emptyDashboard">{tr("Keine Bestandswarnungen.")}</p>
             )}
           </article>
           <article className="dashboardCard">
             <div>
-              <p className="sectionEyebrow">PREISBERECHNUNG</p>
+                <p className="sectionEyebrow">{tr("PREISBERECHNUNG")}</p>
               <h2>Gewinn & Provision</h2>
             </div>
             <div className="marginInputs">
@@ -628,21 +633,21 @@ export function EbayDashboard({ email }: { email: string }) {
                   <strong>{money.format(margin.recommendedSalePrice)}</strong>
                 </span>
                 <span>
-                  Gewinn
+                  {locale === "de" ? "Gewinn" : locale === "en" ? "Profit" : "Kâr"}
                   <strong>
                     {money.format(margin.profit)} · {margin.marginPercent}%
                   </strong>
                 </span>
               </div>
             ) : (
-              <p className="emptyDashboard">Berechnung wird geladen …</p>
+              <p className="emptyDashboard">{tr("Berechnung wird geladen …")}</p>
             )}
           </article>
           <article className="dashboardCard">
             <div className="dashboardCardHeading">
               <div>
                 <p className="sectionEyebrow">VERSAND</p>
-                <h2>Tracking-Nummern</h2>
+                <h2>{tr("Tracking-Nummern")}</h2>
               </div>
               <span
                 className={
@@ -657,10 +662,10 @@ export function EbayDashboard({ email }: { email: string }) {
                 <b>{tracking?.total ?? "—"}</b> Bestellungen
               </span>
               <span>
-                <b>{tracking?.withTracking ?? "—"}</b> Mit Tracking
+                <b>{tracking?.withTracking ?? "—"}</b> {tr("Mit Tracking")}
               </span>
               <span>
-                <b>{tracking?.awaitingTracking ?? "—"}</b> Offen
+                <b>{tracking?.awaitingTracking ?? "—"}</b> {tr("Offen")}
               </span>
             </div>
             {tracking?.shipments?.length ? (
@@ -674,7 +679,7 @@ export function EbayDashboard({ email }: { email: string }) {
               </ul>
             ) : (
               <p className="emptyDashboard">
-                Noch keine eBay-Sendungen verfügbar.
+                {tr("Noch keine eBay-Sendungen verfügbar.")}
               </p>
             )}
           </article>
@@ -684,22 +689,22 @@ export function EbayDashboard({ email }: { email: string }) {
         <section id="live" className="dashboardCard">
           <div className="dashboardCardHeading">
             <div>
-              <p className="sectionEyebrow">eBay Live</p>
-              <h2>Aktive eBay-Angebote</h2>
+              <p className="sectionEyebrow">{tr("eBay Live")}</p>
+              <h2>{tr("Aktive eBay-Angebote")}</h2>
             </div>
-            <span className="statusChip">{listings.length} Listings</span>
+            <span className="statusChip">{listings.length} {tr("Listings")}</span>
           </div>
           {busy ? (
-            <p>Live-Angebote werden geladen …</p>
+            <p>{tr("Live-Angebote werden geladen …")}</p>
           ) : listings.length === 0 ? (
             <p className="emptyDashboard">
-              Keine veröffentlichten eBay-Angebote gefunden.
+              {tr("Keine veröffentlichten eBay-Angebote gefunden.")}
             </p>
           ) : (
             <div className="productGrid">
               <div className="productTableHead">
-                <span>PRODUKT</span>
-                <span>STATUS</span>
+                <span>{tr("PRODUKT")}</span>
+                <span>{tr("STATUS")}</span>
               </div>
               {listings.map((listing) => (
                 <article className="productCard" key={listing.listingId}>
@@ -733,17 +738,17 @@ export function EbayDashboard({ email }: { email: string }) {
         <section id="pool" className="dashboardCard">
           <div className="dashboardCardHeading">
             <div>
-              <p className="sectionEyebrow">Produktpool</p>
-              <h2>Entwürfe &amp; Angebote</h2>
+              <p className="sectionEyebrow">{tr("Produktpool")}</p>
+              <h2>{locale === "de" ? "Entwürfe & Angebote" : locale === "en" ? "Drafts & listings" : "Taslaklar ve ilanlar"}</h2>
             </div>
             <button className="quietButton" onClick={() => void refresh()}>
-              Aktualisieren
+              {tr("Aktualisieren")}
             </button>
           </div>
           {busy ? (
-            <p>Produktdaten werden geladen …</p>
+            <p>{tr("Produktdaten werden geladen …")}</p>
           ) : drafts.length === 0 ? (
-            <p className="emptyDashboard">Keine Entwürfe vorhanden.</p>
+            <p className="emptyDashboard">{tr("Keine Entwürfe vorhanden.")}</p>
           ) : (
             <div className="productGrid">
               {drafts.map((draft) => (
@@ -765,7 +770,7 @@ export function EbayDashboard({ email }: { email: string }) {
                       disabled={busy}
                       onClick={() => void publishDraft(draft)}
                     >
-                      Auf eBay veröffentlichen
+                      {tr("Auf eBay veröffentlichen")}
                     </button>
                   ) : null}
                 </article>
@@ -777,12 +782,12 @@ export function EbayDashboard({ email }: { email: string }) {
       {activeTab === "matcher" ? (
         <section id="matcher" className="dashboardCard">
           <div>
-            <p className="sectionEyebrow">Manuelle Produktzuordnung</p>
-            <h2>Amazon-Produkt manuell verknüpfen</h2>
+            <p className="sectionEyebrow">{tr("Manuelle Produktzuordnung")}</p>
+            <h2>{tr("Amazon-Produkt manuell verknüpfen")}</h2>
           </div>
           <div className="mappingInputs">
             <label>
-              eBay Item ID
+              {tr("eBay Item ID")}
               <input
                 value={mappingItemId}
                 onChange={(event) => setMappingItemId(event.target.value)}
@@ -790,7 +795,7 @@ export function EbayDashboard({ email }: { email: string }) {
               />
             </label>
             <label>
-              Amazon ASIN oder URL
+              {tr("Amazon ASIN oder URL")}
               <input
                 value={mappingAmazonUrl}
                 onChange={(event) => setMappingAmazonUrl(event.target.value)}
@@ -801,7 +806,7 @@ export function EbayDashboard({ email }: { email: string }) {
               className="primaryButton"
               onClick={() => void saveMapping()}
             >
-              Zuordnung speichern
+              {tr("Zuordnung speichern")}
             </button>
           </div>
           {mappingNotice ? <p className="authNotice">{mappingNotice}</p> : null}
@@ -810,33 +815,32 @@ export function EbayDashboard({ email }: { email: string }) {
       {activeTab === "archive" ? (
         <section id="archive" className="dashboardCard">
           <div>
-            <p className="sectionEyebrow">Archiv</p>
-            <h2>Gelöschte und zurückgesetzte Entwürfe</h2>
+            <p className="sectionEyebrow">{tr("Archiv")}</p>
+            <h2>{tr("Gelöschte und zurückgesetzte Entwürfe")}</h2>
           </div>
           <p className="emptyDashboard">
-            Das Archiv wird aus dem eBay-Bridge-Verlauf synchronisiert.
+            {tr("Das Archiv wird aus dem eBay-Bridge-Verlauf synchronisiert.")}
           </p>
         </section>
       ) : null}
       {activeTab === "settings" ? (
         <section id="settings" className="dashboardCard setupGuide">
           <div>
-            <p className="sectionEyebrow">ERSTE SCHRITTE</p>
-            <h2>In 3 Schritten startklar</h2>
+            <p className="sectionEyebrow">{tr("ERSTE SCHRITTE")}</p>
+            <h2>{tr("In 3 Schritten startklar")}</h2>
             <p className="dashboardSubtitle">
-              Verbinde den Produktimport mit deinem eBay-Ablauf.
+              {tr("Verbinde den Produktimport mit deinem eBay-Ablauf.")}
             </p>
           </div>
           <div className="setupSteps">
             <article className="setupStep">
               <div className="setupStepHead">
-                <span className="setupStepNumber">SCHRITT 1</span>
+                <span className="setupStepNumber">{tr("Schritt 1").toUpperCase()}</span>
                 <span aria-hidden="true">▣</span>
               </div>
-              <h3>Chrome-Erweiterung installieren</h3>
+              <h3>{tr("Chrome-Erweiterung installieren")}</h3>
               <p>
-                Erfasse Produktdaten direkt auf Amazon.de. Der Importauftrag
-                wird anschließend an AutoLister übergeben.
+                {tr("Erfasse Produktdaten direkt auf Amazon.de. Der Importauftrag wird anschließend an AutoLister übergeben.")}
               </p>
               <a
                 className="secondaryButton"
@@ -844,12 +848,12 @@ export function EbayDashboard({ email }: { email: string }) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Erweiterung im Chrome Web Store öffnen ↗
+                {tr("Erweiterung im Chrome Web Store öffnen ↗")}
               </a>
             </article>
             <article className="setupStep">
               <div className="setupStepHead">
-                <span className="setupStepNumber">SCHRITT 2</span>
+                <span className="setupStepNumber">{tr("Schritt 2").toUpperCase()}</span>
                 <span
                   className={
                     connectionStatus?.ok
@@ -858,17 +862,15 @@ export function EbayDashboard({ email }: { email: string }) {
                   }
                 >
                   {connectionStatus === null
-                    ? "Status wird geprüft"
+                    ? tr("Status wird geprüft")
                     : connectionStatus.ok
-                      ? "Token aktiv"
-                      : "Nicht verbunden"}
+                      ? tr("Token aktiv")
+                      : tr("Nicht verbunden")}
                 </span>
               </div>
-              <h3>eBay-Konto autorisieren</h3>
+              <h3>{tr("eBay-Konto autorisieren")}</h3>
               <p>
-                Die Zugangsdaten werden serverseitig geschützt. AutoLister nutzt
-                die offizielle eBay REST-Schnittstelle. Aktuell wird das für
-                dieses Konto freigeschaltete eBay-Verkäuferkonto verbunden.
+                {tr("Die Zugangsdaten werden serverseitig geschützt. AutoLister nutzt die offizielle eBay REST-Schnittstelle. Aktuell wird das für dieses Konto freigeschaltete eBay-Verkäuferkonto verbunden.")}
               </p>
               <button
                 className="primaryButton"
@@ -876,9 +878,7 @@ export function EbayDashboard({ email }: { email: string }) {
                 disabled={connectBusy}
                 onClick={() => void connectEbay()}
               >
-                {connectBusy
-                  ? "eBay wird geöffnet …"
-                  : "eBay-Konto sicher verbinden"}
+                {connectBusy ? tr("eBay wird geöffnet …") : tr("eBay-Konto sicher verbinden")}
               </button>
               {connectionStatus?.error ? (
                 <p className="setupFeedback authError">
@@ -888,18 +888,17 @@ export function EbayDashboard({ email }: { email: string }) {
             </article>
             <article className="setupStep">
               <div className="setupStepHead">
-                <span className="setupStepNumber">SCHRITT 3</span>
-                <span className="setupStatus">Produkt vorbereiten</span>
+                <span className="setupStepNumber">{tr("Schritt 3").toUpperCase()}</span>
+                <span className="setupStatus">{tr("Produkt vorbereiten")}</span>
               </div>
-              <h3>Erstes Produkt erfassen</h3>
+              <h3>{tr("Erstes Produkt erfassen")}</h3>
               <p>
-                Amazon-URL oder ASIN eingeben und Marge, Menge sowie Bildrechte
-                vor dem Auftrag prüfen.
+                {tr("Amazon-URL oder ASIN eingeben und Marge, Menge sowie Bildrechte vor dem Auftrag prüfen.")}
               </p>
               <div className="setupImportAction">
                 <div className="mappingInputs">
                   <label>
-                    Amazon-URL oder ASIN
+                    {tr("Amazon-URL oder ASIN")}
                     <input
                       value={importAmazonUrl}
                       onChange={(event) =>
@@ -909,7 +908,7 @@ export function EbayDashboard({ email }: { email: string }) {
                     />
                   </label>
                   <label>
-                    Amazon-Einkaufspreis €
+                    {tr("Amazon-Einkaufspreis €")}
                     <input
                       inputMode="decimal"
                       value={sourcePrice}
@@ -917,7 +916,7 @@ export function EbayDashboard({ email }: { email: string }) {
                     />
                   </label>
                   <label>
-                    Zielmarge %
+                    {tr("Zielmarge %")}
                     <input
                       inputMode="decimal"
                       value={importMargin}
@@ -925,7 +924,7 @@ export function EbayDashboard({ email }: { email: string }) {
                     />
                   </label>
                   <label>
-                    Stückzahl
+                    {tr("Stückzahl")}
                     <input
                       inputMode="numeric"
                       value={importQuantity}
@@ -940,18 +939,18 @@ export function EbayDashboard({ email }: { email: string }) {
                   type="button"
                   onClick={() => void calculateMargin(importMargin, true)}
                 >
-                  Preisvorschau berechnen
+                  {tr("Preisvorschau berechnen")}
                 </button>
                 {marginPreviewRequested && margin ? (
                   <div className="marginResult">
                     <span>
-                      Empfohlener eBay-Preis
+                      {tr("Empfohlener eBay-Preis")}
                       <strong>
                         {money.format(margin.recommendedSalePrice)}
                       </strong>
                     </span>
                     <span>
-                      Geschätzter Gewinn
+                      {tr("Geschätzter Gewinn")}
                       <strong>{money.format(margin.profit)}</strong>
                     </span>
                   </div>
@@ -964,7 +963,7 @@ export function EbayDashboard({ email }: { email: string }) {
                       setImageRightsConfirmed(event.target.checked)
                     }
                   />{" "}
-                  Ich darf die Produktbilder verwenden.
+                  {tr("Ich darf die Produktbilder verwenden.")}
                 </label>
                 <label className="setupCheck">
                   <input
@@ -974,7 +973,7 @@ export function EbayDashboard({ email }: { email: string }) {
                       setImportAutoPublish(event.target.checked)
                     }
                   />{" "}
-                  Nach erfolgreicher Prüfung automatisch veröffentlichen.
+                  {tr("Nach erfolgreicher Prüfung automatisch veröffentlichen.")}
                 </label>
                 <button
                   className="primaryButton"
@@ -982,9 +981,7 @@ export function EbayDashboard({ email }: { email: string }) {
                   disabled={importBusy || !importAmazonUrl.trim()}
                   onClick={() => void importFromAmazon()}
                 >
-                  {importBusy
-                    ? "Auftrag wird gestartet …"
-                    : "Server-Auftrag starten"}
+                  {importBusy ? tr("Auftrag wird gestartet …") : tr("Server-Auftrag starten")}
                 </button>
                 {importNotice ? (
                   <p className="setupFeedback authNotice">{importNotice}</p>
@@ -996,8 +993,7 @@ export function EbayDashboard({ email }: { email: string }) {
             <p className="setupFeedback authError">{setupNotice}</p>
           ) : null}
           <p className="setupFootnote">
-            Der eBay-Verbindungsstatus bezieht sich auf das aktuell für dieses
-            AutoLister-Konto konfigurierte Verkäuferkonto.
+            {tr("Der eBay-Verbindungsstatus bezieht sich auf das aktuell für dieses AutoLister-Konto konfigurierte Verkäuferkonto.")}
           </p>
         </section>
       ) : null}

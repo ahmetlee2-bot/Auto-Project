@@ -1,0 +1,33 @@
+.landingHero {
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+}
+
+.landingCopy,
+.landingPreview {
+  min-width: 0;
+}
+
+.landingPreview {
+  width: 100%;
+  box-sizing: border-box;
+  transform: none;
+}
+
+.previewMetrics article,
+.previewRows > div {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .landingHero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.verifyBox { display: grid; gap: 14px; margin-top: 28px; }
+.verifyBox label { display: grid; gap: 8px; color: var(--muted); font-size: .82rem; font-weight: 700; }
+.otpInput { text-align: center; letter-spacing: .42em; font-size: 1.45rem; font-weight: 800; }
+.verifyBox button { border: 0; justify-content: center; }
+.resendButton, .googleButton { border: 1px solid var(--line-strong); border-radius: 12px; padding: 11px 14px; background: var(--surface); color: var(--ink); font-weight: 700; }
+.resendButton:disabled { opacity: .55; cursor: not-allowed; }
+.authDivider { color: var(--muted); text-align: center; font-size: .8rem; }

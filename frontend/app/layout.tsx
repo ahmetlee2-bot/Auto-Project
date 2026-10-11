@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./saas.css";
+import { ThemeProvider } from "../components/theme-provider";
+import { LocaleProvider, type Locale } from "../lib/locale";
+import { cookies } from "next/headers";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://autolister-app.de"),
@@ -61,16 +64,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const savedLocale = (await cookies()).get("autolister-language")?.value;
+  const locale: Locale = savedLocale === "en" || savedLocale === "tr" ? savedLocale : "de";
   return (
-    <html lang="de">
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.ico" />
         <link rel="alternate icon" href="/favicon.ico" />
       </head>
-      <body>{children}</body>
+      <body>
+        <ThemeProvider>
+          <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

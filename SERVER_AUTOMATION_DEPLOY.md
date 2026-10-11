@@ -5,6 +5,7 @@
 ## Sunucu sırları
 
 - Sunucu kökündeki `.env` içinde `EBAY_BRIDGE_SHARED_SECRET` için rastgele en az 32 baytlık değer ve `EBAY_LEGACY_OWNER_USER_ID` için eBay hesabına sahip AutoLister kullanıcı UUID'si bulunmalıdır.
+- Sunucu kökündeki `.env` içinde `WHATSAPP_LEAD_NUMBER` değerini de uluslararası ülke koduyla ve yalnızca rakam kullanarak tanımlayın. Değer frontend container'ına runtime ortam değişkeni olarak aktarılır; `NEXT_PUBLIC_` değişkeni veya imajı yeniden derleme gerekmez. Ziyaretçi formu gönderdiğinde WhatsApp mesaj taslağı bu numaraya yönlenir ve ziyaretçi mesajı WhatsApp'ta kendisi gönderir.
 - Sunucu kökündeki `ebay-bridge.env` dosyası yerel köprüde kullanılan Production eBay OAuth ve satıcı ayarlarını içerir. `EBAY_MODE=api`, `EBAY_ENV=production`, `EBAY_CREDENTIAL_ENV=production`, geçerli refresh token ve otomatik yayın isteniyorsa `ALLOW_LIVE_PUBLISH=true` gerekir.
 - Bu iki dosya Git'e eklenmez. `EBAY_BRIDGE_SHARED_SECRET` iki container'a Compose tarafından aktarılır. Köprü yalnızca `app-internal` Docker ağına bağlıdır; dışarıya port açılmaz.
 
@@ -12,7 +13,7 @@
 
 1. Sunucuda mevcut Compose projesinin ve veri volume'lerinin yedeğini alın.
 2. Yeni frontend, API ve eBay köprüsü imajlarını oluşturun veya GHCR'a yayınlanan etiketi çekin.
-3. `docker compose -f compose.yml config` ile yapılandırmayı doğrulayın.
+3. Sunucu `.env` dosyasında WhatsApp hedef numarasını tanımlayın ve `docker compose -f compose.yml config` ile yapılandırmayı doğrulayın.
 4. `docker compose -f compose.yml up -d ebay-bridge api frontend` çalıştırın.
 5. `docker compose -f compose.yml ps` ve `https://api.autolister-app.de/api/v1/health` sonucunu kontrol edin.
 6. AutoLister hesabıyla `/api/v1/ebay/readiness` çağrısının `ready: true` ve `livePublishEnabled: true` döndürdüğünü doğrulayın.

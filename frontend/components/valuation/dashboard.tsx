@@ -283,7 +283,7 @@ export function ValuationDashboard() {
           >
             Datenschutzerklärung
           </a>
-          <a href="/terms.html">Nutzungsbedingungen</a>
+          <a href="/terms">Nutzungsbedingungen</a>
         </nav>
       </footer>
     </main>
