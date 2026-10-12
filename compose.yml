@@ -25,13 +25,22 @@ services:
       PORT: "3000"
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in the server .env}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in the server .env}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      RAINFOREST_API_KEY: ${RAINFOREST_API_KEY:-}
+      EBAY_APP_ID: ${EBAY_APP_ID:-}
+      EBAY_CERT_ID: ${EBAY_CERT_ID:-}
+      EBAY_LEGACY_OWNER_USER_ID: ${EBAY_LEGACY_OWNER_USER_ID:-}
+      EBAY_BRIDGE_URL: http://ebay-bridge:3210/api
+      API_INTERNAL_URL: http://api:3000
+      EBAY_BRIDGE_SHARED_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
+      CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
       WHATSAPP_LEAD_NUMBER: ${WHATSAPP_LEAD_NUMBER:?Set WHATSAPP_LEAD_NUMBER in the server .env}
       LEGAL_COMPANY: ${LEGAL_COMPANY:-}
       LEGAL_ADDRESS: ${LEGAL_ADDRESS:-}
       LEGAL_EMAIL: ${LEGAL_EMAIL:-}
       LEGAL_VAT_ID: ${LEGAL_VAT_ID:-}
     ports: ["127.0.0.1:3101:3000"]
-    networks: [edge]
+    networks: [edge, app-internal]
     mem_limit: 320m
     cpus: 0.75
     pids_limit: 160
@@ -67,8 +76,10 @@ services:
       BRIDGE_SHARED_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
       DATA_FILE: /data/drafts.json
       ARCHIVE_FILE: /data/drafts-archive.json
-      SERVER_MONITOR_ENABLED: "true"
+      SERVER_MONITOR_ENABLED: "false"
       SERVER_MONITOR_INTERVAL_MS: "1800000"
+      REPRICER_MANAGED_URL: http://frontend:3000/api/internal/tracked-ids
+      CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
     volumes: [ebay-bridge-data:/data]
     networks: [edge, app-internal]
     mem_limit: 768m
@@ -81,6 +92,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  repricer-cron:
+    image: curlimages/curl:8.16.0
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
+    entrypoint: ["/bin/sh", "-c"]
+    command: 'while true; do if [ -n "$$CRON_SECRET" ]; then curl --fail --silent --show-error --max-time 300 -H "Authorization: Bearer $$CRON_SECRET" http://frontend:3000/api/cron/sync-products || true; fi; sleep 1800; done'
+    networks: [edge]
+    mem_limit: 64m
+    cpus: 0.10
+    pids_limit: 40
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      frontend: { condition: service_started }
+      ebay-bridge: { condition: service_healthy }
 
   redis:
     image: redis:7.4-alpine

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import { HeaderPreferences } from "./header-preferences";
+import { ProductTable } from "./dashboard/ProductTable";
 import { useLocale } from "../lib/locale";
 import { translate } from "../lib/messages";
 
@@ -105,7 +106,6 @@ export function EbayDashboard({ email }: { email: string }) {
   const { locale } = useLocale();
   const tr = (text: string) => translate(locale, text);
   const [activeTab, setActiveTab] = useState("server-import");
-  const [copiedItemId, setCopiedItemId] = useState("");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [jobs, setJobs] = useState<DraftJob[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -366,14 +366,6 @@ export function EbayDashboard({ email }: { email: string }) {
         "Die eBay-Verbindung konnte nicht gestartet werden. Prüfe die eBay-App-Konfiguration oder wende dich an den AutoLister-Administrator.",
       );
       setConnectBusy(false);
-    }
-  }
-  async function copyItemId(itemId: string) {
-    try {
-      await navigator.clipboard.writeText(itemId);
-      setCopiedItemId(itemId);
-    } catch {
-      setError("Die eBay-Artikelnummer konnte nicht kopiert werden.");
     }
   }
   const inventory = automation?.inventory;
@@ -690,48 +682,11 @@ export function EbayDashboard({ email }: { email: string }) {
           <div className="dashboardCardHeading">
             <div>
               <p className="sectionEyebrow">{tr("eBay Live")}</p>
-              <h2>{tr("Aktive eBay-Angebote")}</h2>
+              <h2>{tr("Aktive eBay-Angebote")} & Produktüberwachung</h2>
             </div>
             <span className="statusChip">{listings.length} {tr("Listings")}</span>
           </div>
-          {busy ? (
-            <p>{tr("Live-Angebote werden geladen …")}</p>
-          ) : listings.length === 0 ? (
-            <p className="emptyDashboard">
-              {tr("Keine veröffentlichten eBay-Angebote gefunden.")}
-            </p>
-          ) : (
-            <div className="productGrid">
-              <div className="productTableHead">
-                <span>{tr("PRODUKT")}</span>
-                <span>{tr("STATUS")}</span>
-              </div>
-              {listings.map((listing) => (
-                <article className="productCard" key={listing.listingId}>
-                  <ProductThumbnail
-                    src={listing.imageUrls?.[0]}
-                    title={listing.title}
-                  />
-                  <div>
-                    <strong>{listing.title || "Ohne Titel"}</strong>
-                    <small>
-                      <button
-                        className="copyItemId"
-                        type="button"
-                        onClick={() => void copyItemId(listing.listingId || "")}
-                      >
-                        {copiedItemId === listing.listingId
-                          ? "Kopiert ✓"
-                          : `Item ID: ${listing.listingId || "—"} ⧉`}
-                      </button>{" "}
-                      · {listing.price || "—"} € · {listing.quantity ?? 0} Stück
-                    </small>
-                  </div>
-                  <span className="statusChip">Aktiv</span>
-                </article>
-              ))}
-            </div>
-          )}
+          {busy ? <p>{tr("Live-Angebote werden geladen …")}</p> : <ProductTable listings={listings} />}
         </section>
       ) : null}
       {activeTab === "pool" ? (

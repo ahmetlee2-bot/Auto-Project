@@ -549,33 +549,37 @@ async function getTradingActiveListings() {
 
 async function updateActiveListing(input) {
   const sku = String(input.sku || "");
-  const offerId = String(input.offerId || "");
+  let offerId = String(input.offerId || "");
   const price = Number(input.price);
   const quantity = Number(input.quantity);
   if (!Number.isFinite(price) || price <= 0) throw new Error("Fiyat pozitif olmalı.");
   if (!Number.isInteger(quantity) || quantity < 0) throw new Error("Stok sıfır veya pozitif tam sayı olmalı.");
   const token = await accessToken([inventoryScope]);
-  if (!offerId && input.listingId) {
+  if (!offerId && sku) {
+    try {
+      const offers = await ebayRequest(token, "GET", `/offer?sku=${encodeURIComponent(sku)}`, undefined, "EBAY_DE");
+      const match = (offers.offers || []).find((offer) => String(offer.listingId || offer.listing?.listingId || '') === String(input.listingId || ''));
+      offerId = String(match?.offerId || '');
+    } catch (error) { console.warn('INVENTORY OFFER LOOKUP ERROR:', error.message); }
+  }
+  if (offerId) {
+    const result = await ebayRequest(token, "POST", "/bulk_update_price_quantity", {
+      requests: [{ sku, shipToLocationAvailability: { quantity }, offers: [{ offerId, availableQuantity: quantity, price: { currency: 'EUR', value: price.toFixed(2) } }] }],
+    }, "EBAY_DE");
+    const failed = result.responses?.find((row) => !row.statusCode || Number(row.statusCode) < 200 || Number(row.statusCode) >= 300);
+    if (!result.responses?.length || failed) {
+      throw new Error(failed?.errors?.[0]?.message || 'eBay Inventory-Update fehlgeschlagen.');
+    }
+    return { updated: true, offerId, sku, price: price.toFixed(2), quantity };
+  }
+  if (input.listingId) {
     const body = `<?xml version="1.0" encoding="utf-8"?><ReviseInventoryStatusRequest xmlns="urn:ebay:apis:eBLBaseComponents"><InventoryStatus><ItemID>${String(input.listingId)}</ItemID><StartPrice>${price.toFixed(2)}</StartPrice><Quantity>${quantity}</Quantity></InventoryStatus></ReviseInventoryStatusRequest>`;
     const response = await fetch(`${apiOrigin}/ws/api.dll`, { method: "POST", headers: { "Content-Type": "text/xml", "X-EBAY-API-CALL-NAME": "ReviseInventoryStatus", "X-EBAY-API-SITEID": "77", "X-EBAY-API-COMPATIBILITY-LEVEL": process.env.EBAY_COMPATIBILITY_LEVEL || "1423", "X-EBAY-API-IAF-TOKEN": token }, body });
     const xml = await response.text();
-    if (!response.ok || /<Ack>Failure<\/Ack>/i.test(xml)) throw createTradingError({ response, xml, stage: "LEGACY_UPDATE", operation: "ReviseInventoryStatus", endpoint: "/ws/api.dll" });
+    if (!response.ok || !/<Ack>(?:Success|Warning)<\/Ack>/i.test(xml)) throw createTradingError({ response, xml, stage: "LEGACY_UPDATE", operation: "ReviseInventoryStatus", endpoint: "/ws/api.dll" });
     return { updated: true, listingId: input.listingId, price: price.toFixed(2), quantity };
   }
-  if (!offerId) throw new Error("Aktif offer veya Item ID gerekli.");
-  const offer = await ebayRequest(token, "GET", `/offer/${encodeURIComponent(offerId)}`, undefined, "EBAY_DE");
-  const nextOffer = {
-    ...offer,
-    pricingSummary: { ...(offer.pricingSummary || {}), price: { currency: offer.pricingSummary?.price?.currency || "EUR", value: price.toFixed(2) } },
-    availableQuantity: quantity,
-  };
-  await ebayRequest(token, "PUT", `/offer/${encodeURIComponent(offerId)}`, nextOffer, "EBAY_DE");
-  if (/^[A-Za-z0-9]+$/.test(sku)) {
-    await ebayRequest(token, "PUT", `/inventory_item/${encodeURIComponent(sku)}`, {
-      availability: { shipToLocationAvailability: { quantity } },
-    }, "EBAY_DE");
-  }
-  return { updated: true, offerId, sku, price: price.toFixed(2), quantity };
+  throw new Error("Aktives eBay-Angebot konnte nicht gefunden werden.");
 }
 
 function amazonSourceUrl(draft) {
@@ -817,7 +821,25 @@ async function buildAmazonDraft(input) {
 
 async function monitorPublishedProducts() {
   if (!monitorState.enabled || mode !== 'api' || environment !== 'production') return monitorState;
-  const candidates = readDrafts().filter((draft) => draft.status === 'PUBLISHED' && amazonSourceUrl(draft)).slice(0, 30);
+  let managedIds = new Set();
+  if (process.env.REPRICER_MANAGED_URL && process.env.CRON_SECRET) {
+    const response = await fetch(process.env.REPRICER_MANAGED_URL, {
+      headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }, signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error(`Repricer-Zuordnung nicht erreichbar: HTTP ${response.status}`);
+    const body = await response.json();
+    managedIds = new Set(Array.isArray(body.ids) ? body.ids.map(String) : []);
+  }
+  const drafts = readDrafts();
+  let ownershipChanged = false;
+  for (const draft of drafts) {
+    if (managedIds.has(String(draft.listingId || '')) && !draft.monitorManagedExternally) {
+      draft.monitorManagedExternally = true;
+      ownershipChanged = true;
+    }
+  }
+  if (ownershipChanged) writeDrafts(drafts);
+  const candidates = drafts.filter((draft) => draft.status === 'PUBLISHED' && amazonSourceUrl(draft) && !draft.monitorManagedExternally).slice(0, 30);
   const result = { enabled: true, lastRunAt: new Date().toISOString(), checked: 0, changed: 0, errors: 0 };
   for (const draft of candidates) {
     try {

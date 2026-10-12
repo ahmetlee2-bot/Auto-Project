@@ -2722,3 +2722,53 @@ html.dark body { min-height: 100vh; }
 @media (max-width: 700px) {
   .marketingPage .stepGrid { grid-template-columns: 1fr; gap: 16px; }
 }
+/* Repricer table: scoped dark surface with horizontal overflow on narrow screens. */
+.trackedProducts { color: #e2e8f0; }
+.trackedToolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin: 1.25rem 0; }
+.trackedToolbar h3 { margin: 0 0 .25rem; color: #fff; font-size: 1.2rem; }
+.trackedToolbar p, .trackedUnmanaged p { margin: 0; color: #94a3b8; }
+.trackedButton, .trackedActions button, .trackedEnroll button, .trackedActions form button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 2.35rem; padding: .45rem .75rem; border: 1px solid #334155; border-radius: .6rem; background: #1e293b; color: #e2e8f0; font: inherit; cursor: pointer; }
+.trackedButton:hover, .trackedActions button:hover, .trackedEnroll button:hover { background: #334155; }
+.trackedButton:disabled, .trackedActions button:disabled, .trackedEnroll button:disabled { opacity: .5; cursor: not-allowed; }
+.trackedScroll { overflow-x: auto; border: 1px solid #334155; border-radius: .9rem; background: #0f172a; }
+.trackedTable { width: 100%; min-width: 1060px; border-collapse: collapse; text-align: left; }
+.trackedTable th { padding: .85rem 1rem; border-bottom: 1px solid #334155; background: #172235; color: #94a3b8; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.trackedTable td { padding: 1rem; border-bottom: 1px solid #263449; vertical-align: top; color: #e2e8f0; }
+.trackedTable tbody tr:last-child td { border-bottom: 0; }
+.trackedTable tbody tr:hover { background: #152238; }
+.trackedPaused { opacity: .72; }
+.trackedProductName { display: flex; align-items: flex-start; gap: .75rem; min-width: 235px; }
+.trackedProductName img, .trackedNoImage { width: 3.25rem; height: 3.25rem; flex: none; border-radius: .55rem; object-fit: contain; background: #fff; }
+.trackedNoImage { display: grid; place-items: center; background: #1e293b; color: #94a3b8; }
+.trackedProductName strong { display: -webkit-box; max-width: 290px; overflow: hidden; color: #f8fafc; line-height: 1.35; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.trackedProductName small, .trackedState small, .trackedEnroll small { display: block; margin-top: .4rem; color: #94a3b8; font-size: .75rem; overflow-wrap: anywhere; }
+.trackedMeta { display: flex; align-items: center; gap: .55rem; margin-top: .5rem; color: #cbd5e1; white-space: nowrap; }
+.trackedMeta a { display: inline-flex; color: #60a5fa; }
+.trackedMeta a:hover { color: #93c5fd; }
+.trackedBadge { display: inline-flex; align-items: center; padding: .25rem .5rem; border: 1px solid #475569; border-radius: 999px; color: #cbd5e1; background: #1e293b; font-size: .72rem; font-weight: 650; white-space: nowrap; }
+.trackedBadge.stock { border-color: #047857; background: #064e3b; color: #a7f3d0; }
+.trackedBadge.empty { border-color: #991b1b; background: #450a0a; color: #fecaca; }
+.trackedState { display: flex; flex-direction: column; align-items: flex-start; min-width: 170px; }
+.trackedDelta { display: inline-flex; align-items: center; gap: .15rem; margin-top: .45rem; font-size: .8rem; font-weight: 700; }
+.trackedDelta.up { color: #fb923c; }
+.trackedDelta.down { color: #4ade80; }
+.trackedRowError { max-width: 210px; color: #fca5a5 !important; }
+.trackedActions { display: flex; flex-wrap: wrap; gap: .4rem; min-width: 235px; }
+.trackedActions button { font-size: .75rem; }
+.trackedActions .trackedDelete { color: #fca5a5; }
+.trackedActions form { display: flex; align-items: flex-end; gap: .4rem; }
+.trackedActions form label { color: #cbd5e1; font-size: .75rem; }
+.trackedActions input, .trackedEnroll input { min-width: 0; width: 5.3rem; padding: .45rem; border: 1px solid #475569; border-radius: .5rem; background: #0b0f17; color: #fff; }
+.trackedError, .trackedNotice, .trackedEmpty { padding: .8rem 1rem; border: 1px solid #334155; border-radius: .6rem; background: #0f172a; color: #cbd5e1; }
+.trackedError { border-color: #7f1d1d; color: #fecaca; }
+.trackedNotice { border-color: #047857; color: #a7f3d0; }
+.trackedUnmanaged { margin-top: 1.5rem; }
+.trackedUnmanaged h4 { margin: 0 0 .35rem; color: #f8fafc; }
+.trackedEnroll { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid #334155; }
+.trackedEnroll span { min-width: 0; }
+.trackedEnroll strong { color: #e2e8f0; }
+.trackedEnroll form { display: flex; gap: .5rem; }
+.trackedEnroll input { width: 15rem; }
+.trackedEnroll label { display: flex; align-items: center; gap: .4rem; color: #cbd5e1; font-size: .8rem; }
+.trackedEnroll input[type="number"] { width: 5rem; }
+@media (max-width: 700px) { .trackedToolbar, .trackedEnroll { align-items: stretch; flex-direction: column; } .trackedEnroll form { flex-wrap: wrap; } .trackedEnroll input { flex: 1 1 12rem; } }
