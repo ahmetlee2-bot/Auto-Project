@@ -99,7 +99,8 @@ services:
     environment:
       CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
     entrypoint: ["/bin/sh", "-c"]
-    command: 'while true; do if [ -n "$$CRON_SECRET" ]; then curl --fail --silent --show-error --max-time 300 -H "Authorization: Bearer $$CRON_SECRET" http://frontend:3000/api/cron/sync-products || true; fi; sleep 1800; done'
+    command:
+      - 'while true; do if [ -n "$$CRON_SECRET" ]; then curl --fail --silent --show-error --max-time 300 -H "Authorization: Bearer $$CRON_SECRET" http://frontend:3000/api/cron/sync-products || true; fi; sleep 1800; done'
     networks: [edge]
     mem_limit: 64m
     cpus: 0.10
