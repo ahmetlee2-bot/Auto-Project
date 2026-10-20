@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ContactSupport } from "./contact-support";
-import { HeaderPreferences } from "./header-preferences";
 import { useLocale, localeText } from "../lib/locale";
 
 export function MarketingNavigation() {
@@ -33,7 +32,6 @@ export function MarketingNavigation() {
           {labels.menu} <span aria-hidden="true">☰</span>
         </summary>
         <nav aria-label={localeText(locale, { de: "Mobile Navigation", en: "Mobile navigation", tr: "Mobil gezinme" })}>
-          <div className="mobileHeaderPreferences"><HeaderPreferences /></div>
           <a href="#funktionen">{labels.features}</a>
           <a href="#extension">{labels.extension}</a>
           <a href="#cloud">{labels.cloud}</a>

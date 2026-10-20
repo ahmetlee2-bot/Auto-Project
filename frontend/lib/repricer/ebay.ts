@@ -63,6 +63,168 @@ async function inventoryRequest(token: string, path: string, init: RequestInit =
   return body;
 }
 
+type EbaySetupOption = { id: string; name: string };
+export type EbayListingSetup = {
+  merchantLocations: EbaySetupOption[];
+  fulfillmentPolicies: EbaySetupOption[];
+  paymentPolicies: EbaySetupOption[];
+  returnPolicies: EbaySetupOption[];
+  defaults: {
+    merchantLocationKey: string;
+    fulfillmentPolicyId: string;
+    paymentPolicyId: string;
+    returnPolicyId: string;
+    categoryId: string;
+  };
+};
+
+async function sellerApiRequest(token: string, path: string) {
+  const response = await fetch(`${apiOrigin}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_DE",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.errors?.[0]?.message || `eBay-Kontoeinstellungen: HTTP ${response.status}`);
+  }
+  return body;
+}
+
+export async function getEbayListingSetup(userId: string): Promise<EbayListingSetup> {
+  if (await legacyBridgeFor(userId)) {
+    throw new Error("Für eBay-Entwürfe muss das Verkäuferkonto direkt per eBay OAuth verbunden sein.");
+  }
+  const token = await sellerToken(userId);
+  const [locations, fulfillment, payments, returns] = await Promise.all([
+    sellerApiRequest(token, "/sell/inventory/v1/location?limit=100&offset=0"),
+    sellerApiRequest(token, "/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE"),
+    sellerApiRequest(token, "/sell/account/v1/payment_policy?marketplace_id=EBAY_DE"),
+    sellerApiRequest(token, "/sell/account/v1/return_policy?marketplace_id=EBAY_DE"),
+  ]);
+  const mapOptions = (rows: unknown, idKey: string, nameKey: string): EbaySetupOption[] =>
+    (Array.isArray(rows) ? rows : []).flatMap((row) => {
+      if (!row || typeof row !== "object") return [];
+      const item = row as Record<string, unknown>;
+      const id = String(item[idKey] || "").trim();
+      const name = String(item[nameKey] || id).trim();
+      return id ? [{ id, name }] : [];
+    });
+  return {
+    merchantLocations: mapOptions(locations.locations, "merchantLocationKey", "name"),
+    fulfillmentPolicies: mapOptions(fulfillment.fulfillmentPolicies, "fulfillmentPolicyId", "name"),
+    paymentPolicies: mapOptions(payments.paymentPolicies, "paymentPolicyId", "name"),
+    returnPolicies: mapOptions(returns.returnPolicies, "returnPolicyId", "name"),
+    defaults: {
+      merchantLocationKey: process.env.EBAY_MERCHANT_LOCATION_KEY || "",
+      fulfillmentPolicyId: process.env.EBAY_FULFILLMENT_POLICY_ID || "",
+      paymentPolicyId: process.env.EBAY_PAYMENT_POLICY_ID || "",
+      returnPolicyId: process.env.EBAY_RETURN_POLICY_ID || "",
+      categoryId: process.env.EBAY_DEFAULT_CATEGORY_ID || "",
+    },
+  };
+}
+
+export async function publishEbayDraftProduct(input: {
+  userId: string;
+  id: string;
+  title: string;
+  descriptionHtml: string;
+  images: string[];
+  categoryId?: string | null;
+  price: number;
+  settings: Pick<EbayListingSetup["defaults"], "merchantLocationKey" | "fulfillmentPolicyId" | "paymentPolicyId" | "returnPolicyId">;
+}): Promise<{ sku: string; offerId: string; itemId: string; price: number; quantity: number }> {
+  if (await legacyBridgeFor(input.userId)) {
+    throw new Error("Die direkte eBay Inventory-Veröffentlichung benötigt eine eBay OAuth-Verbindung.");
+  }
+  if (!Number.isFinite(input.price) || input.price <= 0) throw new Error("Der berechnete Verkaufspreis fehlt.");
+  if (!input.images.length) throw new Error("Vor der Veröffentlichung muss mindestens ein Produktbild vorhanden sein.");
+  const { merchantLocationKey, fulfillmentPolicyId, paymentPolicyId, returnPolicyId } = input.settings;
+  const categoryId = String(input.categoryId || process.env.EBAY_DEFAULT_CATEGORY_ID || "").trim();
+  if (!merchantLocationKey || !fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId || !categoryId) {
+    throw new Error("Bitte wähle eBay-Standort, Kategorie sowie Versand-, Zahlungs- und Rückgaberichtlinie.");
+  }
+  const token = await sellerToken(input.userId);
+  const sku = `AL-${input.id}`;
+  const quantity = 1;
+  const listingDescription = input.descriptionHtml.slice(0, 50_000);
+  const item = {
+    availability: { shipToLocationAvailability: { quantity } },
+    condition: "NEW",
+    product: {
+      title: input.title.slice(0, 80),
+      description: listingDescription,
+      imageUrls: input.images.slice(0, 12),
+      aspects: {},
+    },
+  };
+  const offerUrl = `${apiOrigin}/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}&marketplace_id=EBAY_DE`;
+  const existingResponse = await fetch(offerUrl, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "X-EBAY-C-MARKETPLACE-ID": "EBAY_DE" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  const existingBody = await existingResponse.json().catch(() => ({})) as {
+    offers?: Array<{ offerId?: string; listing?: { listingId?: string }; listingId?: string }>;
+    errors?: Array<{ message?: string }>;
+  };
+  if (!existingResponse.ok) throw new Error(existingBody.errors?.[0]?.message || `eBay-Angebotssuche: HTTP ${existingResponse.status}`);
+  const existing = existingBody.offers?.[0];
+  if (existing?.listing?.listingId || existing?.listingId) {
+    const itemId = String(existing.listing?.listingId || existing.listingId);
+    await updateEbayListing({ userId: input.userId, itemId, sku, price: input.price, quantity });
+    return {
+      sku,
+      offerId: String(existing.offerId || ""),
+      itemId,
+      price: input.price,
+      quantity,
+    };
+  }
+  // A previous attempt may have created an unpublished offer. Update its inventory
+  // item only after confirming it is not already live; published listings use the
+  // price/quantity endpoint above and must not be rewritten as a new inventory item.
+  await inventoryRequest(token, `/inventory_item/${encodeURIComponent(sku)}`, {
+    method: "PUT",
+    body: JSON.stringify(item),
+  });
+  const offer = {
+    sku,
+    marketplaceId: "EBAY_DE",
+    format: "FIXED_PRICE",
+    availableQuantity: quantity,
+    categoryId,
+    listingDuration: "GTC",
+    merchantLocationKey,
+    listingDescription,
+    listingPolicies: { fulfillmentPolicyId, paymentPolicyId, returnPolicyId },
+    pricingSummary: { price: { currency: "EUR", value: input.price.toFixed(2) } },
+  };
+  const offerResult = existing?.offerId
+    ? await inventoryRequest(token, `/offer/${encodeURIComponent(existing.offerId)}`, { method: "PUT", body: JSON.stringify(offer) })
+    : await inventoryRequest(token, "/offer", { method: "POST", body: JSON.stringify(offer) });
+  const offerId = String(offerResult.offerId || existing?.offerId || "");
+  if (!offerId) throw new Error("eBay hat keine Angebots-ID zurückgegeben.");
+  const published = await inventoryRequest(token, `/offer/${encodeURIComponent(offerId)}/publish`, { method: "POST" }) as {
+    listingId?: string;
+  };
+  let itemId = String(published.listingId || "");
+  if (!itemId) {
+    const savedOffer = await inventoryRequest(token, `/offer/${encodeURIComponent(offerId)}`) as {
+      listing?: { listingId?: string };
+      listingId?: string;
+    };
+    itemId = String(savedOffer.listing?.listingId || savedOffer.listingId || "");
+  }
+  if (!/^[0-9]{9,15}$/.test(itemId)) throw new Error("eBay hat das Angebot verarbeitet, aber keine gültige Item-ID zurückgegeben.");
+  return { sku, offerId, itemId, price: input.price, quantity };
+}
+
 async function inventoryOffer(token: string, sku: string, itemId: string): Promise<{ offerId: string } | null> {
   const response = await fetch(`${apiOrigin}/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "X-EBAY-C-MARKETPLACE-ID": "EBAY_DE" },
@@ -153,5 +315,27 @@ export async function updateEbayListing(input: { userId: string; itemId: string;
     }
   } else {
     await reviseTrading(token, input.itemId, input.price, input.quantity);
+  }
+}
+
+export async function endEbayListing(userId: string, itemId: string, sku: string) {
+  if (await legacyBridgeFor(userId)) throw new Error("Das verbundene eBay-Konto unterstützt das Beenden von Angeboten über die Bridge nicht.");
+  const token = await sellerToken(userId);
+  const offer = await inventoryOffer(token, sku, itemId);
+  if (offer) {
+    await inventoryRequest(token, `/offer/${encodeURIComponent(offer.offerId)}/withdraw`, { method: "POST" });
+    return;
+  }
+  if (!/^[0-9]{9,15}$/.test(itemId)) throw new Error("eBay Item ID ist ungültig.");
+  const body = `<?xml version="1.0" encoding="utf-8"?><EndItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><ItemID>${itemId}</ItemID><EndingReason>NotAvailable</EndingReason></EndItemRequest>`;
+  const response = await fetch(`${apiOrigin}/ws/api.dll`, {
+    method: "POST", headers: { "Content-Type": "text/xml", "X-EBAY-API-CALL-NAME": "EndItem", "X-EBAY-API-SITEID": "77", "X-EBAY-API-COMPATIBILITY-LEVEL": "1423", "X-EBAY-API-IAF-TOKEN": token }, body,
+    cache: "no-store", signal: AbortSignal.timeout(25_000),
+  });
+  const xml = await response.text();
+  const ack = xml.match(/<Ack>([^<]+)<\/Ack>/i)?.[1];
+  if (!response.ok || !["Success", "Warning"].includes(ack || "")) {
+    const message = xml.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/i)?.[1]?.replace(/<[^>]+>/g, "") || `HTTP ${response.status}`;
+    throw new Error(`eBay-Angebot konnte nicht beendet werden: ${message.slice(0, 300)}`);
   }
 }

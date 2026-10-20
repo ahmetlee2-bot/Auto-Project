@@ -18,6 +18,8 @@ export type TrackedProduct = {
   ebay_fee_percent: number;
   payment_fee_percent: number;
   desired_quantity: number;
+  minimum_sale_price: number;
+  manual_quantity_override: number | null;
   amazon_price_delta: number | null;
   last_checked_at: string | null;
   sync_status: SyncStatus;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./saas.css";
+import "./drafts.css";
 import { ThemeProvider } from "../components/theme-provider";
 import { LocaleProvider, type Locale } from "../lib/locale";
 import { cookies } from "next/headers";
@@ -75,7 +76,7 @@ export default async function RootLayout({
         <link rel="icon" href="/favicon.ico" />
         <link rel="alternate icon" href="/favicon.ico" />
       </head>
-      <body className="bg-[#0B0F17] text-slate-100 min-h-screen antialiased selection:bg-blue-500 selection:text-white">
+      <body className="min-h-screen antialiased selection:bg-blue-500 selection:text-white">
         <ThemeProvider>
           <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
         </ThemeProvider>

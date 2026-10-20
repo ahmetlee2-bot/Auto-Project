@@ -28,14 +28,34 @@ services:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in the server .env}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       RAINFOREST_API_KEY: ${RAINFOREST_API_KEY:-}
+      LOGISTICS_3PL_API_URL: ${LOGISTICS_3PL_API_URL:-}
+      LOGISTICS_3PL_API_KEY: ${LOGISTICS_3PL_API_KEY:-}
+      OVERLAY_TOP_LEFT_TEXT: ${OVERLAY_TOP_LEFT_TEXT:-AutoLister}
+      OVERLAY_BOTTOM_RIGHT_TEXT: ${OVERLAY_BOTTOM_RIGHT_TEXT:-autolister-app.de}
+      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
       EBAY_APP_ID: ${EBAY_APP_ID:-}
       EBAY_CERT_ID: ${EBAY_CERT_ID:-}
+      EBAY_ENV: ${EBAY_ENV:-production}
+      EBAY_MULTI_STORE_RU_NAME: ${EBAY_MULTI_STORE_RU_NAME:-}
+      EBAY_RU_NAME: ${EBAY_RU_NAME:-}
+      EBAY_TOKEN_ENCRYPTION_KEY: ${EBAY_TOKEN_ENCRYPTION_KEY:-}
+      EBAY_OAUTH_STATE_SECRET: ${EBAY_OAUTH_STATE_SECRET:-}
+      AUTOLISTER_ADMIN_USER_IDS: ${AUTOLISTER_ADMIN_USER_IDS:-}
+      EBAY_MERCHANT_LOCATION_KEY: ${EBAY_MERCHANT_LOCATION_KEY:-}
+      EBAY_FULFILLMENT_POLICY_ID: ${EBAY_FULFILLMENT_POLICY_ID:-}
+      EBAY_PAYMENT_POLICY_ID: ${EBAY_PAYMENT_POLICY_ID:-}
+      EBAY_RETURN_POLICY_ID: ${EBAY_RETURN_POLICY_ID:-}
+      EBAY_DEFAULT_CATEGORY_ID: ${EBAY_DEFAULT_CATEGORY_ID:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}
       EBAY_LEGACY_OWNER_USER_ID: ${EBAY_LEGACY_OWNER_USER_ID:-}
       EBAY_BRIDGE_URL: http://ebay-bridge:3210/api
       API_INTERNAL_URL: http://api:3000
       EBAY_BRIDGE_SHARED_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
       CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
       WHATSAPP_LEAD_NUMBER: ${WHATSAPP_LEAD_NUMBER:?Set WHATSAPP_LEAD_NUMBER in the server .env}
+      LEAD_WEBHOOK_URL: ${LEAD_WEBHOOK_URL:-}
       LEGAL_COMPANY: ${LEGAL_COMPANY:-}
       LEGAL_ADDRESS: ${LEGAL_ADDRESS:-}
       LEGAL_EMAIL: ${LEGAL_EMAIL:-}
@@ -80,6 +100,8 @@ services:
       SERVER_MONITOR_ENABLED: "false"
       SERVER_MONITOR_INTERVAL_MS: "1800000"
       REPRICER_MANAGED_URL: http://frontend:3000/api/internal/tracked-ids
+      OVERLAY_TOP_LEFT_TEXT: ${OVERLAY_TOP_LEFT_TEXT:-AutoLister}
+      OVERLAY_BOTTOM_RIGHT_TEXT: ${OVERLAY_BOTTOM_RIGHT_TEXT:-autolister-app.de}
       CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
     volumes: [ebay-bridge-data:/data]
     networks: [edge, app-internal]
@@ -110,6 +132,22 @@ services:
     depends_on:
       frontend: { condition: service_started }
       ebay-bridge: { condition: service_healthy }
+
+  listing-queue-cron:
+    image: curlimages/curl:8.16.0
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${EBAY_BRIDGE_SHARED_SECRET:?Set EBAY_BRIDGE_SHARED_SECRET in the server .env}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'while true; do if [ -n "$$CRON_SECRET" ]; then curl --fail --silent --show-error --max-time 300 -H "Authorization: Bearer $$CRON_SECRET" -X POST http://frontend:3000/api/cron/process-queue || true; fi; sleep 300; done'
+    networks: [edge]
+    mem_limit: 64m
+    cpus: 0.10
+    pids_limit: 40
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      frontend: { condition: service_started }
 
   redis:
     image: redis:7.4-alpine

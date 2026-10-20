@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">AutoLister Demo-Produkt</title>
+  <desc id="desc">Illustration für nicht veröffentlichbare Demodaten im Produktdepot.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111c31"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+    <linearGradient id="box" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="480" rx="30" fill="url(#bg)"/>
+  <circle cx="320" cy="196" r="116" fill="#0b1120" stroke="#334155" stroke-width="5"/>
+  <path d="M247 179h146l-12 114H259z" fill="url(#box)" stroke="#93c5fd" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M247 179l73-44 73 44-73 43z" fill="#60a5fa" stroke="#bfdbfe" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M320 222v71" stroke="#dbeafe" stroke-width="6"/>
+  <rect x="241" y="334" width="158" height="44" rx="22" fill="#f59e0b"/>
+  <text x="320" y="363" text-anchor="middle" fill="#111827" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="2">DEMO</text>
+  <text x="320" y="427" text-anchor="middle" fill="#cbd5e1" font-family="Arial,sans-serif" font-size="18">Vorschau · keine Echtdaten</text>
+</svg>

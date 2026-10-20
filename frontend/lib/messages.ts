@@ -157,6 +157,12 @@ const messages: Record<string, Record<Locale, string>> = {
   "Geschätzter Gewinn": { de: "Geschätzter Gewinn", en: "Estimated profit", tr: "Tahmini kâr" },
   "Ich darf die Produktbilder verwenden.": { de: "Ich darf die Produktbilder verwenden.", en: "I have permission to use these product images.", tr: "Bu ürün görsellerini kullanma iznim var." },
   "Nach erfolgreicher Prüfung automatisch veröffentlichen.": { de: "Nach erfolgreicher Prüfung automatisch veröffentlichen.", en: "Publish automatically after a successful review.", tr: "Başarılı kontrolden sonra otomatik yayınla." },
+  "Produktentwürfe": { de: "Produktentwürfe", en: "Product drafts", tr: "Ürün taslakları" },
+  "Produktüberwachung": { de: "Produktüberwachung", en: "Product monitoring", tr: "Ürün izleme" },
+  "Amazon-URL oder ASIN": { de: "Amazon-URL oder ASIN", en: "Amazon URL or ASIN", tr: "Amazon URL'si veya ASIN" },
+  "eBay-Konto noch nicht verbunden": { de: "eBay-Konto noch nicht verbunden", en: "eBay account not connected yet", tr: "eBay hesabı henüz bağlı değil" },
+  "Verbinde zuerst dein eBay-Verkäuferkonto unter Einstellungen, damit Entwürfe, Angebote und Synchronisierung geladen werden können.": { de: "Verbinde zuerst dein eBay-Verkäuferkonto unter Einstellungen, damit Entwürfe, Angebote und Synchronisierung geladen werden können.", en: "Connect your eBay seller account in Settings first so drafts, listings, and synchronization can be loaded.", tr: "Taslakların, ilanların ve eşitlemenin yüklenebilmesi için önce Ayarlar'dan eBay satıcı hesabınızı bağlayın." },
+  "Zur Einrichtung →": { de: "Zur Einrichtung →", en: "Go to setup →", tr: "Kuruluma git →" },
 };
 
 export function translate(locale: Locale, source: string): string {

@@ -9,6 +9,10 @@ import { LocaleMessage } from "../components/locale-message";
 import { ComparisonSection } from "../components/landing/comparison-section";
 import { PricingSection } from "../components/landing/pricing-section";
 import { WhatsAppLeadForm } from "../components/landing/whatsapp-lead-form";
+import { TrustBadges } from "../components/landing/trust-badges";
+import { FAQSection } from "../components/landing/faq-section";
+import { MarketingFooter } from "../components/landing/marketing-footer";
+import { HeroDashboardPreview } from "../components/landing/hero-dashboard-preview";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
@@ -55,41 +59,6 @@ const features = [
     enText: "Monitor inventory, orders, and server jobs from your dashboard.",
     trText: "Stokları, siparişleri ve sunucu görevlerini panelinden izle.",
     icon: "◎",
-  },
-];
-
-const questions = [
-  {
-    q: "Brauche ich einen dauerhaft eingeschalteten PC?",
-    a: "Der Server verarbeitet gestartete Aufträge und überwacht verbundene Abläufe unabhängig von deinem Computer. Die Erweiterung brauchst du nur für Aktionen direkt im Browser.",
-    enQ: "Do I need to keep my computer on?",
-    enA: "The server processes submitted jobs and monitors connected workflows independently of your computer. You only need the extension for actions in your browser.",
-    trQ: "Bilgisayarımın sürekli açık kalması gerekir mi?",
-    trA: "Sunucu, başlatılan görevleri ve bağlı iş akışlarını bilgisayarından bağımsız yürütür. Eklenti yalnızca tarayıcıdaki işlemler için gerekir.",
-  },
-  {
-    q: "Kann ich Produkte ohne Erweiterung importieren?",
-    a: "Ja. Im Dashboard kannst du eine Amazon.de-URL oder ASIN eingeben und den Server-Auftrag direkt starten.",
-    enQ: "Can I import products without the extension?",
-    enA: "Yes. Enter an Amazon.de URL or ASIN in the dashboard and start a server job directly.",
-    trQ: "Eklenti olmadan ürün aktarabilir miyim?",
-    trA: "Evet. Panelde Amazon.de URL'si veya ASIN girip sunucu görevini doğrudan başlatabilirsin.",
-  },
-  {
-    q: "Wird ein Angebot sofort veröffentlicht?",
-    a: "Du kannst einen Entwurf zunächst prüfen. Die automatische Veröffentlichung ist eine eigene, auswählbare Option im Importformular.",
-    enQ: "Is a listing published immediately?",
-    enA: "You can review a draft first. Automatic publishing is a separate, optional setting in the import form.",
-    trQ: "İlan hemen yayınlanır mı?",
-    trA: "Önce taslağı inceleyebilirsin. Otomatik yayınlama, içe aktarma formunda ayrıca seçilen bir ayardır.",
-  },
-  {
-    q: "Benötige ich für die Registrierung eine Kreditkarte?",
-    a: "Für die Kontoerstellung werden Name, E-Mail-Adresse und Passwort benötigt. Zahlungsdaten werden dabei nicht abgefragt.",
-    enQ: "Do I need a credit card to sign up?",
-    enA: "You only need a name, email address, and password to create an account. No payment details are requested.",
-    trQ: "Kayıt için kredi kartı gerekir mi?",
-    trA: "Hesap açmak için ad, e-posta adresi ve şifre yeterlidir. Ödeme bilgisi istenmez.",
   },
 ];
 
@@ -147,8 +116,8 @@ export default function Page() {
                 <span aria-hidden="true">✦</span> <LocaleMessage de="CHROME-ERWEITERUNG + CLOUD ENGINE" en="CHROME EXTENSION + CLOUD ENGINE" tr="CHROME EKLENTİSİ + BULUT MOTORU" />
               </div>
               <h1>
-                <LocaleMessage de="Amazon-Produkte auf eBay listen." en="List Amazon products on eBay." tr="Amazon ürünlerini eBay'de listele." />{" "}
-                <span><LocaleMessage de="Mit einem klaren Workflow." en="With a clear workflow." tr="Düzenli bir iş akışıyla." /></span>
+                <LocaleMessage de="Amazon-Produkte auf eBay listen." en="List Amazon products on eBay." tr="eBay'de Amazon ürünlerini" />{" "}
+                <span><LocaleMessage de="Mit einem klaren Workflow." en="With a clear workflow." tr="düzenli bir iş akışıyla listele." /></span>
               </h1>
               <p>
                 <LocaleMessage de="Weniger manuelles Kopieren: AutoLister bereitet Titel, Bilder und Beschreibungen für eBay vor. Der Cloud-Server verarbeitet gestartete Aufträge und überwacht verbundene Abläufe auch dann, wenn dein PC ausgeschaltet ist." en="Less manual copying: AutoLister prepares titles, images, and descriptions for eBay. The cloud server processes submitted jobs and monitors connected workflows even when your computer is off." tr="Daha az elle kopyalama: AutoLister başlıkları, görselleri ve açıklamaları eBay için hazırlar. Bulut sunucusu, bilgisayarın kapalıyken bile başlatılan görevleri işler ve bağlı süreçleri izler." />
@@ -167,90 +136,9 @@ export default function Page() {
                 <span>✓ <LocaleMessage de="Server-Aufträge ohne offenen Browser" en="Server jobs without an open browser" tr="Tarayıcı açık olmadan sunucu görevleri" /></span>
                 <span>✓ <LocaleMessage de="Registrierung ohne Kreditkarte" en="Sign up without a credit card" tr="Kredi kartsız kayıt" /></span>
               </div>
+              <TrustBadges compact />
             </div>
-            <div
-              className="heroVisual"
-              aria-label="Beispielansicht des AutoLister-Dashboards"
-            >
-              <div className="previewTopbar">
-                <div className="previewTraffic">
-                  <i />
-                  <i />
-                  <i />
-                </div>
-                <span>autolister-app.de/dashboard</span>
-                <span className="previewCloud">● <LocaleMessage de="CLOUD AKTIV" en="CLOUD ACTIVE" tr="BULUT AKTİF" /></span>
-              </div>
-              <div className="previewBody">
-                <aside className="previewSidebar">
-                  <div className="previewBrand">
-                    <span>A</span> AutoLister
-                  </div>
-                  <div className="previewSidebarItem selected">
-                    ▦ <span><LocaleMessage de="Übersicht" en="Overview" tr="Genel bakış" /></span>
-                  </div>
-                  <div className="previewSidebarItem">
-                    ↗ <span><LocaleMessage de="Amazon Import" en="Amazon import" tr="Amazon aktarımı" /></span>
-                  </div>
-                  <div className="previewSidebarItem">
-                    ◎ <span><LocaleMessage de="eBay-Angebote" en="eBay listings" tr="eBay ilanları" /></span>
-                  </div>
-                  <div className="previewSidebarItem">
-                    ◫ <span><LocaleMessage de="Marge &amp; Bestand" en="Margin &amp; inventory" tr="Marj ve stok" /></span>
-                  </div>
-                  <div className="previewSidebarFoot"><LocaleMessage de="SERVER VERBUNDEN" en="SERVER CONNECTED" tr="SUNUCU BAĞLI" /></div>
-                </aside>
-                <div className="previewMain">
-                  <div className="previewCaption"><LocaleMessage de="BEISPIEL-DASHBOARD" en="DASHBOARD PREVIEW" tr="PANEL ÖNİZLEMESİ" /></div>
-                  <div className="previewMainHeading">
-                    <div>
-                        <span><LocaleMessage de="Operations" en="Operations" tr="Operasyonlar" /></span>
-                        <strong><LocaleMessage de="Guten Morgen 👋" en="Good morning 👋" tr="Günaydın 👋" /></strong>
-                    </div>
-                    <span className="previewOnline">● <LocaleMessage de="Alle Systeme bereit" en="All systems ready" tr="Tüm sistemler hazır" /></span>
-                  </div>
-                  <div className="previewKpis">
-                    <div>
-                      <small><LocaleMessage de="eBay-Angebote" en="eBay listings" tr="eBay ilanları" /></small>
-                      <strong><LocaleMessage de="Aktiv" en="Active" tr="Aktif" /></strong>
-                      <span><LocaleMessage de="Aktuelle Angebote" en="Current listings" tr="Mevcut ilanlar" /></span>
-                    </div>
-                    <div>
-                      <small><LocaleMessage de="Produktpool" en="Product pool" tr="Ürün havuzu" /></small>
-                      <strong><LocaleMessage de="Bereit" en="Ready" tr="Hazır" /></strong>
-                      <span><LocaleMessage de="Entwürfe prüfen" en="Review drafts" tr="Taslakları incele" /></span>
-                    </div>
-                    <div>
-                      <small><LocaleMessage de="Cloud-Synchronisierung" en="Cloud sync" tr="Bulut eşitleme" /></small>
-                      <strong>24/7</strong>
-                      <span><LocaleMessage de="Serverseitiger Ablauf" en="Server-side workflow" tr="Sunucu tabanlı iş akışı" /></span>
-                    </div>
-                  </div>
-                  <div className="previewTable">
-                    <div className="previewTableHead">
-                      <strong><LocaleMessage de="Deine Produkte" en="Your products" tr="Ürünlerin" /></strong>
-                      <span>STATUS</span>
-                    </div>
-                    <div className="previewProduct">
-                      <span className="previewProductArt blue">◈</span>
-                      <span>
-                        <b><LocaleMessage de="Produktlisting" en="Product listing" tr="Ürün ilanı" /></b>
-                        <small><LocaleMessage de="eBay Angebot" en="eBay listing" tr="eBay ilanı" /></small>
-                      </span>
-                      <em><LocaleMessage de="Aktiv" en="Active" tr="Aktif" /></em>
-                    </div>
-                    <div className="previewProduct">
-                      <span className="previewProductArt amber">▣</span>
-                      <span>
-                        <b><LocaleMessage de="Neuer Entwurf" en="New draft" tr="Yeni taslak" /></b>
-                        <small><LocaleMessage de="Bereit zur Prüfung" en="Ready for review" tr="İncelemeye hazır" /></small>
-                      </span>
-                      <em className="previewReady"><LocaleMessage de="Bereit" en="Ready" tr="Hazır" /></em>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <HeroDashboardPreview />
           </section>
 
           <section className="trustBar" aria-label="Technologie">
@@ -291,20 +179,43 @@ export default function Page() {
 
           <section className="sectionWrap marketingSection feedbackSection">
             <div className="sectionIntro">
-              <span className="sectionKicker"><LocaleMessage de="GEMEINSAM BESSER WERDEN" en="LET'S MAKE IT BETTER TOGETHER" tr="BİRLİKTE GELİŞTİRELİM" /></span>
-              <h2><LocaleMessage de="Deine Erfahrung hilft uns weiter." en="Your feedback helps us improve." tr="Görüşlerin gelişmemize yardımcı olur." /></h2>
+              <span className="sectionKicker"><LocaleMessage de="WARUM HÄNDLER WECHSELN" en="WHY SELLERS SWITCH" tr="SATICILAR NEDEN TERCİH EDİYOR" /></span>
+              <h2><LocaleMessage de="Gebaut für den täglichen eBay.de-Handel." en="Built for daily eBay.de operations." tr="Günlük eBay.de operasyonları için tasarlandı." /></h2>
               <p>
-                <LocaleMessage de="Wir sammeln gerade Rückmeldungen von AutoLister-Nutzern. Wenn du den Produktimport oder das Dashboard ausprobiert hast, freuen wir uns über deine ehrliche Einschätzung." en="We're gathering feedback from AutoLister users. If you've tried the product import or dashboard, we'd value your honest thoughts." tr="AutoLister kullanıcılarından geri bildirim topluyoruz. Ürün aktarımını veya paneli denediysen görüşlerini duymak isteriz." />
+                <LocaleMessage de="Statt überladener Tabellen erhältst du einen präzisen Workflow vom Amazon-Kandidaten bis zum überwachten Live-Angebot." en="Instead of cluttered spreadsheets, you get a precise workflow from Amazon product candidate to monitored live listing." tr="Karmaşık tablolar yerine Amazon ürün adayından izlenen canlı ilana kadar net bir iş akışı elde edersin." />
               </p>
+            </div>
+            <div className="stepGrid" style={{ marginBottom: "1.5rem" }}>
+              <article className="stepCard">
+                <span className="stepNumber">✦</span>
+                <h3><LocaleMessage de="KI-Titel & 1500×1500 Cover-Studio" en="AI Title & 1500×1500 Cover Studio" tr="YZ Başlık ve 1500×1500 Kapak Stüdyosu" /></h3>
+                <p>
+                  <LocaleMessage de="Optimiere Produkttitel exakt auf das 80-Zeichen-Limit von eBay und versehe das Hauptbild optional automatisch mit einem sauberen Verkaufsrahmen." en="Optimize product titles to eBay's exact 80-character limit and optionally frame your main cover image automatically." tr="Ürün başlıklarını eBay'in 80 karakter sınırına göre optimize et ve ana kapak görseline isteğe bağlı çerçeve uygula." />
+                </p>
+              </article>
+              <article className="stepCard">
+                <span className="stepNumber">€</span>
+                <h3><LocaleMessage de="Reale Gebühren- & Margenformel" en="Real Fee & Margin Formula" tr="Gerçek Komisyon ve Marj Formülü" /></h3>
+                <p>
+                  <LocaleMessage de="Jeder Entwurf kalkuliert Amazon-Einkauf, Versandkosten, 13 % eBay-Gebühr und 2 % Zahlungsabwicklung vorab in deinen Zielpreis ein." en="Every draft factors Amazon cost, shipping, 13% eBay fee, and 2% payment processing into your target price upfront." tr="Her taslak; Amazon alış fiyatını, kargoyu, %13 eBay komisyonunu ve %2 ödeme kesintisini hedef fiyatına önceden dahil eder." />
+                </p>
+              </article>
+              <article className="stepCard">
+                <span className="stepNumber">◎</span>
+                <h3><LocaleMessage de="Direkte Richtlinien-Synchronisation" en="Direct Policy Synchronization" tr="Doğrudan Politika Eşitlemesi" /></h3>
+                <p>
+                  <LocaleMessage de="Versand-, Zahlungs- und Rückgaberichtlinien sowie dein Lagerstandort werden direkt aus deinem verbundenen eBay-Konto geladen." en="Shipping, payment, and return policies plus your merchant location load directly from your connected eBay account." tr="Kargo, ödeme ve iade politikaları ile depo konumun doğrudan bağlı eBay hesabından çekilir." />
+                </p>
+              </article>
             </div>
             <div className="feedbackCard">
               <span className="feedbackIcon" aria-hidden="true">
                 ✦
               </span>
               <div>
-                  <strong><LocaleMessage de="Dein Feedback, unverfälscht." en="Your honest feedback." tr="Samimi geri bildirimin." /></strong>
+                <strong><LocaleMessage de="Direkter Draht zum Produkt-Team" en="Direct line to the product team" tr="Ürün ekibiyle doğrudan iletişim" /></strong>
                 <p>
-                  <LocaleMessage de="Teile mit uns, was gut funktioniert und was wir verbessern sollten. Öffentliche Kundenstimmen zeigen wir erst nach ausdrücklicher Freigabe." en="Tell us what works well and what we should improve. We only publish customer comments with explicit permission." tr="Nelerin iyi çalıştığını ve neleri geliştirmemiz gerektiğini paylaş. Müşteri yorumlarını yalnızca açık izinle yayınlarız." />
+                  <LocaleMessage de="Fehlt dir eine Funktion im Sourcing-Pool oder Repricer? Schreib uns direkt — wir entwickeln AutoLister eng mit aktiven eBay.de-Händlern weiter." en="Missing a feature in the sourcing pool or repricer? Write to us directly — we build AutoLister closely with active eBay.de sellers." tr="Ürün havuzunda veya fiyatlandırma motorunda beklediğin bir özellik mi var? Bize doğrudan yaz; AutoLister'ı aktif satıcılarla birlikte geliştiriyoruz." />
                 </p>
               </div>
               <ContactSupport
@@ -397,54 +308,13 @@ export default function Page() {
 
           <ComparisonSection />
           <PricingSection />
+          <TrustBadges />
           <WhatsAppLeadForm fallbackNumber={process.env.WHATSAPP_LEAD_NUMBER ?? ""} />
 
-          <section id="faq" className="sectionWrap marketingSection faqSection">
-            <div className="sectionIntro">
-                <span className="sectionKicker">FAQ</span>
-                <h2><LocaleMessage de="Häufige Fragen." en="Frequently asked questions." tr="Sıkça sorulan sorular." /></h2>
-                <p><LocaleMessage de="Das Wichtigste zum Einstieg und zum Betrieb auf dem Server." en="The essentials for getting started and running jobs on the server." tr="Başlangıç ve sunucuda görev yürütme hakkında bilmen gerekenler." /></p>
-            </div>
-            <div className="faqList">
-              {questions.map(({ q, a }) => (
-                <details key={q}>
-                  <summary>
-                    <LocaleMessage className="faqQuestion" de={q} en={questions.find((item) => item.q === q)?.enQ ?? q} tr={questions.find((item) => item.q === q)?.trQ ?? q} />
-                    <span className="faqToggleIcon" aria-hidden="true">＋</span>
-                  </summary>
-                  <p><LocaleMessage de={a} en={questions.find((item) => item.a === a)?.enA ?? a} tr={questions.find((item) => item.a === a)?.trA ?? a} /></p>
-                </details>
-              ))}
-            </div>
-          </section>
+          <FAQSection />
         </main>
 
-        <footer className="marketingFooter">
-          <div className="sectionWrap">
-            <div className="footerCta">
-              <div>
-                  <span className="sectionKicker"><LocaleMessage de="BEREIT LOSZULEGEN?" en="READY TO GET STARTED?" tr="BAŞLAMAYA HAZIR MISIN?" /></span>
-                  <h2><LocaleMessage de="Mach aus Produktdaten einen klaren Ablauf." en="Turn product data into a clear workflow." tr="Ürün verilerini düzenli bir iş akışına dönüştür." /></h2>
-                  <p><LocaleMessage de="Ein Dashboard für Import, Prüfung und eBay Operations." en="One dashboard for imports, reviews, and eBay operations." tr="Aktarım, kontrol ve eBay operasyonları için tek panel." /></p>
-              </div>
-              <Link className="primaryButton" href="/register">
-                <LocaleMessage de="AutoLister starten" en="Start AutoLister" tr="AutoLister'ı başlat" /> <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-            <div className="footerBottom">
-              <div>
-                <BrandMark />
-                <p><LocaleMessage de="Amazon-zu-eBay Operations in der Cloud." en="Amazon-to-eBay operations in the cloud." tr="Amazon'dan eBay'e bulut operasyonları." /></p>
-              </div>
-              <nav aria-label="Rechtliches und Kontakt">
-                <Link href="/impressum"><LocaleMessage de="Impressum" en="Legal notice" tr="Yasal bilgiler" /></Link>
-                <Link href="/datenschutz"><LocaleMessage de="Datenschutz" en="Privacy" tr="Gizlilik" /></Link>
-                <a href="/terms"><LocaleMessage de="AGB" en="Terms" tr="Kullanım koşulları" /></a>
-                <ContactSupport />
-              </nav>
-            </div>
-          </div>
-        </footer>
+        <MarketingFooter />
       </div>
     </>
   );

@@ -5,7 +5,7 @@ import { ArrowRight, Check, Clock3, Image, Search, Sparkles, Type, WalletCards }
 import { useState } from "react";
 import { useLocale } from "../../lib/locale";
 
-const minutesPerProduct = { research: 150, listing: 45, images: 60, monitoring: 30 };
+const minutesPerProduct = { research: 10, listing: 8, images: 7, monitoring: 5 };
 const manualTotal = Object.values(minutesPerProduct).reduce((sum, value) => sum + value, 0);
 
 export function ComparisonSection() {
@@ -19,20 +19,20 @@ export function ComparisonSection() {
     products: locale === "de" ? "Produkte pro Tag" : locale === "en" ? "products per day" : "ürün / gün",
     manual: locale === "de" ? "Manuell erledigt" : locale === "en" ? "Done manually" : "Manuel işlem",
     auto: locale === "de" ? "Mit AutoLister" : locale === "en" ? "With AutoLister" : "AutoLister ile",
-    research: locale === "de" ? "Produktrecherche" : locale === "en" ? "Product research" : "Ürün araştırması",
+    research: locale === "de" ? "Produktdaten & Varianten prüfen" : locale === "en" ? "Check product data & variants" : "Ürün verisi ve varyant kontrolü",
     writing: locale === "de" ? "Titel, SEO & Beschreibung" : locale === "en" ? "Title, SEO & description" : "Başlık, SEO ve açıklama",
     images: locale === "de" ? "Bilder bearbeiten & hochladen" : locale === "en" ? "Edit & upload images" : "Görselleri düzenle ve yükle",
     monitoring: locale === "de" ? "Preis- & Bestandskontrolle" : locale === "en" ? "Price & stock checks" : "Fiyat ve stok kontrolü",
-    ai: locale === "de" ? "SEO & Listing mit einem Klick" : locale === "en" ? "One-click SEO & listing" : "Tek tıkla SEO ve ilan",
+    ai: locale === "de" ? "SEO, Cover & Listing mit einem Klick" : locale === "en" ? "One-click SEO, cover & listing" : "Tek tıkla SEO, kapak ve ilan",
     sync: locale === "de" ? "Automatische Preis- & Bestandssynchronisierung" : locale === "en" ? "Automatic price & stock sync" : "Otomatik fiyat ve stok eşitleme",
-    tracking: locale === "de" ? "Trackingnummern automatisch übernehmen" : locale === "en" ? "Automatic tracking number updates" : "Kargo takip numarasını otomatik aktar",
+    tracking: locale === "de" ? "Laufende Überwachung in der Cloud" : locale === "en" ? "Continuous cloud monitoring" : "Bulutta kesintisiz izleme",
     hours: locale === "de" ? "Std." : locale === "en" ? "hr" : "sa",
     minutes: locale === "de" ? "Min." : locale === "en" ? "min" : "dk",
     perDay: locale === "de" ? "pro Tag" : locale === "en" ? "per day" : "günde",
-    unsustainable: locale === "de" ? "Nicht nachhaltig" : locale === "en" ? "Unsustainable" : "Sürdürülemez",
-    impossible: locale === "de" ? "Über einen vollen Arbeitstag" : locale === "en" ? "More than a full workday" : "Tam bir iş gününden fazla",
+    unsustainable: locale === "de" ? "Kaum skalierbar" : locale === "en" ? "Hard to scale" : "Ölçeklenmesi zor",
+    impossible: locale === "de" ? "Über einen halben Arbeitstag nur für Routine" : locale === "en" ? "Over half a workday on routine tasks" : "Rutin işler için yarım iş gününden fazla",
     saved: locale === "de" ? "Netto-Zeitersparnis pro Monat" : locale === "en" ? "Net time saved each month" : "Aylık net zaman tasarrufu",
-    savedBody: locale === "de" ? "Diese Zeit kannst du in Wachstum und neue Shops investieren." : locale === "en" ? "Put that time into growing your business and opening new stores." : "Bu zamanı işini büyütmeye ve yeni mağazalar açmaya ayır.",
+    savedBody: locale === "de" ? "Bei 22 Arbeitstagen pro Monat — Zeit, die direkt in Produktsuche und Umsatz fließt." : locale === "en" ? "Across 22 workdays per month — time you can invest directly into sourcing and growth." : "Ayda 22 iş günü üzerinden — doğrudan ürün bulmaya ve büyümeye ayırabileceğin süre.",
     cta: locale === "de" ? "Mit Automatisierung starten" : locale === "en" ? "Start automating" : "Otomasyona başla",
   };
   const dailyManualMinutes = target * manualTotal;
@@ -62,15 +62,15 @@ export function ComparisonSection() {
       </div>
       <div className="comparisonGrid">
         <article className="comparisonCard manualComparison">
-          <div className="comparisonCardTitle"><span className="comparisonIcon"><Clock3 size={19} /></span><div><p className="sectionEyebrow">{t.manual}</p><h3>{locale === "de" ? "Der manuelle Weg" : locale === "en" ? "The manual way" : "Manuel yöntem"}</h3></div></div>
+          <div className="comparisonCardTitle"><span className="comparisonIcon"><Clock3 size={19} /></span><div><p className="sectionEyebrow">{t.manual}</p><h3>{locale === "de" ? "Der manuelle Weg (~30 Min. / Produkt)" : locale === "en" ? "The manual way (~30 min / product)" : "Manuel yöntem (~30 dk / ürün)"}</h3></div></div>
           <ul className="comparisonTasks">
-            <li><span><Search size={17} />{t.research}</span><b>2.5 {t.hours}</b></li>
-            <li><span><Type size={17} />{t.writing}</span><b>45 {t.minutes}</b></li>
-            <li><span><Image size={17} />{t.images}</span><b>1 {t.hours}</b></li>
-            <li><span><WalletCards size={17} />{t.monitoring}</span><b>30 {t.minutes}</b></li>
+            <li><span><Search size={17} />{t.research}</span><b>{minutesPerProduct.research} {t.minutes}</b></li>
+            <li><span><Type size={17} />{t.writing}</span><b>{minutesPerProduct.listing} {t.minutes}</b></li>
+            <li><span><Image size={17} />{t.images}</span><b>{minutesPerProduct.images} {t.minutes}</b></li>
+            <li><span><WalletCards size={17} />{t.monitoring}</span><b>{minutesPerProduct.monitoring} {t.minutes}</b></li>
           </ul>
           <div className="comparisonTotal"><span>{locale === "de" ? "Zeitaufwand" : locale === "en" ? "Time required" : "Gereken süre"}</span><strong>{formatDuration(dailyManualMinutes)} <small>{t.perDay}</small></strong></div>
-          <p className="comparisonWarning"><span aria-hidden="true">!</span>{dailyManualMinutes >= 480 ? `${t.unsustainable} · ${t.impossible}` : locale === "de" ? "Jeder Arbeitsschritt kostet wertvolle Zeit." : locale === "en" ? "Every task takes valuable time." : "Her işlem değerli zamanını alır."}</p>
+          <p className="comparisonWarning"><span aria-hidden="true">!</span>{dailyManualMinutes >= 240 ? `${t.unsustainable} · ${t.impossible}` : locale === "de" ? "Jeder manuelle Schritt bremst dein tägliches Listing-Volumen." : locale === "en" ? "Every manual step slows down your daily listing volume." : "Her manuel adım günlük listeleme hacmini yavaşlatır."}</p>
         </article>
         <article className="comparisonCard automatedComparison">
           <div className="comparisonCardTitle"><span className="comparisonIcon"><Sparkles size={19} /></span><div><p className="sectionEyebrow">{t.auto}</p><h3>AutoLister</h3></div></div>

@@ -8,10 +8,6 @@ import { translate } from "../../lib/messages";
 const siteUrl = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://autolister-app.de"
 ).replace(/\/$/, "");
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const googleCallbackUrl = supabaseUrl
-  ? `${supabaseUrl.replace(/\/$/, "")}/auth/v1/callback`
-  : "";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const { locale } = useLocale();
@@ -70,11 +66,23 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   }
   async function google() {
     setError("");
-    const { error: oauthError } = await createClient().auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${siteUrl}/dashboard` },
-    });
-    if (oauthError) setError(oauthError.message);
+    setBusy(true);
+    try {
+      const { error: oauthError } = await createClient().auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${siteUrl}/dashboard` },
+      });
+      if (oauthError) throw oauthError;
+    } catch {
+      setError(
+        locale === "de"
+          ? "Google-Anmeldung ist derzeit nicht verfügbar. Bitte versuche es später erneut."
+          : locale === "en"
+            ? "Google sign-in is temporarily unavailable. Please try again later."
+            : "Google ile giriş şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.",
+      );
+      setBusy(false);
+    }
   }
   return (
     <form className="authForm" onSubmit={submit}>
@@ -133,20 +141,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       >
         {translate(locale, "Mit Google fortfahren")}
       </button>
-      {mode === "login" && googleCallbackUrl ? (
-        <details className="oauthSetupDetails">
-          <summary>Google OAuth konfigurieren</summary>
-          <p>
-            Diese Weiterleitungs-URI in Google Cloud unter „Autorisierte
-            Weiterleitungs-URIs“ eintragen:
-          </p>
-          <code>{googleCallbackUrl}</code>
-          <p>
-            Supabase leitet nach erfolgreicher Anmeldung an{" "}
-            <code>{siteUrl}/dashboard</code> zurück.
-          </p>
-        </details>
-      ) : null}
     </form>
   );
 }

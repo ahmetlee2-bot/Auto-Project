@@ -10,9 +10,9 @@ export const metadata: Metadata = {
 };
 
 const registrationPlans = {
-  starter: { name: "Starter", price: 49 },
-  pro: { name: "Pro", price: 79 },
-  turbo: { name: "Turbo", price: 119 },
+  starter: { name: "Starter", monthly: 9.99, annual: 7.99 },
+  pro: { name: "Pro", monthly: 17.99, annual: 13.99 },
+  turbo: { name: "Turbo", monthly: 39.99, annual: 29.99 },
 } as const;
 
 export default async function RegisterPage({
@@ -25,11 +25,11 @@ export default async function RegisterPage({
     ? registrationPlans[planId as keyof typeof registrationPlans]
     : null;
   const annualBilling = billing === "annual";
-  const selectedMonthlyPrice = selectedPlan ? selectedPlan.price * (annualBilling ? 0.75 : 1) : 0;
+  const selectedMonthlyPrice = selectedPlan ? (annualBilling ? selectedPlan.annual : selectedPlan.monthly) : 0;
   const priceLocale = new Intl.NumberFormat("de-DE", {
     style: "currency",
     currency: "EUR",
-    minimumFractionDigits: annualBilling ? 2 : 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 

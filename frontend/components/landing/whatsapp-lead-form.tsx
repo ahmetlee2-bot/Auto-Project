@@ -20,7 +20,7 @@ export function WhatsAppLeadForm({ fallbackNumber }: { fallbackNumber?: string }
   const t = {
     kicker: locale === "de" ? "PERSÖNLICH SPRECHEN" : locale === "en" ? "TALK TO A REAL PERSON" : "BİREBİR GÖRÜŞELİM",
     title: locale === "de" ? "Noch Fragen? Wir melden uns." : locale === "en" ? "Still have questions? We can help." : "Soruların mı var? Yardımcı olalım.",
-    intro: locale === "de" ? "Hinterlasse deine Nummer. Wir melden uns über WhatsApp bei dir." : locale === "en" ? "Leave your number and we’ll get back to you on WhatsApp." : "Numaranı bırak, WhatsApp üzerinden sana ulaşalım.",
+    intro: locale === "de" ? "Schick uns deine Anfrage über WhatsApp. Deine Nummer hilft uns, dir zu antworten." : locale === "en" ? "Send us your request on WhatsApp. Your number lets us reply to you." : "Talebini WhatsApp'tan gönder. Numaran sana yanıt vermemize yardımcı olur.",
     name: locale === "de" ? "Vor- und Nachname" : locale === "en" ? "Full name" : "Ad soyad",
     phone: locale === "de" ? "WhatsApp-Nummer" : locale === "en" ? "WhatsApp number" : "WhatsApp numarası",
     store: locale === "de" ? "Wie ist dein Shop-Status?" : locale === "en" ? "What is your store status?" : "Mağaza durumun nedir?",
@@ -31,11 +31,11 @@ export function WhatsAppLeadForm({ fallbackNumber }: { fallbackNumber?: string }
     note: locale === "de" ? "Deine Frage (optional)" : locale === "en" ? "Your question (optional)" : "Sorun (isteğe bağlı)",
     notePlaceholder: locale === "de" ? "Wobei können wir helfen?" : locale === "en" ? "How can we help?" : "Nasıl yardımcı olabiliriz?",
     consent: locale === "de" ? "Ich stimme zu, dass AutoLister mich zur Beantwortung meiner Anfrage kontaktiert. Details stehen in der Datenschutzerklärung." : locale === "en" ? "I agree that AutoLister may contact me about my request. See the privacy notice for details." : "AutoLister'ın talebim hakkında benimle iletişime geçmesini kabul ediyorum. Ayrıntılar gizlilik bildiriminde.",
-    submit: locale === "de" ? "WhatsApp-Rückruf anfragen" : locale === "en" ? "Request a WhatsApp follow-up" : "WhatsApp'tan dönüş iste",
+    submit: locale === "de" ? "WhatsApp-Nachricht vorbereiten" : locale === "en" ? "Prepare WhatsApp message" : "WhatsApp mesajı hazırla",
     privacy: locale === "de" ? "Deine Angaben bleiben vertraulich." : locale === "en" ? "Your details are kept private." : "Bilgilerin gizli tutulur.",
     response: locale === "de" ? "Wir antworten in der Regel innerhalb von 15 Minuten." : locale === "en" ? "We usually reply within 15 minutes." : "Genellikle 15 dakika içinde yanıt veririz.",
-    success: locale === "de" ? "Anfrage erhalten" : locale === "en" ? "Request received" : "Talebin alındı",
-    successText: locale === "de" ? "Danke! Öffne WhatsApp und sende die vorbereitete Nachricht, damit wir deine Anfrage erhalten." : locale === "en" ? "Thanks! Open WhatsApp and send the prepared message so we receive your request." : "Teşekkürler! Talebinin bize ulaşması için WhatsApp'ı açıp hazırlanan mesajı gönder.",
+    success: locale === "de" ? "Nachricht ist vorbereitet" : locale === "en" ? "Message is ready" : "Mesajın hazır",
+    successText: locale === "de" ? "Deine Anfrage wurde noch nicht übermittelt. Öffne WhatsApp und tippe dort auf Senden. Die oben eingetragene Nummer ist deine Rückrufnummer; die Nachricht geht an den AutoLister-Kontakt." : locale === "en" ? "Your request has not been delivered yet. Open WhatsApp and tap Send. The number you entered above is your callback number; the message is addressed to AutoLister." : "Talebin henüz iletilmedi. WhatsApp'ı açıp Gönder'e dokun. Yukarıdaki numara sana ulaşmamız için; mesaj AutoLister iletişim numarasına gider.",
     open: locale === "de" ? "WhatsApp öffnen und senden" : locale === "en" ? "Open WhatsApp and send" : "WhatsApp'ı aç ve gönder",
     another: locale === "de" ? "Weitere Anfrage senden" : locale === "en" ? "Send another request" : "Yeni talep gönder",
   };
@@ -81,6 +81,7 @@ export function WhatsAppLeadForm({ fallbackNumber }: { fallbackNumber?: string }
         <div className="leadTrustList"><span><LockKeyhole size={16} />{t.privacy}</span><span><Zap size={16} />{t.response}</span></div>
       </div>
       <div className="leadFormCard">
+        <p className="leadDeliveryNote">{locale === "de" ? "Wichtig: Dieses Formular sendet keine automatische WhatsApp-Nachricht. Nach dem Absenden öffnet sich ein vorbereiteter Chat mit AutoLister; erst mit deinem Klick auf Senden wird die Anfrage übermittelt." : locale === "en" ? "Important: this form does not send an automatic WhatsApp message. After submitting, a prepared chat with AutoLister opens; your request is delivered only when you tap Send." : "Önemli: Bu form otomatik WhatsApp mesajı göndermez. Gönderince AutoLister ile hazır sohbet açılır; talep ancak WhatsApp'ta Gönder'e dokunduğunda iletilir."}</p>
         {result ? (
           <div className="leadSuccess" role="status">
             <CheckCircle2 size={42} aria-hidden="true" />

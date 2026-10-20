@@ -28,9 +28,9 @@ export async function syncProductById(id: string, userId?: string): Promise<{ pr
     const live = await fetchEbayListing(row.user_id, row.ebay_item_id, row.amazon_asin);
     const snapshot = await fetchAmazonSnapshot(row.amazon_asin);
     const nextPrice = snapshot.inStock
-      ? calculateEbayPrice(snapshot.price!, row.estimated_shipping, row.target_margin_percent, row.ebay_fee_percent, row.payment_fee_percent)
+      ? Math.max(row.minimum_sale_price || 0, calculateEbayPrice(snapshot.price!, row.estimated_shipping, row.target_margin_percent, row.ebay_fee_percent, row.payment_fee_percent))
       : live.price;
-    const nextQuantity = snapshot.inStock ? row.desired_quantity : 0;
+    const nextQuantity = snapshot.inStock ? (row.manual_quantity_override ?? row.desired_quantity) : 0;
     const priceChanged = snapshot.price !== null && row.amazon_price !== null && Math.round((snapshot.price - row.amazon_price) * 100) !== 0;
     const ebayPriceChanged = snapshot.inStock && Math.round(((nextPrice || 0) - live.price) * 100) !== 0;
     if (nextQuantity !== live.quantity || ebayPriceChanged) {
@@ -41,7 +41,7 @@ export async function syncProductById(id: string, userId?: string): Promise<{ pr
       amazon_stock_status: snapshot.inStock,
       amazon_price_delta: snapshot.price !== null && row.amazon_price !== null ? Math.round((snapshot.price - row.amazon_price) * 100) / 100 : null,
       title: snapshot.title || row.title,
-      image_url: snapshot.imageUrl || row.image_url,
+      image_url: row.image_url?.includes("/storage/v1/object/public/product-images/covers/") ? row.image_url : snapshot.imageUrl || row.image_url,
       ebay_price: nextPrice,
       ebay_quantity: nextQuantity,
       sync_status: snapshot.inStock ? priceChanged ? "price_changed" : "synced" : "out_of_stock",
