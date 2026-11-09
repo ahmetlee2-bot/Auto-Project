@@ -13,14 +13,15 @@
   }
 
   function overlayLayout(width, height, topLeft, bottomRight) {
-    const padding = 15;
-    const topWidth = Math.max(1, Math.round(width * 0.25));
-    const bottomWidth = Math.max(1, Math.round(width * 0.14));
+    const topPadding = Math.round(width * 0.015);
+    const topWidth = Math.max(1, Math.round(width * 0.49));
+    const bottomWidth = Math.max(1, Math.round(width * 0.21));
     const topHeight = Math.round(topWidth * (topLeft.height / topLeft.width));
     const bottomHeight = Math.round(bottomWidth * (bottomRight.height / bottomRight.width));
     return {
-      topLeft: { x: padding, y: padding, width: topWidth, height: topHeight },
-      bottomRight: { x: width - bottomWidth - padding, y: height - bottomHeight - padding, width: bottomWidth, height: bottomHeight },
+      // Exact proportions from the approved reference image.
+      topLeft: { x: topPadding, y: topPadding, width: topWidth, height: topHeight },
+      bottomRight: { x: width - bottomWidth, y: height - bottomHeight, width: bottomWidth, height: bottomHeight },
     };
   }
 

@@ -194,13 +194,13 @@
       || { title: globalThis.AlltaghausSeo?.compactTitle(title, extractedSpecifics) || title.slice(0, 80), specifics: extractedSpecifics, terms: [] };
     const productType = regulatedProductType(title, description, seo.specifics);
     const itemSpecifics = ensureRequiredSpecifics(seo.specifics, productType, title);
-    const galleryImages = mergeGalleryImages(extractImages(), extractDescriptionImages());
+    const galleryImages = mergeGalleryImages(extractImages());
     return {
       asin,
       title,
       suggestedTitle: seo.title,
       images: galleryImages,
-      descriptionImages: extractDescriptionImages(),
+      descriptionImages: [],
       galleryImageCount: galleryImages.length,
       imageExtractionComplete: galleryImages.length > 0,
       productType,
@@ -211,6 +211,7 @@
         title, description, highlights, specifics: itemSpecifics, legalNotice: legalNoticeFor(productType),
       }) || globalThis.AlltaghausListingBuilder?.buildListingDescription({ description, legalNotice: legalNoticeFor(productType) }) || description,
       priceText: extractPrice(),
+      isPrime: Boolean(document.querySelector("#primeBlock, #prime_feature_div, [aria-label*='Prime'], [aria-label*='prime']")),
       inStock: availability.inStock,
       availabilityText: availability.text,
       stockQuantity: availability.stockQuantity,
@@ -225,21 +226,9 @@
   }
 
   async function attachProcessedGallery(product) {
-    const response = await chrome.runtime.sendMessage({
-      action: "PROCESS_GALLERY_IMAGES",
-      urls: product.images,
-    });
-    if (!response?.success || !Array.isArray(response.images) || !response.images.length) {
-      throw new Error(response?.error || "Galeri görselleri işlenemedi.");
-    }
     return {
       ...product,
-      // Preserve the full source gallery so the background worker can retry only failed images.
-      images: product.images,
-      processedImageData: response.images,
-      processedSourceUrls: response.sourceUrls || [],
-      processedGalleryCount: response.images.length,
-      skippedGalleryImages: Number(response.skipped || 0),
+      images: [...new Set((product.images || []).map((url) => globalThis.AlltaghausAmazonParser.normalizeImageUrl(url)).filter(Boolean))],
       imageExtractionComplete: true,
     };
   }
@@ -247,7 +236,7 @@
   async function extractAndProcessCurrentProduct() {
     const product = extractProduct();
     if (!product.asin || !product.title) throw new Error("Bu sayfada geçerli bir Amazon ürünü bulunamadı.");
-    // Extraction stays local and fast; the popup sends the resulting product data to the backend.
+    // Extraction must stay fast; CREATE_EBAY_DRAFT processes the gallery once.
     return storageProduct(product);
   }
 

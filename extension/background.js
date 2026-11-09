@@ -1,5 +1,5 @@
 if (typeof importScripts === "function") importScripts("cloudClient.js");
-if (typeof importScripts === "function") importScripts("config.js", "priceCalculator.js", "imageProcessor.js", "offscreen.js", "listing_builder.js", "amazon_parser.js", "bridgeClient.js");
+if (typeof importScripts === "function") importScripts("config.js", "priceCalculator.js", "listing_builder.js", "amazon_parser.js", "bridgeClient.js");
 
 const priceTools = globalThis.AlltaghausPrice || {
   calculateSalePrice(source, marginPercent) {
@@ -9,9 +9,7 @@ const priceTools = globalThis.AlltaghausPrice || {
   },
 };
 
-const MONITOR_ALARM = "amazon-product-monitor";
-const IMAGE_PIPELINE_VERSION = 4;
-const SETTINGS_VERSION = 7;
+const SETTINGS_VERSION = 8;
 const DEFAULT_SETTINGS = {
   apiBaseUrl: globalThis.AlltaghausConfig.API_BASE_URL,
   draftMode: false,
@@ -25,10 +23,17 @@ const DEFAULT_SETTINGS = {
   paymentPolicyId: "",
   returnPolicyId: "",
   lowStockThreshold: 3,
-  customImageOverlay: false,
+  customImageOverlay: true,
 };
 let monitorInFlight = false;
-const MAX_GALLERY_PAYLOAD_BYTES = 18_000_000;
+let joybuySyncInFlight = false;
+const JOYBUY_SYNC_ALARM = "joybuyAutoSync";
+const JOYBUY_SYNC_CONTINUE_ALARM = "autolister-joybuy-price-stock-continue";
+const JOYBUY_AUTO_SYNC_KEY = "joybuyAutoSyncEnabled";
+const JOYBUY_SYNC_STATUS_KEY = "joybuySyncStatus";
+const JOYBUY_LAST_SUCCESS_KEY = "joybuyLastSuccessfulQueueRunAt";
+const JOYBUY_SYNC_PAUSED_KEY = "joybuySyncPausedForVerification";
+const JOYBUY_RUN_BATCH_LIMIT = 6;
 
 function generateEbaySku() {
   return `DE-INV-${String(Date.now()).slice(-10)}${Math.floor(Math.random() * 900 + 100)}`;
@@ -96,115 +101,10 @@ function highResolutionImageUrl(value) {
   return globalThis.AlltaghausAmazonParser.normalizeImageUrl(value);
 }
 
-async function processImageToCleanBase64(imageUrl, { applyOverlay = false } = {}) {
-  const sourceUrl = highResolutionImageUrl(imageUrl);
-  if (!/^https:\/\//i.test(sourceUrl)) throw new Error("Görsel HTTPS URLsi olmalı.");
-  let bitmap;
-  try {
-    const attempts = [];
-    for (const candidate of globalThis.AlltaghausAmazonParser.imageCandidates(imageUrl)) {
-      try {
-        const response = await fetchWithTimeout(candidate, { cache: "no-store" }, 12_000);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const decoded = await createImageBitmap(await response.blob());
-        attempts.push(`${decoded.width}x${decoded.height}`);
-        if (!bitmap || Math.max(decoded.width, decoded.height) > Math.max(bitmap.width, bitmap.height)) {
-          bitmap?.close(); bitmap = decoded;
-        } else decoded.close();
-        if (Math.max(bitmap.width, bitmap.height) >= 1500) break;
-      } catch (error) { attempts.push(error.message); }
-    }
-    if (!bitmap?.width || !bitmap?.height || Math.max(bitmap.width, bitmap.height) < 500) {
-      throw new Error(`Ürünün yüksek çözünürlüklü görseli alınamadı (${attempts.join('; ')}). Kaynak: ${sourceUrl}`);
-    }
-    // Preserve the complete source image. A square, white canvas prevents visual
-    // distortion while satisfying the minimum eBay image size requirement.
-    const longestSide = Math.max(bitmap.width, bitmap.height);
-    const targetLongestSide = Math.max(500, Math.min(1600, longestSide));
-    const scale = targetLongestSide / longestSide;
-    const drawWidth = Math.max(1, Math.round(bitmap.width * scale));
-    const drawHeight = Math.max(1, Math.round(bitmap.height * scale));
-    const targetWidth = targetLongestSide;
-    const targetHeight = targetLongestSide;
-    const canvas = new OffscreenCanvas(targetWidth, targetHeight);
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("Offscreen Canvas 2D bağlamı oluşturulamadı.");
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, targetWidth, targetHeight);
-    context.drawImage(bitmap, Math.round((targetWidth - drawWidth) / 2), Math.round((targetHeight - drawHeight) / 2), drawWidth, drawHeight);
-    const pixels = context.getImageData(0, 0, targetWidth, targetHeight).data;
-    let hasContent = false;
-    for (let i = 0; i < pixels.length; i += 4) {
-      if (pixels[i] < 250 || pixels[i + 1] < 250 || pixels[i + 2] < 250) { hasContent = true; break; }
-    }
-    if (!hasContent) throw new Error("Bos/beyaz gorsel galeriye eklenmedi.");
-    // Hash before drawing badges, so a duplicate without badges is also removed.
-    const digest = await crypto.subtle.digest("SHA-256", pixels);
-    const pixelHash = `${targetWidth}:` + [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-    if (applyOverlay) {
-      if (!globalThis.AlltaghausOverlay) throw new Error("Rozet motoru yuklenemedi.");
-      await globalThis.AlltaghausOverlay.drawCustomOverlay(context, targetWidth, targetHeight);
-    }
-    const cleanBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.98 });
-    const dataUrl = globalThis.AlltaghausImage?.blobToDataUrl
-      ? await globalThis.AlltaghausImage.blobToDataUrl(cleanBlob)
-      : `data:image/jpeg;base64,${btoa(String.fromCharCode(...new Uint8Array(await cleanBlob.arrayBuffer())))}`;
-    if (!cleanBlob.size) throw new Error("Canvas bos dosya uretti.");
-    return { dataUrl, mimeType: "image/jpeg", cropRatio: 0, width: targetWidth, height: targetHeight, pixelHash, pipelineVersion: IMAGE_PIPELINE_VERSION, overlayApplied: applyOverlay };
-  } catch (error) {
-    console.error("CANVAS IMAGE ERROR:", { sourceUrl, applyOverlay, stage: "CANVAS_DECODE_RENDER", message: error.message });
-    throw error;
-  } finally {
-    bitmap?.close();
-  }
-}
-
-async function processGalleryImages(urls) {
-  const uniqueUrls = [...new Set((Array.isArray(urls) ? urls : [])
+function originalGalleryUrls(product) {
+  return [...new Set([...(product.images || []), ...(product.descriptionImages || [])]
     .map(highResolutionImageUrl)
     .filter((url) => /^https:\/\//i.test(String(url))))].slice(0, 12);
-  if (!uniqueUrls.length) throw new Error("İşlenecek galeri görseli bulunamadı.");
-  // Process the primary image first: its failure must never silently promote a detail image.
-  const successful = [{ url: uniqueUrls[0], asset: await processImageToCleanBase64(uniqueUrls[0], { applyOverlay: true }) }];
-  const seen = new Set([successful[0].asset.pixelHash]);
-  const failures = [];
-  for (const url of uniqueUrls.slice(1)) {
-    try {
-      const asset = await processImageToCleanBase64(url);
-      if (!seen.has(asset.pixelHash)) { successful.push({ url, asset }); seen.add(asset.pixelHash); }
-    } catch (error) { failures.push({ url, message: error.message }); console.error("GALLERY IMAGE ERROR:", url, error); }
-  }
-  if (!successful.length) throw new Error("Kaynak görseller çözülemedi; lütfen ürün sayfasını yenileyip tekrar deneyin.");
-  const payloadBytes = successful.reduce((total, item) => total + Math.ceil(item.asset.dataUrl.length * 0.75), 0);
-  if (payloadBytes > MAX_GALLERY_PAYLOAD_BYTES) throw new Error("İşlenmiş görsel paketi çok büyük; ürün galerisi güvenli payload sınırını aşıyor.");
-  return {
-    images: successful.map((item) => item.asset),
-    sourceUrls: successful.map((item) => item.url),
-    skipped: uniqueUrls.length - successful.length,
-    failures,
-  };
-}
-
-async function buildProcessedGallery(product, settings) {
-  const sourceUrls = [...new Set([
-    ...(product.images || []), ...(product.descriptionImages || []),
-  ].map(highResolutionImageUrl).filter(Boolean))].slice(0, 12);
-  const assets = product.processedImageData || [];
-  const references = (product.processedSourceUrls || []).map(highResolutionImageUrl);
-  const cacheValid = assets.length === sourceUrls.length && references.length === assets.length
-    && assets.every((asset, index) => asset.pipelineVersion === IMAGE_PIPELINE_VERSION && asset.pixelHash
-      && asset.overlayApplied === (index === 0) && asset.width >= 500 && asset.height >= 500
-      && references[index] === sourceUrls[index]);
-  const gallery = cacheValid
-    ? { images: assets, sourceUrls: references, skipped: 0 }
-    : await processGalleryImages(sourceUrls);
-  gallery.images = globalThis.AlltaghausListingBuilder.cleanGallery(gallery.images);
-  await recordPipelineEvent({
-    stage: "GALLERY_PROCESSED", sourceCount: sourceUrls.length,
-    processedCount: gallery.images.length, skipped: sourceUrls.length - gallery.images.length,
-    failures: gallery.failures || [],
-  });
-  return { ...gallery, sourceCount: sourceUrls.length, retriedCount: cacheValid ? 0 : gallery.images.length };
 }
 
 async function ensureSettings() {
@@ -214,14 +114,11 @@ async function ensureSettings() {
   if (Number(settings.settingsVersion || 0) < SETTINGS_VERSION) {
     settings.draftMode = false;
     settings.autoPublish = true;
+    settings.customImageOverlay = true;
     settings.settingsVersion = SETTINGS_VERSION;
   }
   await chrome.storage.local.set({ settings });
   return settings;
-}
-
-async function ensureAlarm() {
-  await chrome.alarms.clear(MONITOR_ALARM);
 }
 
 async function purgeLegacyLocalDrafts() {
@@ -234,9 +131,181 @@ async function purgeLegacyLocalDrafts() {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => { void ensureAlarm(); void purgeLegacyLocalDrafts(); });
-chrome.runtime.onStartup.addListener(() => { void ensureAlarm(); void purgeLegacyLocalDrafts(); });
-void ensureAlarm();
+chrome.runtime.onInstalled.addListener(() => { void purgeLegacyLocalDrafts(); });
+chrome.runtime.onStartup.addListener(() => { void purgeLegacyLocalDrafts(); });
+async function ensureJoybuySyncAlarm() {
+  const alarm = await chrome.alarms.get(JOYBUY_SYNC_ALARM);
+  if (!alarm) chrome.alarms.create(JOYBUY_SYNC_ALARM, { periodInMinutes: 30 });
+  const state = await chrome.storage.local.get(JOYBUY_AUTO_SYNC_KEY);
+  if (state[JOYBUY_AUTO_SYNC_KEY] === undefined) await chrome.storage.local.set({ [JOYBUY_AUTO_SYNC_KEY]: true });
+}
+void ensureJoybuySyncAlarm();
+chrome.runtime.onStartup.addListener(() => { void ensureJoybuySyncAlarm(); });
+chrome.runtime.onInstalled.addListener(() => { void ensureJoybuySyncAlarm(); });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === JOYBUY_SYNC_ALARM) {
+    void runJoybuySync(false).catch((error) => console.warn("Joybuy sync alarm:", error));
+  }
+  if (alarm.name === JOYBUY_SYNC_CONTINUE_ALARM) void resumeJoybuySync();
+});
+
+async function resumeJoybuySync() {
+  const { joybuySyncManualResume = false } = await chrome.storage.local.get("joybuySyncManualResume");
+  await chrome.storage.local.remove("joybuySyncManualResume");
+  try { await runJoybuySync(joybuySyncManualResume); }
+  catch (error) { console.warn("Joybuy sync continuation:", error); }
+}
+
+function joybuyIdFromUrl(value) {
+  try { return new URL(value).pathname.match(/\/(?:dp\/[^/]+\/|dg\/|landingPage\/dp\/)(\d{6,20})(?:\/|$)/i)?.[1] || ""; }
+  catch { return ""; }
+}
+
+function waitForTabComplete(tabId, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      error ? reject(error) : resolve();
+    };
+    const onUpdated = (changedId, changeInfo) => { if (changedId === tabId && changeInfo.status === "complete") finish(); };
+    const timer = setTimeout(() => finish(new Error("Joybuy-Seite hat nicht rechtzeitig geladen.")), timeoutMs);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId).then((tab) => { if (tab.status === "complete") finish(); }).catch(finish);
+  });
+}
+
+async function reportJoybuyPending(item, reason) {
+  return globalThis.AutoListerCloud.reportJoybuySync({ id: item.id, sourceUrl: item.source_url, status: "verification_pending", reason: String(reason || "Joybuy-Seite konnte nicht sicher geprüft werden.").slice(0, 300) });
+}
+
+function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function activeToastTabId() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    return tab?.id ?? null;
+  } catch { return null; }
+}
+
+async function notifyJoybuyToast(tabId, payload) {
+  if (tabId == null) return;
+  try { await chrome.tabs.sendMessage(tabId, { type: "AUTO_LISTER_JOYBUY_SYNC_TOAST", ...payload }); }
+  catch { /* No toast-capable content script on this page. */ }
+}
+
+async function syncJoybuyItem(item, tabId) {
+  let result;
+  try { result = await chrome.tabs.sendMessage(tabId, { type: "EXTRACT_JOYBUY_SYNC" }); }
+  catch (error) {
+    await reportJoybuyPending(item, error?.message || "Joybuy-Seite konnte nicht gelesen werden.");
+    return { pending: true };
+  }
+  const snapshot = result?.snapshot;
+  const expectedId = joybuyIdFromUrl(item.source_url);
+  if (!result?.ok || !snapshot || snapshot.supplierProductId !== expectedId || !Number.isFinite(Number(snapshot.priceEur)) || Number(snapshot.priceEur) <= 0 || typeof snapshot.inStock !== "boolean") {
+    await reportJoybuyPending(item, result?.error || "Preis, Bestand oder Produktidentität konnte nicht verifiziert werden.");
+    return { pending: true, blocked: Boolean(result?.blocked) };
+  }
+  const report = await globalThis.AutoListerCloud.reportJoybuySync({
+    id: item.id, sourceUrl: item.source_url, status: "verified", sourceProductId: snapshot.supplierProductId,
+    priceEur: Number(snapshot.priceEur), inStock: snapshot.inStock,
+  });
+  return { pending: false, changed: Boolean(report.changed) };
+}
+
+async function runJoybuySync(manual = false) {
+  if (joybuySyncInFlight) return { checked: 0, pending: 0, waiting: 0, busy: true };
+  joybuySyncInFlight = true;
+  const toastTabId = await activeToastTabId();
+  let checked = 0;
+  let pending = 0;
+  let processed = 0;
+  let empty = false;
+  let fatal = false;
+  let blocked = false;
+  let queueTotal = JOYBUY_RUN_BATCH_LIMIT;
+  const startedAt = new Date().toISOString();
+  try {
+    const auth = await globalThis.AutoListerCloud.status();
+    if (!auth.authenticated) {
+      const result = { checked, pending, processed, authenticated: false, paused: false };
+      await chrome.storage.local.set({ [JOYBUY_SYNC_STATUS_KEY]: { ...result, checkedAt: new Date().toISOString() } });
+      await notifyJoybuyToast(toastTabId, { state: "warning", text: "AutoLister-Anmeldung erforderlich" });
+      return result;
+    }
+    const setting = await chrome.storage.local.get(JOYBUY_AUTO_SYNC_KEY);
+    if (!manual && setting[JOYBUY_AUTO_SYNC_KEY] === false) return { checked, pending, paused: true };
+    const verificationPause = await chrome.storage.local.get(JOYBUY_SYNC_PAUSED_KEY);
+    if (!manual && verificationPause[JOYBUY_SYNC_PAUSED_KEY]) return { checked, pending, paused: true, reason: "verification" };
+    if (manual) await chrome.storage.local.remove(JOYBUY_SYNC_PAUSED_KEY);
+    await notifyJoybuyToast(toastTabId, { state: "running", text: "Joybuy-Abgleich wird gestartet …" });
+    while (processed < JOYBUY_RUN_BATCH_LIMIT) {
+      const { items = [] } = await globalThis.AutoListerCloud.getJoybuySyncQueue(manual);
+      if (!items.length) { empty = processed === 0; break; }
+      queueTotal = Math.min(processed + items.length, JOYBUY_RUN_BATCH_LIMIT);
+      for (const item of items) {
+        if (processed >= JOYBUY_RUN_BATCH_LIMIT) break;
+        let tabId = null;
+        try {
+          const url = new URL(String(item.source_url || ""));
+          if (url.protocol !== "https:" || !/(^|\.)joybuy\.de$/i.test(url.hostname) || !joybuyIdFromUrl(url.href)) {
+            throw new Error("Ungültige Joybuy-Produktadresse in der Warteschlange.");
+          }
+          const tab = await chrome.tabs.create({ url: url.href, active: false });
+          tabId = tab.id;
+          if (!tabId) throw new Error("Chrome konnte den Joybuy-Hintergrundtab nicht erstellen.");
+          await waitForTabComplete(tabId);
+          await delay(2500);
+          const outcome = await syncJoybuyItem(item, tabId);
+          if (outcome.pending) pending += 1; else checked += 1;
+          if (outcome.blocked) blocked = true;
+        } catch (error) {
+          try {
+            await reportJoybuyPending(item, error?.message || "Joybuy-Seite konnte nicht sicher geprüft werden.");
+            pending += 1;
+          } catch (reportError) {
+            console.warn("Joybuy verification report failed:", reportError);
+            fatal = true;
+          }
+        } finally {
+          if (tabId) { try { await chrome.tabs.remove(tabId); } catch {} }
+        }
+        processed += 1;
+        await notifyJoybuyToast(toastTabId, { state: "running", text: `Joybuy-Bestand wird geprüft (${processed} / ${queueTotal} in diesem Durchlauf) …` });
+        if (fatal || blocked || processed >= JOYBUY_RUN_BATCH_LIMIT) break;
+        await delay(2500);
+      }
+      if (fatal || blocked) break;
+    }
+    const continuing = !fatal && !blocked && !empty && processed >= JOYBUY_RUN_BATCH_LIMIT;
+    if (continuing) {
+      await chrome.storage.local.set({ joybuySyncManualResume: manual });
+      chrome.alarms.create(JOYBUY_SYNC_CONTINUE_ALARM, { delayInMinutes: 0.5 });
+    }
+    if (blocked) await chrome.storage.local.set({ [JOYBUY_SYNC_PAUSED_KEY]: true });
+    const result = { checked, pending, processed, continuing, empty, paused: blocked, blocked };
+    const checkedAt = new Date().toISOString();
+    const saved = { [JOYBUY_SYNC_STATUS_KEY]: { ...result, checkedAt, startedAt } };
+    if (!fatal && !blocked) saved[JOYBUY_LAST_SUCCESS_KEY] = checkedAt;
+    await chrome.storage.local.set(saved);
+    const summary = blocked
+      ? `Sicherheitsprüfung erkannt; Warteschlange pausiert. ${pending} Produkt(e) warten auf Verifizierung.`
+      : `${checked} Joybuy-Prüfung(en) bestätigt; ${pending} warten auf Verifizierung${continuing ? "; Fortsetzung geplant" : ""}.`;
+    await recordPipelineEvent({ stage: "JOYBUY_SYNC", message: summary, checkedAt });
+    await notifyJoybuyToast(toastTabId, { state: blocked || pending || fatal ? "warning" : "success", text: blocked ? "Sicherheitsprüfung erkannt · Sync pausiert" : fatal ? "Sync mit Fehler beendet" : `${checked} geprüft · ${pending} ausstehend${continuing ? " · Fortsetzung läuft" : " · abgeschlossen"}` });
+    return result;
+  } catch (error) {
+    const checkedAt = new Date().toISOString();
+    const result = { checked, pending, processed, failed: true, paused: false, error: String(error?.message || error).slice(0, 300) };
+    await chrome.storage.local.set({ [JOYBUY_SYNC_STATUS_KEY]: { ...result, checkedAt, startedAt } });
+    await notifyJoybuyToast(toastTabId, { state: "warning", text: "Joybuy-Sync konnte nicht abgeschlossen werden" });
+    throw error;
+  } finally { joybuySyncInFlight = false; }
+}
 
 function decodeHtml(value) {
   return value
@@ -340,7 +409,6 @@ async function trackProduct(product) {
     },
   };
   await chrome.storage.local.set({ trackedProducts });
-  await ensureAlarm();
   return trackedProducts[product.asin];
 }
 
@@ -449,6 +517,7 @@ async function createDraft(product) {
       returnPolicyId: settings.returnPolicyId,
     },
     autoPublish: settings.autoPublish === true,
+    applyCustomFrame: settings.customImageOverlay !== false,
   };
   await recordPipelineEvent({ stage: 'SERVER_UPLOAD', message: 'Ürün URL’si ve seçenekler sunucuya aktarılıyor; ürün ve görseller sunucuda işleniyor.' });
   return globalThis.AutoListerCloud.createEbayDraft(listing);
@@ -466,7 +535,7 @@ async function dashboardState() {
 }
 
 async function syncLegacyMappingWithBackend(mapping, method = "POST") {
-  if (method !== "POST") throw new Error("Cloud mapping removal is not available.");
+  if (method !== "POST") return { synced: false, unavailable: true };
   return { synced: true, result: await globalThis.AutoListerCloud.request("/automation/mapping", mapping) };
 }
 
@@ -512,45 +581,70 @@ async function refreshPublishedDraftFromOpenAmazonTab(draftId, sourceId) {
   const response = await extractProductFromTab(tab.id);
   if (!response?.ok || !response.product) throw new Error(response?.error || "Amazon ürün verisi yeniden okunamadı.");
   const settings = await ensureSettings();
-  const gallery = await buildProcessedGallery(response.product, settings);
+  const imageUrls = originalGalleryUrls(response.product);
+  if (!imageUrls.length) throw new Error("Amazon ürününde yayınlanabilir görsel bulunamadı.");
   const refreshResponse = await fetchWithTimeout(`${settings.apiBaseUrl.replace(/\/$/, "")}/ebay/drafts/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       draftId,
-      processedImageData: gallery.images.map(({ dataUrl, mimeType, cropRatio, width, height }) => ({ dataUrl, mimeType, cropRatio, width, height })),
+      imageUrls,
+      applyCustomFrame: settings.customImageOverlay !== false,
       description: response.product.descriptionHtml || response.product.description || "",
       itemSpecifics: response.product.itemSpecifics || {},
     }),
   }, 45_000);
   const body = await refreshResponse.json().catch(() => ({}));
   if (!refreshResponse.ok) throw new Error(body.message || `Canlı ilan yenileme HTTP ${refreshResponse.status} döndürdü.`);
-  return { ...body, processedImageCount: gallery.images.length };
+  return { ...body, imageCount: imageUrls.length };
 }
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === MONITOR_ALARM) void monitorProducts();
-});
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.action === "PROCESS_GALLERY_IMAGES") {
-    ensureSettings().then((settings) => processGalleryImages(message.urls, { customImageOverlay: settings.customImageOverlay }))
-      .then((result) => sendResponse({ success: true, ...result }))
-      .catch((error) => sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }));
-    return true;
-  }
-
   const handler = async () => {
-    const privileged = ["CLOUD_LOGIN", "CLOUD_LOGOUT", "CLOUD_STATUS", "SAVE_CLOUD_PRODUCT", "CREATE_EBAY_DRAFT", "CHECK_BRIDGE"];
+    const privileged = ["CLOUD_LOGIN", "CLOUD_LOGOUT", "CLOUD_STATUS", "SAVE_CLOUD_PRODUCT", "SAVE_FAVORITE", "IMPORT_SUPPLIER_DRAFT", "CREATE_EBAY_DRAFT", "CHECK_BRIDGE", "JOYBUY_SYNC_NOW"];
     if (privileged.includes(message?.type) && (_sender.id !== chrome.runtime.id || _sender.url !== chrome.runtime.getURL("popup.html"))) {
       throw new Error("Untrusted extension sender.");
     }
     switch (message?.type) {
+      case "SYNC_AMAZON_SUPPLIER_TRACKING": {
+        const sourceUrl = String(_sender.url || "");
+        if (_sender.id !== chrome.runtime.id || !/^https:\/\/(?:www\.)?amazon\.de\//i.test(sourceUrl)
+          || !/(?:\/gp\/your-account\/order-history|\/progress-tracker\/package\/|\/gp\/your-account\/ship-track)/i.test(new URL(sourceUrl).pathname)) {
+          throw new Error("Amazon-Tracking darf nur von einer unterstützten Amazon-Bestellseite gesendet werden.");
+        }
+        return globalThis.AutoListerCloud.syncAmazonSupplierTracking(message.shipment);
+      }
       case "CHECK_BRIDGE": return globalThis.AutoListerCloud.check();
       case "CLOUD_LOGIN": return globalThis.AutoListerCloud.login(message.email, message.password);
       case "CLOUD_LOGOUT": return globalThis.AutoListerCloud.logout();
       case "CLOUD_STATUS": return globalThis.AutoListerCloud.status();
       case "SAVE_CLOUD_PRODUCT": return createDraft(message.product);
+      case "SAVE_FAVORITE": return globalThis.AutoListerCloud.saveFavorite(message.product);
+      case "IMPORT_SUPPLIER_DRAFT": return globalThis.AutoListerCloud.importSupplierDraft(message.product);
+      case "JOYBUY_SYNC_NOW": return runJoybuySync(true);
+      case "SYNC_AMAZON_TRACKING_PAGE": {
+        if (_sender.id !== chrome.runtime.id || _sender.url !== chrome.runtime.getURL("popup.html")) throw new Error("Untrusted extension sender.");
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const url = new URL(tab?.url || "");
+        if (!/^www\.amazon\.de$/i.test(url.hostname) || !/(?:\/gp\/your-account\/order-history|\/progress-tracker\/package\/|\/gp\/your-account\/ship-track)/i.test(url.pathname)) {
+          throw new Error("Öffne zuerst deine Amazon-Bestellübersicht oder die Paketverfolgung.");
+        }
+        let extracted;
+        try { extracted = await chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_AMAZON_TRACKING" }); }
+        catch {
+          await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["amazonOrders.js"] });
+          extracted = await chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_AMAZON_TRACKING" });
+        }
+        if (!extracted?.ok) throw new Error(extracted?.error || "Amazon-Bestelldaten konnten nicht gelesen werden.");
+        const shipments = Array.isArray(extracted.shipments) ? extracted.shipments : [];
+        if (!shipments.length) return { synced: 0, failed: 0, message: "Keine versandten Bestellungen mit sicher erkannten Trackingdaten gefunden." };
+        let synced = 0; const errors = [];
+        for (const shipment of shipments) {
+          try { await globalThis.AutoListerCloud.syncAmazonSupplierTracking(shipment); synced++; }
+          catch (error) { errors.push(error instanceof Error ? error.message : String(error)); }
+        }
+        return { synced, failed: errors.length, errors: errors.slice(0, 5) };
+      }
       case "CREATE_EBAY_DRAFT":
         return createDraft(message.product);
       case "REMEMBER_MANUAL_PRICE": {
@@ -603,7 +697,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         };
         await chrome.storage.local.set({ legacyMappings, trackedProducts });
         mapping.cloud = await syncLegacyMappingWithBackend(mapping);
-        await ensureAlarm();
         return mapping;
       }
       case "REMOVE_LEGACY_MAPPING": {
@@ -620,9 +713,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return { schemaVersion: 1, exportedAt: new Date().toISOString(), ...state };
       }
       case "SAVE_SETTINGS": {
-        const settings = { ...DEFAULT_SETTINGS, ...(message.settings ?? {}), settingsVersion: SETTINGS_VERSION };
+        const settings = { ...(await ensureSettings()), ...(message.settings ?? {}), settingsVersion: SETTINGS_VERSION };
         await chrome.storage.local.set({ settings });
-        await ensureAlarm();
         return settings;
       }
       case "CLEAR_MONITOR_CHANGES":

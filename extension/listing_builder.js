@@ -55,11 +55,15 @@
 
   function cleanGallery(assets) {
     try {
-      if (!assets?.length || assets[0].overlayApplied !== true) throw new Error("Ana gorsel rozetlenmeden gonderilemez.");
+      if (!assets?.length) throw new Error("En az bir islenmis ana gorsel gerekli.");
+      const primary = assets[0];
+      if (primary.overlayApplied !== true || primary.badgeLayout !== "REFERENCE_BADGE_LAYOUT_V2" || Math.min(primary.width || 0, primary.height || 0) < 1200) {
+        throw new Error("Ana görsel kalite kontrolü başarısız: referans ilandaki sembol şablonu, boyutu veya konumu doğrulanamadı. İlan eBay'e gönderilmedi.");
+      }
       const seen = new Set();
       return assets.filter((asset, index) => {
-      if (!/^data:image\/jpeg;base64,.+/.test(asset.dataUrl || "") || !asset.pixelHash || asset.pipelineVersion !== 4 || asset.width < 500 || asset.height < 500) throw new Error("Gecersiz islenmis galeri.");
-      if (index > 0 && asset.overlayApplied) throw new Error("Rozet yalnizca ana gorselde olabilir.");
+      if (!/^data:image\/jpeg;base64,.+/.test(asset.dataUrl || "") || !asset.pixelHash || asset.pipelineVersion !== 8 || asset.width < 500 || asset.height < 500) throw new Error("Gecersiz islenmis galeri.");
+      if (index > 0 && asset.overlayApplied) throw new Error("Referans rozetleri yalnızca ana görselde olabilir.");
       if (seen.has(asset.pixelHash)) return false;
       seen.add(asset.pixelHash);
       return true;

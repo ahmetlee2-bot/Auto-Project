@@ -49,6 +49,20 @@
     if (!response.ok) throw new Error(body.error || `Cloud HTTP ${response.status}`);
     return body;
   }
+  async function extensionApi(path, payload) {
+    let token = await accessToken();
+    const send = () => fetch(`https://autolister-app.de/api/extension/${path}`, {
+      method: payload === undefined ? 'GET' : 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+      cache: 'no-store', signal: AbortSignal.timeout(30000),
+    });
+    let response = await send();
+    if (response.status === 401) { token = await accessToken(true); response = await send(); }
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Extension API HTTP ${response.status}`);
+    return body;
+  }
   async function logout() {
     await chrome.storage.session.remove(SESSION_KEY);
     await chrome.storage.local.remove(['backendAccessToken', 'supabaseSession']);
@@ -71,13 +85,48 @@
       manualSalePrice: product.manualSalePrice || null,
       quantity: product.quantity === undefined ? 1 : product.quantity,
       autoPublish: product.autoPublish === true,
+      applyCustomFrame: product.applyCustomFrame !== false,
       imageRightsConfirmed: product.imageRightsConfirmed === true,
     });
     if (!draft.jobId) throw new Error('Der AutoLister-Server hat den Auftrag nicht bestätigt.');
     return { ...draft, status: 'PROCESSING', serverQueued: true };
   }
+  async function importSupplierDraft(product) {
+    const token = await accessToken();
+    const response = await fetch("https://autolister-app.de/api/drafts/import-supplier", {method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({sourceUrl:product.sourceUrl,product}),signal:AbortSignal.timeout(90000)});
+    const body = await response.json().catch(()=>({}));
+    if(!response.ok || !body.draftId) throw new Error(body.error || `Produktimport HTTP ${response.status}`);
+    return body;
+  }
+  async function syncAmazonSupplierTracking(shipment) {
+    const token = await accessToken();
+    const response = await fetch("https://autolister-app.de/api/orders/sync-supplier-tracking", {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(shipment), cache: "no-store", signal: AbortSignal.timeout(30000),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Tracking-Synchronisierung HTTP ${response.status}`);
+    return body;
+  }
+  async function saveFavorite(product) {
+    const token = await accessToken();
+    const response = await fetch('https://autolister-app.de/api/favorites/add', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        asin: product.asin, title: product.title,
+        imageUrl: product.images?.[0] || '', amazonUrl: product.amazonUrl || product.sourceUrl,
+        images: product.images || [],
+        amazonPrice: product.price, isPrime: product.isPrime === true,
+      }), signal: AbortSignal.timeout(30000),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || !body.favorite?.id) throw new Error(body.error || `Favori kaydı başarısız (HTTP ${response.status}).`);
+    return body.favorite;
+  }
   globalThis.AutoListerCloud = {
-    request, saveProduct, createEbayDraft, logout,
+    request, saveProduct, createEbayDraft, saveFavorite, importSupplierDraft, syncAmazonSupplierTracking, logout,
+    async getJoybuySyncQueue(force = false) { return extensionApi(`sync-queue${force ? '?force=1' : ''}`); },
+    async reportJoybuySync(report) { return extensionApi('sync-report', report); },
     async login(email, password) { await authenticate('password', { email, password }); return { email: (await session()).email }; },
     async status() { const current = await session(); return { authenticated: Boolean(current), email: current?.email || '' }; },
     async check() {

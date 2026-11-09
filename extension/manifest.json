@@ -1,33 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "AutoLister – Amazon to eBay",
-  "version": "1.0.5",
-  "description": "Amazon-Produkte sicher erfassen, als eBay-Entwürfe vorbereiten und Preise sowie Bestand überwachen.",
+  "name": "AutoLister: Multi-Supplier eBay Lister & Repricer",
+  "version": "1.1.0",
+  "description": "Amazon.de- und Joybuy.de-Produkte mit AutoLister für eBay vorbereiten. Preis- und Bestandsprüfung, SEO-Titel und Margenkalkulation.",
   "minimum_chrome_version": "120",
   "permissions": [
     "tabs",
-    "alarms",
     "storage",
-    "scripting"
+    "scripting",
+    "alarms"
   ],
   "host_permissions": [
     "https://*.amazon.de/*",
-    "https://*.amazon.com/*",
-    "https://*.amazon.co.uk/*",
-    "https://*.amazon.fr/*",
-    "https://*.amazon.it/*",
-    "https://*.amazon.es/*",
     "https://*.media-amazon.com/*",
     "https://*.ssl-images-amazon.com/*",
     "https://images-na.ssl-images-amazon.com/*",
     "https://api.autolister-app.de/*",
-    "https://rdwqrygkkzzouiamrxwq.supabase.co/*"
+    "https://autolister-app.de/*",
+    "https://rdwqrygkkzzouiamrxwq.supabase.co/*",
+    "https://*.joybuy.de/*",
+    "https://*.joybuy.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Amazon ürününü eBay taslağına aktar",
+    "default_title": "AutoLister: Produkt auf eBay vorbereiten",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -49,12 +47,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.amazon.de/*",
-        "https://*.amazon.com/*",
-        "https://*.amazon.co.uk/*",
-        "https://*.amazon.fr/*",
-        "https://*.amazon.it/*",
-        "https://*.amazon.es/*"
+        "https://*.amazon.de/*"
       ],
       "js": [
         "seoProcessor.js",
@@ -62,7 +55,28 @@
         "descriptionProcessor.js",
         "listing_builder.js",
         "amazon_parser.js",
-        "content.js"
+        "content.js",
+        "amazonOrders.js",
+        "syncToast.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "run_at": "document_idle",
+      "matches": [
+        "https://*.joybuy.de/*"
+      ],
+      "js": [
+        "joybuy_content.js",
+        "syncToast.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://autolister-app.de/*"
+      ],
+      "js": [
+        "syncToast.js"
       ],
       "run_at": "document_idle"
     }

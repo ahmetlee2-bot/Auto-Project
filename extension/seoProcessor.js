@@ -25,8 +25,9 @@
 
   function resolveBrand(specifics = {}, sourceTitle = "") {
     const entries = Object.entries(specifics);
-    const direct = entries.find(([key]) => /^(marke|brand)$/i.test(clean(key)))?.[1]?.[0];
-    const manufacturer = entries.find(([key]) => /^(hersteller|manufacturer)$/i.test(clean(key)))?.[1]?.[0];
+    const normalizedKey = (key) => clean(key).replace(/[:：]+$/, "").trim();
+    const direct = entries.find(([key]) => /^(marke|brand)$/i.test(normalizedKey(key)))?.[1]?.[0];
+    const manufacturer = entries.find(([key]) => /^(hersteller|manufacturer)$/i.test(normalizedKey(key)))?.[1]?.[0];
     const candidate = clean(direct || manufacturer);
     if (candidate && !/^(unbranded|generic|unbekannt|n\/?a)$/i.test(candidate) && candidate.length <= 80) return candidate;
     // A missing brand must remain missing. Guessing "Unbranded" conflicts with branded packaging.
@@ -40,7 +41,9 @@
   function normalizeSpecifics(rawSpecifics = {}) {
     const specifics = {};
     for (const [rawKey, rawValue] of Object.entries(rawSpecifics)) {
-      const key = clean(rawKey);
+      // Amazon sometimes renders labels as "Hersteller :".  The punctuation is
+      // presentation only and must not prevent label mapping or brand detection.
+      const key = clean(rawKey).replace(/[:：]+$/, "").trim();
       const value = clean(rawValue);
       if (!key || !value || value.length > 120) continue;
       const normalizedKey = LABELS[key.toLocaleLowerCase("de-DE")] || titleCase(key);

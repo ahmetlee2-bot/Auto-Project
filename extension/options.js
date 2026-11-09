@@ -8,28 +8,19 @@ let legacyMappings = {};
 
 function normalizedStatus(item) { return String(item?.status || item?.listingStatus || item?.listing_status || "").trim().toLowerCase(); }
 function isPublished(item) { return ["active", "published", "gelistet"].includes(normalizedStatus(item)); }
-function isPoolDraft(item) { return ["draft", "ready"].includes(normalizedStatus(item)); }
+function isPoolDraft(item) { return ["ready", "draft"].includes(normalizedStatus(item)); }
 function mappingFor(item) {
   const itemId = String(item?.listingId || item?.ebay_item_id || "");
   const saved = legacyMappings[itemId];
   if (saved?.asin || saved?.amazonUrl) return saved;
   const amazonUrl = item?.amazonUrl || item?.sourceUrl || "";
-  const asinCandidate = item?.amazonAsin || item?.asin || item?.sourceId || "";
-  const asin = String(asinCandidate).toUpperCase().match(/(?:^|\/)(B0[A-Z0-9]{8})(?:$|[/?])/i)?.[1]
-    || String(asinCandidate).toUpperCase().match(/^B0[A-Z0-9]{8}$/)?.[0]
-    || String(amazonUrl).toUpperCase().match(/\/(?:DP|GP\/PRODUCT)\/(B0[A-Z0-9]{8})(?:[/?]|$)/)?.[1]
-    || "";
+  const candidate = String(item?.amazonAsin || item?.asin || item?.sourceId || "").toUpperCase();
+  const asin = candidate.match(/^B0[A-Z0-9]{8}$/)?.[0] || String(amazonUrl).toUpperCase().match(/\/(?:DP|GP\/PRODUCT)\/(B0[A-Z0-9]{8})(?:[/?]|$)/)?.[1] || "";
   return asin || amazonUrl ? { itemId, asin: asin || "Amazon", amazonUrl } : null;
 }
-function routedActiveListings() {
-  const active = liveListings.filter(isPublished);
-  return { mapped: active.filter((item) => Boolean(mappingFor(item))), unmatched: active.filter((item) => !mappingFor(item)) };
-}
+function routedActiveListings() { const active = liveListings.filter(isPublished); return { mapped: active.filter((item) => Boolean(mappingFor(item))), unmatched: active.filter((item) => !mappingFor(item)) }; }
 
 function status(target, message, error = false) { byId(target).textContent = message; byId(target).classList.toggle("error", error); }
-function showBridgeError(error) { const banner = byId("bridgeBanner"); if (!banner) return; byId("bridgeBannerMessage").textContent = AlltaghausBridge.displayError(error); banner.hidden = false; }
-function emptyRow(target, columns) { const row = document.createElement("tr"); row.innerHTML = `<td class="empty-state" colspan="${columns}">Keine Daten verfügbar</td>`; byId(target).replaceChildren(row); }
-function showToast(message) { let toast = byId("toast"); if (!toast) { toast = document.createElement("div"); toast.id = "toast"; Object.assign(toast.style, { position: "fixed", zIndex: "20", top: "18px", right: "22px", padding: "14px 18px", borderRadius: "12px", color: "#fff", background: "#14885f", boxShadow: "0 16px 36px rgb(20 54 39 / 20%)", fontSize: "13px", fontWeight: "700" }); document.body.append(toast); } toast.textContent = message; toast.hidden = false; clearTimeout(showToast.timer); showToast.timer = setTimeout(() => { toast.hidden = true; }, 4200); }
 function baseUrl() { return byId("apiBaseUrl").value.replace(/\/$/, ""); }
 async function command(type, payload = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...payload });
@@ -43,7 +34,7 @@ async function request(path, options = {}) {
   const { supabaseSession = null } = await chrome.storage.local.get(["supabaseSession"]);
   const headers = { ...(options.headers || {}) };
   if (supabaseSession?.access_token) headers.Authorization = `Bearer ${supabaseSession.access_token}`;
-  try { return await globalThis.AlltaghausBridge.requestJson(`${baseUrl()}${path}`, { ...options, headers }, 90000); } catch (error) { showBridgeError(error); throw error; }
+  return globalThis.AlltaghausBridge.requestJson(`${baseUrl()}${path}`, { ...options, headers }, 90000);
 }
 function marginFor(draft) { const source = Number(String(draft.sourcePriceText || "").replace(/[^0-9,]/g, "").replace(",", ".")); return source ? Math.max(0, ((Number(draft.price) / source) - 1) * 100) : null; }
 function sourceCost(draft) { return Number(String(draft.sourcePriceText || "").replace(/[^0-9,]/g, "").replace(",", ".")) || 0; }
@@ -77,12 +68,13 @@ function renderRows() {
       finally { savePrice.disabled = false; }
     };
     row.children[4].replaceChildren(priceInput, savePrice);
-    const publishButton = document.createElement("button"); publishButton.className = "publish small"; publishButton.textContent = "Jetzt veröffentlichen"; publishButton.onclick = () => void publish([draft.id]); actions.append(publishButton);
+    if (draft.status !== "PUBLISHED") { const publishButton = document.createElement("button"); publishButton.className = "publish small"; publishButton.textContent = "Jetzt veröffentlichen"; publishButton.onclick = () => void publish([draft.id]); actions.append(publishButton); }
+    if (draft.status === "PUBLISHED") { const refresh = document.createElement("button"); refresh.className = "quiet small"; refresh.textContent = "Bilder & HTML erneuern"; refresh.onclick = () => void refreshPublishedDraft(draft); actions.append(refresh); }
     const editLink = document.createElement("button"); editLink.className = "quiet small"; editLink.textContent = "URL anpassen"; editLink.onclick = () => void editAmazonLink(draft); actions.append(editLink);
     const remove = document.createElement("button"); remove.className = "delete small"; remove.textContent = draft.status === "PUBLISHED" ? "Aus Dashboard entfernen" : "Löschen"; remove.onclick = () => void removeDraft(draft.id, draft.status === "PUBLISHED"); actions.append(remove);
     return row;
   });
-  rows.length ? byId("draftRows").replaceChildren(...rows) : emptyRow("draftRows", 10);
+  byId("draftRows").replaceChildren(...rows);
 }
 
 function renderLive() {
@@ -93,29 +85,28 @@ function renderLive() {
     const mapping = mappingFor(draft);
     const link = draft.ebayListingUrl || (draft.listingId ? `https://www.ebay.de/itm/${encodeURIComponent(draft.listingId)}` : "");
     const image = draft.imageUrls?.[0] || draft.imageUrl || "";
-    row.innerHTML = `<td>${image ? `<img src="${image}" alt="" loading="lazy">` : "—"}</td><td><strong>${draft.title || "Ohne Titel"}</strong></td><td>${Number(draft.quantity) > 0 ? "Auf Lager" : "Ausverkauft"}</td><td>${link ? `<a href="${link}" target="_blank" rel="noreferrer">${itemId}</a>` : itemId}</td><td>${mapping ? `<span class="badge live">${mapping.asin}</span>` : `<span class="badge ready">Nicht verknüpft</span>`}</td><td><span class="badge live">Aktiv</span></td><td><input class="live-price" type="number" min="0.01" step="0.01" value="${draft.price || ""}"></td><td><input class="live-quantity" type="number" min="0" step="1" value="${draft.quantity ?? 0}"></td><td></td>`;
+    row.innerHTML = `<td>${image ? `<img src="${image}" alt="" loading="lazy">` : "—"}</td><td><strong>${draft.title || "Ohne Titel"}</strong></td><td>${Number(draft.quantity) > 0 ? "Auf Lager" : "Ausverkauft"}</td><td>${link ? `<a href="${link}" target="_blank" rel="noreferrer">${itemId}</a>` : itemId}</td><td><span class="badge live">${mapping.asin || "Verknüpft"}</span></td><td><span class="badge live">Aktiv</span></td><td><input class="live-price" type="number" min="0.01" step="0.01" value="${draft.price || ""}"></td><td><input class="live-quantity" type="number" min="0" step="1" value="${draft.quantity ?? 0}"></td><td></td>`;
     const view = document.createElement("button"); view.className = "quiet small"; view.textContent = "Anzeige öffnen"; view.onclick = () => openLiveListing(draft); row.lastElementChild.append(view);
     const update = document.createElement("button"); update.className = "publish small"; update.textContent = "Aktualisieren"; update.onclick = () => void updateLiveListing(draft, row); row.lastElementChild.append(update);
     return row;
   });
-  rows.length ? byId("liveRows").replaceChildren(...rows) : emptyRow("liveRows", 9); byId("liveBadge").textContent = live.length;
+  byId("liveRows").replaceChildren(...rows); byId("liveBadge").textContent = live.length;
 }
 
 function renderLegacyMappings() {
   const unmatched = routedActiveListings().unmatched;
   const rows = unmatched.map((listing) => {
     const row = document.createElement("tr");
-    const image = listing.imageUrls?.[0] || listing.imageUrl || "";
     const itemId = listing.listingId || listing.ebay_item_id || "";
+    const image = listing.imageUrls?.[0] || listing.imageUrl || "";
     row.innerHTML = `<td>${image ? `<img src="${image}" alt="" loading="lazy">` : "—"}</td><td><a href="https://www.ebay.de/itm/${encodeURIComponent(itemId)}" target="_blank" rel="noreferrer">${itemId}</a></td><td><strong>${listing.title || "Ohne Titel"}</strong></td><td><span class="badge ready">Nicht verknüpft</span></td><td></td>`;
-    const connect = document.createElement("button");
-    connect.className = "publish small"; connect.textContent = "Verbinden";
+    const connect = document.createElement("button"); connect.className = "publish small"; connect.textContent = "Verbinden";
     connect.onclick = () => { byId("legacyItemId").value = itemId; byId("legacyAmazonUrl").focus(); };
     row.onclick = (event) => { if (!event.target.closest("a,button")) connect.click(); };
     row.lastElementChild.append(connect);
     return row;
   });
-  rows.length ? byId("legacyRows").replaceChildren(...rows) : emptyRow("legacyRows", 5);
+  byId("legacyRows").replaceChildren(...rows);
   byId("legacyBadge").textContent = unmatched.length;
 }
 
@@ -168,17 +159,17 @@ function renderArchive() {
     const remove = document.createElement("button"); remove.className = "delete small"; remove.textContent = "Endgültig löschen"; remove.onclick = () => void deleteArchivedDraft(draft.id); row.lastElementChild.append(remove);
     return row;
   });
-  rows.length ? byId("archiveRows").replaceChildren(...rows) : emptyRow("archiveRows", 5);
+  byId("archiveRows").replaceChildren(...rows);
   byId("archiveBadge").textContent = archivedDrafts.length;
 }
 
 function renderStats() {
-  const waiting = drafts.filter(isPoolDraft); const live = liveListings.filter(isPublished).filter((item, index, list) => list.findIndex((entry) => (entry.listingId || entry.ebay_item_id) === (item.listingId || item.ebay_item_id)) === index);
+  const waiting = drafts.filter(isPoolDraft); const live = liveListings.filter(isPublished);
   const margins = drafts.map(marginFor).filter(Number.isFinite);
   const today = new Date().toISOString().slice(0, 10);
   const todayRevenue = orders.filter((order) => String(order.createdDate || "").slice(0, 10) === today).reduce((total, order) => total + Number(order.total || 0), 0);
   const totalProfit = live.reduce((total, draft) => total + Math.max(0, Number(draft.price || 0) - sourceCost(draft)), 0);
-  byId("waitingCount").textContent = waiting.length; byId("listedCount").textContent = live.length; byId("marginAverage").textContent = margins.length ? `${(margins.reduce((a, b) => a + b, 0) / margins.length).toFixed(1)} %` : "—"; byId("todayRevenue").textContent = euro(todayRevenue); byId("totalProfit").textContent = euro(totalProfit); byId("readyBadge").textContent = waiting.length;
+  byId("waitingCount").textContent = waiting.length; byId("listedCount").textContent = liveListings.length || live.length; byId("marginAverage").textContent = margins.length ? `${(margins.reduce((a, b) => a + b, 0) / margins.length).toFixed(1)} %` : "—"; byId("todayRevenue").textContent = euro(todayRevenue); byId("totalProfit").textContent = euro(totalProfit); byId("readyBadge").textContent = waiting.length;
 }
 
 function addressText(address = {}) { return [address.addressLine1, address.addressLine2, [address.postalCode, address.city].filter(Boolean).join(" "), address.countryCode].filter(Boolean).join("\n"); }
@@ -195,7 +186,7 @@ function renderOrders() {
       status("ordersStatus", "Adresse kopiert und Produktseite geöffnet.");
     }; row.lastElementChild.append(button); return row;
   });
-  rows.length ? byId("orderRows").replaceChildren(...rows) : emptyRow("orderRows", 5); byId("orderBadge").textContent = orders.length;
+  byId("orderRows").replaceChildren(...rows); byId("orderBadge").textContent = orders.length;
 }
 async function editAmazonLink(draft) {
   const value = window.prompt("Amazon Produktlink (amazon.de/dp/ASIN):", draft.amazonUrl || draft.sourceUrl || "");
@@ -211,6 +202,7 @@ async function load() {
   try {
     const state = await command("GET_DASHBOARD_STATE");
     for (const key of settingKeys) byId(key).value = state.settings[key] || "";
+    byId("customImageOverlay").checked = state.settings.customImageOverlay !== false;
     legacyMappings = state.legacyMappings || {};
     const [result, archive, orderResult, liveResult, cloudLegacy] = await Promise.all([
       request("/ebay/drafts"), request("/ebay/drafts/archive"),
@@ -239,12 +231,7 @@ async function publish(ids) {
   for (const originalDraftId of ids) {
     let draftId = originalDraftId;
     try {
-      const published = await request("/ebay/drafts/publish", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ draftId }) });
-      const listingId = published.listingId || published.ebay_item_id;
-      const localDraft = drafts.find((draft) => draft.id === draftId);
-      if (localDraft) Object.assign(localDraft, { status: "PUBLISHED", listingId, ebay_item_id: listingId, ebayListingUrl: listingId ? `https://www.ebay.de/itm/${listingId}` : null });
-      if (localDraft && !liveListings.some((item) => item.listingId === listingId)) liveListings.push(localDraft);
-      showToast("Produkt erfolgreich auf eBay hochgeladen");
+      await request("/ebay/drafts/publish", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ draftId }) });
       done++;
     } catch (error) {
       const failedDraft = drafts.find((draft) => draft.id === draftId);
@@ -275,7 +262,7 @@ async function refreshPublishedDraft(draft) {
   try {
     status("poolStatus", "Amazon-Galerie und HTML werden für die Live-Anzeige neu aufgebaut …");
     const result = await command("REFRESH_PUBLISHED_DRAFT_FROM_AMAZON", { draftId: draft.id, sourceId: draft.sourceId });
-    status("poolStatus", `Live-Anzeige aktualisiert: ${result.processedImageCount} bereinigte Bilder.`);
+    status("poolStatus", `Live-Anzeige aktualisiert: ${result.imageCount} Originalbilder.`);
     await load();
   } catch (error) {
     console.error("PUBLISHED DRAFT REFRESH ERROR:", { draftId: draft.id, error });
@@ -331,12 +318,8 @@ byId("selectAll").onchange = (event) => document.querySelectorAll(".pick").forEa
 byId("publishSelected").onclick = () => void publish([...document.querySelectorAll(".pick:checked")].map((box) => box.value));
 byId("resetDrafts").onclick = () => void resetDrafts();
 byId("refresh").onclick = async (event) => { const button = event.currentTarget; button.disabled = true; button.textContent = "Aktualisiere …"; await load(); await new Promise((resolve) => setTimeout(resolve, 1000)); button.disabled = false; button.textContent = "Aktualisieren"; };
-byId("saveSettings").onclick = async () => { const settings = Object.fromEntries(settingKeys.map((key) => [key, byId(key).value.trim()])); try { await command("SAVE_SETTINGS", { settings }); status("settingsStatus", "Einstellungen gespeichert."); } catch (error) { status("settingsStatus", error.message, true); } };
+byId("saveSettings").onclick = async () => { const settings = Object.fromEntries(settingKeys.map((key) => [key, byId(key).value.trim()])); settings.customImageOverlay = byId("customImageOverlay").checked; try { await command("SAVE_SETTINGS", { settings }); status("settingsStatus", "Einstellungen gespeichert."); } catch (error) { status("settingsStatus", error.message, true); } };
 byId("testConnection").onclick = async () => { try { const data = await request("/ebay/status"); status("settingsStatus", `Verbindung bereit · ${data.environment}`); } catch (error) { status("settingsStatus", error.message, true); } };
 byId("saveLegacyMapping").onclick = () => void saveLegacyMapping();
 byId("runLegacyMonitor").onclick = async () => { try { status("legacyStatus", "Amazon-Preise und Bestände werden geprüft …"); const result = await command("RUN_MONITOR_NOW"); status("legacyStatus", `${result.checked} Produkt(e) geprüft, ${result.changed} Änderung(en).`); await load(); } catch (error) { status("legacyStatus", error.message, true); } };
-byId("customImageOverlay").checked = true;
-byId("customImageOverlay").disabled = true;
-byId("customImageOverlay").title = "Hauptbild-Badges sind im aktuellen Bildprofil obligatorisch.";
-byId("bridgeBannerClose").onclick = () => { byId("bridgeBanner").hidden = true; };
 void load();

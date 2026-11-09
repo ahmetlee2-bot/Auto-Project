@@ -48,12 +48,27 @@ export async function POST(request: NextRequest, context: { params: Promise<{ st
       sourceTrackingId: body.sourceTrackingId,
       order: orderContext,
     });
+    const admin = repricerAdmin();
+    const { error: saveError } = await admin.from("order_tracking").upsert({
+      user_id: user.id, store_id: storeId, order_id: orderId,
+      source_tracking_id: String(body.sourceTrackingId || "").trim() || null,
+      tracking_number: resolved.trackingNumber, carrier_code: resolved.ebayCarrierCode,
+      provider: resolved.provider, status: "pending", last_error: null, updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,store_id,order_id" });
+    if (saveError) throw new Error(saveError.message);
+    try {
     await ebayApiRequest<null>(scope, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`, "POST", {
       lineItems,
       shippedDate: new Date().toISOString(),
       shippingCarrierCode: resolved.ebayCarrierCode,
       trackingNumber: resolved.trackingNumber,
     });
+    } catch (cause) {
+      await admin.from("order_tracking").update({ status: "error", last_error: cause instanceof Error ? cause.message : "eBay gönderimi başarısız." }).eq("user_id", user.id).eq("store_id", storeId).eq("order_id", orderId);
+      throw cause;
+    }
+    const { error: statusError } = await admin.from("order_tracking").update({ status: "submitted", last_error: null, updated_at: new Date().toISOString() }).eq("user_id", user.id).eq("store_id", storeId).eq("order_id", orderId);
+    if (statusError) return NextResponse.json({ error: "eBay takip kodunu kabul etti; yerel durum kaydedilemedi. Yeniden göndermeden siparişi yenileyin." }, { status: 502 });
     return NextResponse.json({ submitted: true, orderId, carrierCode: resolved.ebayCarrierCode, provider: resolved.provider });
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "Takip bilgisi eBay'e gönderilemedi." }, { status: 400 });
