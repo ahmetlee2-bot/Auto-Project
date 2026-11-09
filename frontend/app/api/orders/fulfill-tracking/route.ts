@@ -12,7 +12,8 @@ type EbayAddress = { postalCode?: string; city?: string; countryCode?: string };
 type EbayOrder = {
   orderId: string;
   orderFulfillmentStatus?: string;
-  lineItems?: Array<{ lineItemId: string; quantity?: number; title?: string }>;
+  buyer?: { username?: string };
+  lineItems?: Array<{ lineItemId: string; legacyItemId?: string; quantity?: number; title?: string }>;
   fulfillmentStartInstructions?: Array<{
     shippingStep?: { shipTo?: { fullName?: string; contactAddress?: EbayAddress } };
   }>;
@@ -213,7 +214,34 @@ export async function POST(request: NextRequest) {
     if (statusError) return NextResponse.json({ error: "eBay takip kodunu kabul etti; yerel durum kaydedilemedi. Siparişi yenileyin.", trackingNumber, carrierCode, walletBalance }, { status: 502 });
     if (conversionId) await admin.from("tracking_conversions").update({ status: "SENT_TO_EBAY" }).eq("id", conversionId).eq("user_id", user.id);
 
-    return NextResponse.json({ submitted: true, orderId, carrierCode, provider, trackingNumber, walletBalance });
+    let buyerMessageSent = false;
+    let buyerMessageText: string | null = null;
+    const notifyBuyer = body.notifyBuyer !== false;
+    if (notifyBuyer) {
+      const { data: portal } = await admin.from("supplier_order_tracking")
+        .select("public_tracking_number,buyer_notified_at")
+        .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId).maybeSingle();
+      if (portal?.public_tracking_number && order.buyer?.username) {
+        const trackingUrl = `https://autolister-app.de/track/${encodeURIComponent(portal.public_tracking_number)}`;
+        const recipientName = String(order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "").trim();
+        buyerMessageText = `Hallo${recipientName ? ` ${recipientName}` : ""}, Ihre Bestellung wurde auf eBay als versandt markiert. Den zuletzt erfassten Lieferstatus finden Sie unter ${trackingUrl}. Diese Statusseite ist eine interne Information und kein Tracking eines Paketdienstes. Vielen Dank für Ihren Einkauf!`;
+        const itemId = order.lineItems?.find(item => item.legacyItemId)?.legacyItemId;
+        try {
+          await ebayApiRequest<unknown>(scope, "/commerce/message/v1/send_message", "POST", {
+            otherPartyUsername: order.buyer.username,
+            messageText: buyerMessageText,
+            ...(itemId ? { reference: { referenceType: "LISTING", referenceId: itemId } } : {}),
+          });
+          buyerMessageSent = true;
+          await admin.from("supplier_order_tracking").update({ buyer_notified_at: new Date().toISOString() })
+            .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId);
+        } catch {
+          // Message permission/scopes are optional. Keep the successful fulfillment and expose copyable text.
+        }
+      }
+    }
+
+    return NextResponse.json({ submitted: true, orderId, carrierCode, provider, trackingNumber, walletBalance, buyerMessageSent, buyerMessageText });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Takip bilgisi eBay'e gönderilemedi.";
     const status = message === "INSUFFICIENT_CREDITS" ? 402 : 400;

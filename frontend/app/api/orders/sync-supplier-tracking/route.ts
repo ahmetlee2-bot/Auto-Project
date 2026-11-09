@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { bearerUser } from "../../../../lib/supabase/bearer-user";
 import { ebayApiRequest, type MarketplaceId } from "../../../../lib/ebay/multi-store";
 import { repricerAdmin } from "../../../../lib/repricer/admin";
+import { appendDeliveryStatus, DELIVERY_STATUSES, isDeliveryStatus, nextDeliveryStatus, STATUS_LABELS, type DeliveryStatus } from "../../../../lib/tracking/status-history";
 
 export const runtime = "nodejs";
 
 type EbayOrder = {
   orderId: string;
   orderFulfillmentStatus?: string;
-  fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string } } }>;
+  fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string; contactAddress?: { city?: string; postalCode?: string } } } }>;
 };
 type Store = { id: string; user_id: string; marketplace_id: MarketplaceId; status: string };
 
@@ -41,6 +42,8 @@ export async function POST(request: NextRequest) {
     const sourceTrackingNumber = cleanText(body.sourceTrackingNumber, 80).replace(/\s/g, "");
     const shareTrackingUrl = amazonShareUrl(body.shareTrackingUrl);
     const estimatedDeliveryDate = cleanText(body.estimatedDeliveryDate, 10);
+    const requestedStatus = cleanText(body.deliveryStatus, 40).toUpperCase();
+    const deliveryStatus: DeliveryStatus = isDeliveryStatus(requestedStatus) ? requestedStatus : "ORDER_RECEIVED";
     const requestedStoreId = cleanText(body.ebayStoreId, 80);
     const requestedOrderId = cleanText(body.ebayOrderId, 100);
     if (!/^\d{3}-\d{7}-\d{7}$/.test(supplierOrderId)) return NextResponse.json({ error: "Amazon-Bestellnummer ist ungültig." }, { status: 400 });
@@ -49,18 +52,23 @@ export async function POST(request: NextRequest) {
 
     const admin = repricerAdmin();
     const existing = await admin.from("supplier_order_tracking")
-      .select("store_id,ebay_order_id").eq("user_id", user.id).eq("supplier", "amazon")
+      .select("store_id,ebay_order_id,public_tracking_number,delivery_status,status_history").eq("user_id", user.id).eq("supplier", "amazon")
       .eq("supplier_order_id", supplierOrderId).maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
     if (existing.data) {
+      const oldStatus = isDeliveryStatus(existing.data.delivery_status) ? existing.data.delivery_status : "ORDER_RECEIVED";
+      const effectiveStatus = nextDeliveryStatus(oldStatus, deliveryStatus);
       const { data, error } = await admin.from("supplier_order_tracking").update({
         recipient_name: recipientName, source_carrier: sourceCarrier || null,
         source_tracking_number: sourceTrackingNumber, amazon_share_url: shareTrackingUrl,
-        estimated_delivery_date: estimatedDeliveryDate || null, synced_at: new Date().toISOString(),
+        estimated_delivery_date: estimatedDeliveryDate || null, estimated_delivery: estimatedDeliveryDate || null,
+        recipient_zip: cleanText(body.recipientZip, 20) || null, recipient_city: cleanText(body.recipientCity, 100) || null,
+        delivery_status: effectiveStatus, status_history: appendDeliveryStatus(existing.data.status_history, oldStatus, effectiveStatus),
+        synced_at: new Date().toISOString(), last_synced_at: new Date().toISOString(),
       }).eq("user_id", user.id).eq("supplier_order_id", supplierOrderId)
-        .select("store_id,ebay_order_id").single();
+        .select("store_id,ebay_order_id,public_tracking_number,delivery_status").single();
       if (error) throw new Error(error.message);
-      return NextResponse.json({ synced: true, updated: true, ebayOrderId: data.ebay_order_id, storeId: data.store_id });
+      return NextResponse.json({ synced: true, updated: true, ebayOrderId: data.ebay_order_id, storeId: data.store_id, trackingReference: data.public_tracking_number, deliveryStatus: data.delivery_status });
     }
 
     const { data: stores, error: storesError } = await admin.from("ebay_stores")
@@ -83,15 +91,22 @@ export async function POST(request: NextRequest) {
     if (candidates.length !== 1) return NextResponse.json({ error: "Mehrere offene eBay-Aufträge passen zum Empfänger. Tracking wurde nicht gespeichert, um eine falsche Bestellung zu vermeiden." }, { status: 409 });
 
     const { store, order } = candidates[0];
-    const { error } = await admin.from("supplier_order_tracking").insert({
+    const destination = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.contactAddress;
+    const observedAt = new Date().toISOString();
+    const { data, error } = await admin.from("supplier_order_tracking").insert({
       user_id: user.id, store_id: store.id, ebay_order_id: order.orderId, supplier: "amazon",
       supplier_order_id: supplierOrderId, recipient_name: recipientName, source_carrier: sourceCarrier || null,
       source_tracking_number: sourceTrackingNumber, amazon_share_url: shareTrackingUrl,
-      estimated_delivery_date: estimatedDeliveryDate || null,
-    });
+      estimated_delivery_date: estimatedDeliveryDate || null, estimated_delivery: estimatedDeliveryDate || null,
+      recipient_zip: cleanText(body.recipientZip || destination?.postalCode, 20) || null,
+      recipient_city: cleanText(body.recipientCity || destination?.city, 100) || null,
+      delivery_status: deliveryStatus,
+      status_history: [{ at: observedAt, status: deliveryStatus, description: STATUS_LABELS[deliveryStatus] }],
+      last_synced_at: observedAt,
+    }).select("public_tracking_number,delivery_status").single();
     if (error?.code === "23505") return NextResponse.json({ error: "Diese Amazon-Bestellung wurde bereits einem eBay-Auftrag zugeordnet." }, { status: 409 });
     if (error) throw new Error(error.message);
-    return NextResponse.json({ synced: true, updated: false, ebayOrderId: order.orderId, storeId: store.id });
+    return NextResponse.json({ synced: true, updated: false, ebayOrderId: order.orderId, storeId: store.id, trackingReference: data?.public_tracking_number, deliveryStatus: data?.delivery_status });
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "Lieferanten-Tracking konnte nicht synchronisiert werden." }, { status: 502 });
   }

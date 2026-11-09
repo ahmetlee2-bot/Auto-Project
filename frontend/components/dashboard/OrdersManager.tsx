@@ -7,9 +7,9 @@ import { TopUpCreditsModal } from "./TopUpCreditsModal";
 
 type EbayOrder = {
   tracking?: { source_tracking_id: string | null; tracking_number: string; carrier_code: string; provider: string | null; status: string; last_error: string | null };
-  supplierTracking?: { supplier_order_id: string; recipient_name: string; source_carrier: string | null; source_tracking_number: string; amazon_share_url: string | null; estimated_delivery_date: string | null; synced_at: string } | null;
+  supplierTracking?: { supplier_order_id: string; recipient_name: string; source_carrier: string | null; source_tracking_number: string; amazon_share_url: string | null; estimated_delivery_date: string | null; synced_at: string; public_tracking_number?: string; delivery_status?: string; last_synced_at?: string; recipient_city?: string | null; recipient_zip?: string | null; estimated_delivery?: string | null; buyer_notified_at?: string | null } | null;
   orderId: string; orderFulfillmentStatus?: string; orderPaymentStatus?: string; creationDate?: string;
-  lineItems?: Array<{ lineItemId: string; title?: string; quantity?: number }>;
+  lineItems?: Array<{ lineItemId: string; legacyItemId?: string; title?: string; quantity?: number }>;
   fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string } } }>;
 };
 type OrderRow = { storeId: string; order: EbayOrder };
@@ -42,6 +42,7 @@ export function OrdersManager() {
   const { stores, selectedStoreId } = useStores();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [fields, setFields] = useState<Record<string, TrackingFields>>({});
+  const [notifyBuyer, setNotifyBuyer] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
@@ -49,6 +50,7 @@ export function OrdersManager() {
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
 
   const loadWallet = useCallback(async () => {
     try {
@@ -129,9 +131,9 @@ export function OrdersManager() {
     setBusy(key); setError(""); setNotice("");
     try {
       const response = await fetch("/api/orders/fulfill-tracking", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, storeId, orderId }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, storeId, orderId, notifyBuyer: notifyBuyer[key] !== false }),
       });
-      const body = await response.json() as { error?: string; carrierCode?: string; trackingNumber?: string; walletBalance?: number | null; mockMode?: boolean; provider?: string };
+      const body = await response.json() as { error?: string; carrierCode?: string; trackingNumber?: string; walletBalance?: number | null; mockMode?: boolean; provider?: string; buyerMessageSent?: boolean; buyerMessageText?: string | null };
       if (!response.ok) throw new Error(body.error || "Trackingdaten konnten nicht übertragen werden.");
       if (body.mockMode) {
         setNotice(`MOCK-Test erfolgreich: ${body.provider || "3PL"} → ${body.trackingNumber}. Es wurde nichts an eBay gesendet und keine Testnummer gespeichert.`);
@@ -139,9 +141,10 @@ export function OrdersManager() {
         return;
       }
       if (typeof body.walletBalance === "number") setCreditBalance(body.walletBalance);
+      setCopyMessage(body.buyerMessageText || "");
       await loadWallet();
       await loadOrders();
-      setNotice(`Tracking wurde für Bestellung ${orderId} an eBay übermittelt${body.carrierCode ? ` (${body.carrierCode})` : ""}.`);
+      setNotice(`Tracking wurde für Bestellung ${orderId} an eBay übermittelt${body.carrierCode ? ` (${body.carrierCode})` : ""}.${notifyBuyer[key] === false ? " Käufernachricht übersprungen." : body.buyerMessageSent ? " Käufer wurde per eBay-Nachricht informiert." : body.buyerMessageText ? " Nachricht konnte nicht automatisch gesendet werden; Vorlage steht zum Kopieren bereit." : " Kein interner Statuslink für eine Nachricht vorhanden."}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Trackingdaten konnten nicht übertragen werden."); }
     finally { setBusy(""); }
   };
@@ -163,7 +166,7 @@ export function OrdersManager() {
         return <article className="proCard" key={key}>
           <div className="proToolbar"><span className="proTag">{store?.marketplace_id.replace("EBAY_", "") || "eBay"} · {store?.store_name}</span><span className="proTag proTagWarn">{order.orderFulfillmentStatus || "Offen"}</span></div>
           <h3>Bestellung #{order.orderId}</h3><p className="proMuted">{order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "Kundenname nicht verfügbar"} · {order.creationDate ? new Date(order.creationDate).toLocaleString("de-DE") : ""}</p>
-          <dl className="proTrackingDetails"><dt>eBay Sipariş No</dt><dd>{order.orderId}</dd><dt>Müşteri Adı</dt><dd>{order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "—"}</dd><dt>Amazon-Bestellnummer</dt><dd>{order.supplierTracking?.supplier_order_id || "—"}</dd><dt>Amazon / Tedarikçi Takip No</dt><dd>{order.tracking?.source_tracking_id || order.supplierTracking?.source_tracking_number || "—"}</dd><dt>Dönüştürülen Kargo Firması</dt><dd>{order.tracking?.provider?.replaceAll("_", " ") || order.tracking?.carrier_code || order.supplierTracking?.source_carrier || "—"}</dd><dt>Gerçek eBay-Trackingnummer</dt><dd>{order.tracking?.tracking_number || "—"}</dd><dt>Durum</dt><dd>{order.tracking?.status === "delivered" ? "Teslim Edildi" : order.tracking?.status === "submitted" ? "eBay’e İşlendi" : order.tracking?.status === "error" ? "Gönderim hatası" : order.supplierTracking ? "Amazon-Daten übernommen · noch nicht an eBay gesendet" : "Takip bekleniyor"}</dd></dl>
+          <dl className="proTrackingDetails"><dt>eBay Sipariş No</dt><dd>{order.orderId}</dd><dt>Müşteri Adı</dt><dd>{order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "—"}</dd><dt>Amazon-Bestellnummer</dt><dd>{order.supplierTracking?.supplier_order_id || "—"}</dd><dt>Amazon / Tedarikçi Takip No</dt><dd>{order.tracking?.source_tracking_id || order.supplierTracking?.source_tracking_number || "—"}</dd><dt>Dönüştürülen Kargo Firması</dt><dd>{order.tracking?.provider?.replaceAll("_", " ") || order.tracking?.carrier_code || order.supplierTracking?.source_carrier || "—"}</dd><dt>Gerçek eBay-Trackingnummer</dt><dd>{order.tracking?.tracking_number || "—"}</dd><dt>Durum</dt><dd>{order.tracking?.status === "delivered" ? "Teslim Edildi" : order.tracking?.status === "submitted" ? "eBay’e İşlendi" : order.tracking?.status === "error" ? "Gönderim hatası" : order.supplierTracking ? "Amazon-Daten übernommen · noch nicht an eBay gesendet" : "Takip bekleniyor"}</dd>{order.supplierTracking?.public_tracking_number && <><dt>Interne Statusreferenz</dt><dd><a href={`/track/${encodeURIComponent(order.supplierTracking.public_tracking_number)}`} target="_blank" rel="noreferrer">Statusseite öffnen ↗</a></dd><dt>Lieferantenstatus</dt><dd>{order.supplierTracking.delivery_status || "Auftragsdaten übernommen"}{order.supplierTracking.last_synced_at ? ` · ${new Date(order.supplierTracking.last_synced_at).toLocaleString("de-DE")}` : ""}</dd></>}</dl>
           {order.tracking?.last_error && <p role="alert" className="proNotice proNoticeError">{order.tracking.last_error}</p>}
           <ul className="proOrderItems">{(order.lineItems || []).map((line) => <li key={line.lineItemId}>{line.title || line.lineItemId} <span>× {line.quantity || 1}</span></li>)}</ul>
           <div className="proFormGrid">
@@ -185,10 +188,12 @@ export function OrdersManager() {
               <label className="proLabel">Ursprüngliche Lieferanten-Trackingnummer<input className="proInput" autoComplete="off" value={value.sourceTrackingId} onChange={(event) => updateFields(key, { sourceTrackingId: event.target.value })} placeholder="Nur an den konfigurierten 3PL-Dienst" /></label>
             </>}
           </div>
+          <label className="proLabel" style={{ display: "flex", alignItems: "center", gap: 9, margin: "12px 0" }}><input type="checkbox" checked={notifyBuyer[key] !== false} onChange={event => setNotifyBuyer(current => ({ ...current, [key]: event.target.checked }))} />Käufer per eBay-Nachricht über den internen Statuslink informieren</label>
           <button className="proButton proButtonPrimary" type="button" disabled={!!order.tracking && order.tracking.status === "submitted" || order.orderFulfillmentStatus === "FULFILLED" || busy === key || (value.mode === "direct" ? !value.carrierCode || !value.trackingNumber : !value.sourceTrackingId)} onClick={() => void submitTracking(storeId, order.orderId)}>{busy === key ? "Wird übertragen…" : value.mode === "direct" ? "Tracking an eBay senden" : "3PL abrufen und an eBay senden"}</button>
         </article>;
       })}</div> : <div className="proEmpty">Keine offenen Bestellungen für den ausgewählten Shop gefunden.</div>}
     </section>
+    {copyMessage && <section className="proPanel" aria-live="polite"><h2>eBay-Nachrichtenvorlage</h2><p>{copyMessage}</p><button className="proButton" type="button" onClick={() => { void navigator.clipboard.writeText(copyMessage).then(() => setNotice("Nachrichtenvorlage wurde kopiert.")); }}>Nachrichtenvorlage kopieren</button></section>}
     {showTopUp && <TopUpCreditsModal onClose={() => setShowTopUp(false)} />}
   </main>;
 }

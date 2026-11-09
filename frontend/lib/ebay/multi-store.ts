@@ -9,6 +9,7 @@ export const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
+  "https://api.ebay.com/oauth/api_scope/commerce.message",
 ].join(" ");
 
 export type MarketplaceId = "EBAY_US" | "EBAY_DE" | "EBAY_GB" | "EBAY_AU" | "EBAY_CA" | "EBAY_FR" | "EBAY_IT" | "EBAY_ES";
@@ -175,7 +176,7 @@ export async function validEbayToken(storeId: string, userId: string): Promise<s
       Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: decryptEbayToken(store.refresh_token), scope: EBAY_SCOPES }),
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: decryptEbayToken(store.refresh_token) }),
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });

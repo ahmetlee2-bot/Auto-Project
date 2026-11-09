@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sto
     const { data: tracking, error: trackingError } = await admin.from("order_tracking").select("order_id,source_tracking_id,tracking_number,carrier_code,provider,status,last_error").eq("user_id", user.id).eq("store_id", storeId);
     if (trackingError) throw new Error(trackingError.message);
     const { data: supplierTracking, error: supplierTrackingError } = await admin.from("supplier_order_tracking")
-      .select("ebay_order_id,supplier_order_id,recipient_name,source_carrier,source_tracking_number,amazon_share_url,estimated_delivery_date,synced_at")
+      .select("ebay_order_id,supplier_order_id,recipient_name,source_carrier,source_tracking_number,amazon_share_url,estimated_delivery_date,synced_at,public_tracking_number,delivery_status,last_synced_at,recipient_city,recipient_zip,estimated_delivery,buyer_notified_at")
       .eq("user_id", user.id).eq("store_id", storeId);
     if (supplierTrackingError) throw new Error(supplierTrackingError.message);
     return NextResponse.json({ orders: (body.orders || []).map(order => ({

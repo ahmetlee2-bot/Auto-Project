@@ -53,6 +53,10 @@
   }
   function shipmentFrom(root, orderId) {
     const bodyText = text(root);
+    const deliveryStatus = /zugestellt|erfolgreich zugestellt/i.test(bodyText) ? "DELIVERED"
+      : /in zustellung|heute zustellbar/i.test(bodyText) ? "OUT_FOR_DELIVERY"
+      : /unterwegs|wird zugestellt/i.test(bodyText) ? "IN_TRANSIT"
+      : /versandt|versendet|auf dem weg/i.test(bodyText) ? "SHIPPED" : "ORDER_RECEIVED";
     let sourceTrackingNumber = "";
     for (const match of bodyText.matchAll(/(?:Sendungsnummer|Tracking\s*ID|Trackingnummer|Verfolgungsnummer)\s*:?\s*([A-Z0-9-]{8,40})/gi)) {
       const value = match[1].replace(/-/g, "");
@@ -77,6 +81,7 @@
     return {
       supplier: "amazon", supplierOrderId: orderId, recipientName: recipientFrom(root),
       sourceCarrier, sourceTrackingNumber, shareTrackingUrl: shareUrlFrom(root, orderId),
+      deliveryStatus,
       ...(estimatedDeliveryDate ? { estimatedDeliveryDate } : {}),
     };
   }
