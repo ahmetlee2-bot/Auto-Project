@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoLister: Multi-Supplier eBay Lister & Repricer",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Amazon.de- und Joybuy.de-Produkte mit AutoLister für eBay vorbereiten. Preis- und Bestandsprüfung, SEO-Titel und Margenkalkulation.",
   "minimum_chrome_version": "120",
   "permissions": [
