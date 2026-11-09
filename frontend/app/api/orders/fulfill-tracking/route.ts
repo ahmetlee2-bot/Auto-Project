@@ -221,22 +221,24 @@ export async function POST(request: NextRequest) {
       const { data: portal } = await admin.from("supplier_order_tracking")
         .select("public_tracking_number,buyer_notified_at")
         .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId).maybeSingle();
-      if (portal?.public_tracking_number && order.buyer?.username) {
+      if (portal?.public_tracking_number) {
         const trackingUrl = `https://autolister-app.de/track/${encodeURIComponent(portal.public_tracking_number)}`;
         const recipientName = String(order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "").trim();
         buyerMessageText = `Hallo${recipientName ? ` ${recipientName}` : ""}, Ihre Bestellung wurde auf eBay als versandt markiert. Den zuletzt erfassten Lieferstatus finden Sie unter ${trackingUrl}. Diese Statusseite ist eine interne Information und kein Tracking eines Paketdienstes. Vielen Dank für Ihren Einkauf!`;
-        const itemId = order.lineItems?.find(item => item.legacyItemId)?.legacyItemId;
-        try {
-          await ebayApiRequest<unknown>(scope, "/commerce/message/v1/send_message", "POST", {
-            otherPartyUsername: order.buyer.username,
-            messageText: buyerMessageText,
-            ...(itemId ? { reference: { referenceType: "LISTING", referenceId: itemId } } : {}),
-          });
-          buyerMessageSent = true;
-          await admin.from("supplier_order_tracking").update({ buyer_notified_at: new Date().toISOString() })
-            .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId);
-        } catch {
-          // Message permission/scopes are optional. Keep the successful fulfillment and expose copyable text.
+        if (order.buyer?.username) {
+          const itemId = order.lineItems?.find(item => item.legacyItemId)?.legacyItemId;
+          try {
+            await ebayApiRequest<unknown>(scope, "/commerce/message/v1/send_message", "POST", {
+              otherPartyUsername: order.buyer.username,
+              messageText: buyerMessageText,
+              ...(itemId ? { reference: { referenceType: "LISTING", referenceId: itemId } } : {}),
+            });
+            buyerMessageSent = true;
+            await admin.from("supplier_order_tracking").update({ buyer_notified_at: new Date().toISOString() })
+              .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId);
+          } catch {
+            // Message permission/scopes are optional. Keep the successful fulfillment and expose copyable text.
+          }
         }
       }
     }
