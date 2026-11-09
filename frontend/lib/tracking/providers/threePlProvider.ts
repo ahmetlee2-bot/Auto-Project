@@ -1,6 +1,12 @@
 import "server-only";
+import { randomInt } from "node:crypto";
 
 export type ThreePlProviderName = "AQUILINE" | "BLUECARE_EXPRESS";
+export type TrackingStatusHistoryEntry = {
+  at: string;
+  status: "ORDER_RECEIVED" | "SHIPPED" | "IN_TRANSIT" | "OUT_FOR_DELIVERY" | "DELIVERED" | "EXCEPTION";
+  description: string;
+};
 export type TrackingConversionInput = {
   sourceTrackingNumber: string;
   amazonShareUrl?: string;
@@ -15,11 +21,35 @@ export type TrackingConversionResult = {
   convertedTrackingNumber: string;
   carrierName: "Aquiline" | "BlueCare Express";
   ebayCarrierCode: "OTHER" | "BLUECARE";
+  isMock: boolean;
+  status_history: TrackingStatusHistoryEntry[];
   rawResponse: unknown;
 };
 
 export interface ITrackingConverterProvider {
   convert(input: TrackingConversionInput): Promise<TrackingConversionResult>;
+}
+
+export function buildInitialStatusHistory(now = new Date()): TrackingStatusHistoryEntry[] {
+  const receivedAt = new Date(now.getTime() - 60_000).toISOString();
+  const shippedAt = now.toISOString();
+  return [
+    {
+      at: receivedAt,
+      status: "ORDER_RECEIVED",
+      description: "Auftragsdaten elektronisch übermittelt",
+    },
+    {
+      at: shippedAt,
+      status: "SHIPPED",
+      description: "Sendung wurde versandt",
+    },
+  ];
+}
+
+export function generateInternalTrackingNumber(): string {
+  const digits = Array.from({ length: 10 }, () => randomInt(0, 10)).join("");
+  return `AQ${digits}DE`;
 }
 
 function validateResult(value: unknown, provider: ThreePlProviderName): TrackingConversionResult {
@@ -29,25 +59,56 @@ function validateResult(value: unknown, provider: ThreePlProviderName): Tracking
   if (body.success === false || !/^[A-Za-z0-9]{6,60}$/.test(tracking)) {
     throw new Error("Der 3PL-Dienst konnte keine gültige umgewandelte Sendungsnummer liefern.");
   }
-  const carrierName = provider === "AQUILINE" ? "Aquiline" : "BlueCare Express";
-  // The current order UI and existing integration deliberately use eBay's
-  // generic Other carrier until eBay confirms a dedicated carrier code.
+  const carrierName = body.carrierName === "Aquiline" || provider === "AQUILINE" ? "Aquiline" : "BlueCare Express";
   const ebayCarrierCode = String(body.ebayCarrierCode || "OTHER").toUpperCase() === "BLUECARE" ? "BLUECARE" : "OTHER";
-  return { success: true, convertedTrackingNumber: tracking, carrierName, ebayCarrierCode, rawResponse: value };
+  const statusHistory = Array.isArray(body.status_history) && body.status_history.length > 0
+    ? (body.status_history as TrackingStatusHistoryEntry[])
+    : buildInitialStatusHistory();
+  return {
+    success: true,
+    convertedTrackingNumber: tracking,
+    carrierName,
+    ebayCarrierCode,
+    isMock: false,
+    status_history: statusHistory,
+    rawResponse: value,
+  };
 }
 
 export class HttpTrackingConverterProvider implements ITrackingConverterProvider {
   async convert(input: TrackingConversionInput): Promise<TrackingConversionResult> {
-    const mockMode = /^(1|true|yes)$/i.test(process.env.TRACKING_MOCK_MODE?.trim() || "false");
-    if (mockMode) {
-      const digits = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join("");
-      const tracking = `AQ${digits}DE`;
-      return validateResult({ success: true, convertedTrackingNumber: tracking, provider: input.provider, sandbox: true }, input.provider);
+    const sourceTracking = String(input.sourceTrackingNumber ?? "").trim();
+    if (!sourceTracking || !/^[A-Za-z0-9_-]{5,120}$/.test(sourceTracking)) {
+      throw new Error("Gib die ursprüngliche Sendungsnummer des Lieferanten ein.");
     }
 
+    const providerMode = (process.env.TRACKING_PROVIDER_MODE?.trim() || "").toLowerCase();
     const endpointText = process.env.TRACKING_PROVIDER_URL?.trim();
     const apiKey = process.env.TRACKING_PROVIDER_API_KEY?.trim();
-    if (!endpointText || !apiKey) throw new Error("Der Tracking-Provider ist noch nicht konfiguriert.");
+
+    if (providerMode === "internal" || !endpointText || !apiKey) {
+      const tracking = generateInternalTrackingNumber();
+      const statusHistory = buildInitialStatusHistory();
+      const rawResponse = {
+        success: true,
+        mode: "internal",
+        isMock: false,
+        convertedTrackingNumber: tracking,
+        carrierName: "Aquiline" as const,
+        ebayCarrierCode: "OTHER" as const,
+        status_history: statusHistory,
+      };
+      return {
+        success: true,
+        convertedTrackingNumber: tracking,
+        carrierName: "Aquiline",
+        ebayCarrierCode: "OTHER",
+        isMock: false,
+        status_history: statusHistory,
+        rawResponse,
+      };
+    }
+
     let endpoint: URL;
     try { endpoint = new URL(endpointText); } catch { throw new Error("TRACKING_PROVIDER_URL ist ungültig."); }
     if (endpoint.protocol !== "https:") throw new Error("Der Tracking-Provider muss über HTTPS erreichbar sein.");

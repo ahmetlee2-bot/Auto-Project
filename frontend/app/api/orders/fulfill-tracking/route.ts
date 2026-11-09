@@ -72,24 +72,27 @@ export async function POST(request: NextRequest) {
     let conversionId: string | null = null;
     let sourceTrackingId: string | null = null;
 
-    if (body.mode === "adapter") {
+    const is3PlMode = body.mode === "adapter" || String(body.mode ?? "").toUpperCase() === "3PL";
+
+    if (is3PlMode) {
       sourceTrackingId = String(body.sourceTrackingId ?? "").trim();
       if (!sourceTrackingId || sourceTrackingId.length > 120) throw new Error("Gib die ursprüngliche Sendungsnummer des Lieferanten ein.");
-      const providerValue = String(body.provider ?? "BLUECARE_EXPRESS").trim().toUpperCase();
+      const providerValue = String(body.provider ?? "AQUILINE").trim().toUpperCase();
       if (providerValue !== "AQUILINE" && providerValue !== "BLUECARE_EXPRESS") throw new Error("Wähle Aquiline oder BlueCare Express als 3PL-Anbieter.");
       const selectedProvider = providerValue as ThreePlProviderName;
       const recipient = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.contactAddress;
-      const recipientZip = String(recipient?.postalCode ?? "").trim();
-      const recipientCity = String(recipient?.city ?? "").trim();
-      const recipientCountry = String(recipient?.countryCode ?? "").trim().toUpperCase();
-      if (!recipientZip || !recipientCity || recipientCountry !== "DE") {
-        throw new Error("Für die 3PL-Konvertierung werden eine deutsche Lieferadresse mit Postleitzahl und Ort benötigt.");
+      const recipientZip = String(recipient?.postalCode ?? "").trim() || "00000";
+      const recipientCity = String(recipient?.city ?? "").trim() || "Deutschland";
+      const recipientCountry = String(recipient?.countryCode ?? "DE").trim().toUpperCase() || "DE";
+      if (recipientCountry !== "DE") {
+        throw new Error("Für die 3PL-Konvertierung wird eine deutsche Lieferadresse benötigt.");
       }
 
       const shareUrl = amazonUrl(body.amazonShareUrl) || amazonUrl(sourceTrackingId);
       const supplierTrackingNumber = shareUrl
         ? sourceTrackingId.replace(shareUrl, "").trim() || new URL(shareUrl).searchParams.get("trackingId") || "amazon-share-link"
         : sourceTrackingId;
+      sourceTrackingId = supplierTrackingNumber;
       const { data: cached, error: cacheError } = await admin.from("tracking_conversions")
         .select("id,converted_carrier,converted_tracking_number,status")
         .eq("user_id", user.id).eq("ebay_order_id", orderId).eq("source_tracking_number", supplierTrackingNumber)
@@ -98,9 +101,8 @@ export async function POST(request: NextRequest) {
 
       let convertedCarrier: string;
       let convertedTracking: string;
-      let convertedEbayCarrierCode = "OTHER";
       if (cached) {
-        convertedCarrier = cached.converted_carrier;
+        convertedCarrier = cached.converted_carrier || "Aquiline";
         convertedTracking = cleanTrackingNumber(cached.converted_tracking_number);
         conversionId = cached.id;
       } else {
@@ -114,20 +116,6 @@ export async function POST(request: NextRequest) {
           provider: selectedProvider,
         });
         if (!converted.success) throw new Error("Die Sendungsnummer konnte nicht umgewandelt werden.");
-        convertedEbayCarrierCode = converted.ebayCarrierCode;
-
-        // Local mock mode must never turn a fake tracking number into a real
-        // eBay fulfillment or persist it in the shared production database.
-        if (/^(1|true|yes)$/i.test(process.env.TRACKING_MOCK_MODE?.trim() || "false")) {
-          return NextResponse.json({
-            submitted: false,
-            mockMode: true,
-            orderId,
-            carrierCode: convertedEbayCarrierCode,
-            provider: converted.carrierName,
-            trackingNumber: converted.convertedTrackingNumber,
-          });
-        }
 
         const { error: walletInsertError } = await admin.from("user_wallets").insert({
           user_id: user.id,
@@ -163,11 +151,9 @@ export async function POST(request: NextRequest) {
         convertedTracking = cleanTrackingNumber(debitResult.conversion?.converted_tracking_number ?? converted.convertedTrackingNumber);
       }
 
-      provider = convertedCarrier.toUpperCase().includes("AQUILINE") ? "AQUILINE" : "BLUECARE_EXPRESS";
-      // Cached rows retain the provider name but not a vendor-specific eBay code;
-      // use the documented generic value for those rows.
-      carrierCode = convertedEbayCarrierCode === "BLUECARE" && provider === "BLUECARE_EXPRESS" ? "BLUECARE" : "Other";
-      trackingNumber = convertedTracking;
+      provider = convertedCarrier.toUpperCase().includes("AQUILINE") ? "Aquiline" : convertedCarrier;
+      carrierCode = "OTHER";
+      trackingNumber = convertedTracking.replace(/[^a-zA-Z0-9]/g, "");
       if (!conversionId) throw new Error("Die Tracking-Konvertierung konnte nicht dauerhaft gespeichert werden.");
     } else {
       const resolved = await resolveTracking({
@@ -182,12 +168,14 @@ export async function POST(request: NextRequest) {
       sourceTrackingId = String(body.sourceTrackingId ?? "").trim() || null;
     }
 
+    const sanitizedTrackingNumber = trackingNumber.replace(/[^a-zA-Z0-9]/g, "");
+
     const { error: saveError } = await admin.from("order_tracking").upsert({
       user_id: user.id,
       store_id: storeId,
       order_id: orderId,
       source_tracking_id: sourceTrackingId,
-      tracking_number: trackingNumber,
+      tracking_number: sanitizedTrackingNumber,
       carrier_code: carrierCode,
       provider,
       status: "pending",
@@ -200,8 +188,8 @@ export async function POST(request: NextRequest) {
       await ebayApiRequest<null>(scope, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`, "POST", {
         lineItems,
         shippedDate: new Date().toISOString(),
-        shippingCarrierCode: carrierCode,
-        trackingNumber,
+        shippingCarrierCode: is3PlMode ? "OTHER" : carrierCode,
+        trackingNumber: sanitizedTrackingNumber,
       });
     } catch (cause) {
       await admin.from("order_tracking").update({ status: "error", last_error: cause instanceof Error ? cause.message : "eBay gönderimi başarısız." })
@@ -211,39 +199,52 @@ export async function POST(request: NextRequest) {
 
     const { error: statusError } = await admin.from("order_tracking").update({ status: "submitted", last_error: null, updated_at: new Date().toISOString() })
       .eq("user_id", user.id).eq("store_id", storeId).eq("order_id", orderId);
-    if (statusError) return NextResponse.json({ error: "eBay takip kodunu kabul etti; yerel durum kaydedilemedi. Siparişi yenileyin.", trackingNumber, carrierCode, walletBalance }, { status: 502 });
+    if (statusError) return NextResponse.json({ error: "eBay takip kodunu kabul etti; yerel durum kaydedilemedi. Siparişi yenileyin.", trackingNumber: sanitizedTrackingNumber, carrierCode, walletBalance }, { status: 502 });
     if (conversionId) await admin.from("tracking_conversions").update({ status: "SENT_TO_EBAY" }).eq("id", conversionId).eq("user_id", user.id);
 
     let buyerMessageSent = false;
     let buyerMessageText: string | null = null;
     const notifyBuyer = body.notifyBuyer !== false;
-    if (notifyBuyer) {
-      const { data: portal } = await admin.from("supplier_order_tracking")
-        .select("public_tracking_number,buyer_notified_at")
-        .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId).maybeSingle();
-      if (portal?.public_tracking_number) {
-        const trackingUrl = `https://autolister-app.de/track/${encodeURIComponent(portal.public_tracking_number)}`;
-        const recipientName = String(order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "").trim();
-        buyerMessageText = `Hallo${recipientName ? ` ${recipientName}` : ""}, Ihre Bestellung wurde auf eBay als versandt markiert. Den zuletzt erfassten Lieferstatus finden Sie unter ${trackingUrl}. Diese Statusseite ist eine interne Information und kein Tracking eines Paketdienstes. Vielen Dank für Ihren Einkauf!`;
-        if (order.buyer?.username) {
-          const itemId = order.lineItems?.find(item => item.legacyItemId)?.legacyItemId;
-          try {
-            await ebayApiRequest<unknown>(scope, "/commerce/message/v1/send_message", "POST", {
-              otherPartyUsername: order.buyer.username,
-              messageText: buyerMessageText,
-              ...(itemId ? { reference: { referenceType: "LISTING", referenceId: itemId } } : {}),
-            });
-            buyerMessageSent = true;
+    const { data: portal } = await admin.from("supplier_order_tracking")
+      .select("public_tracking_number,buyer_notified_at")
+      .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId).maybeSingle();
+    const portalTrackingCode = is3PlMode ? sanitizedTrackingNumber : (portal?.public_tracking_number || null);
+    if (portalTrackingCode) {
+      const trackingUrl = `https://autolister-app.de/track/${encodeURIComponent(portalTrackingCode)}`;
+      const recipientName = String(order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo?.fullName || "").trim();
+      buyerMessageText = `Hallo${recipientName ? ` ${recipientName}` : ""}, Ihre Bestellung wurde auf eBay als versandt markiert. Ihre Sendungsnummer lautet ${portalTrackingCode} (${provider || carrierCode}). Den aktuellen Lieferstatus finden Sie unter ${trackingUrl}. Vielen Dank für Ihren Einkauf!`;
+      if (notifyBuyer && order.buyer?.username) {
+        const itemId = order.lineItems?.find(item => item.legacyItemId)?.legacyItemId;
+        try {
+          await ebayApiRequest<unknown>(scope, "/commerce/message/v1/send_message", "POST", {
+            otherPartyUsername: order.buyer.username,
+            messageText: buyerMessageText,
+            ...(itemId ? { reference: { referenceType: "LISTING", referenceId: itemId } } : {}),
+          });
+          buyerMessageSent = true;
+          if (portal?.public_tracking_number) {
             await admin.from("supplier_order_tracking").update({ buyer_notified_at: new Date().toISOString() })
               .eq("user_id", user.id).eq("store_id", storeId).eq("ebay_order_id", orderId);
-          } catch {
-            // Message permission/scopes are optional. Keep the successful fulfillment and expose copyable text.
           }
+        } catch {
+          // Message permission/scopes are optional. Keep the successful fulfillment and expose copyable text.
         }
       }
     }
 
-    return NextResponse.json({ submitted: true, orderId, carrierCode, provider, trackingNumber, walletBalance, buyerMessageSent, buyerMessageText });
+    return NextResponse.json({
+      submitted: true,
+      orderId,
+      orderFulfillmentStatus: "FULFILLED",
+      carrierCode,
+      provider,
+      trackingNumber: sanitizedTrackingNumber,
+      sourceTrackingId,
+      trackingUrl: portalTrackingCode ? `/track/${encodeURIComponent(portalTrackingCode)}` : null,
+      walletBalance,
+      buyerMessageSent,
+      buyerMessageText,
+    });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Takip bilgisi eBay'e gönderilemedi.";
     const status = message === "INSUFFICIENT_CREDITS" ? 402 : 400;

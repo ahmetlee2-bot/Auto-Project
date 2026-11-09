@@ -31,11 +31,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sto
       .select("ebay_order_id,supplier_order_id,recipient_name,source_carrier,source_tracking_number,amazon_share_url,estimated_delivery_date,synced_at,public_tracking_number,delivery_status,last_synced_at,recipient_city,recipient_zip,estimated_delivery,buyer_notified_at")
       .eq("user_id", user.id).eq("store_id", storeId);
     if (supplierTrackingError) throw new Error(supplierTrackingError.message);
-    return NextResponse.json({ orders: (body.orders || []).map(order => ({
-      ...order,
-      tracking: tracking?.find(row => row.order_id === order.orderId) || null,
-      supplierTracking: supplierTracking?.find(row => row.ebay_order_id === order.orderId) || null,
-    })), storeId }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ orders: (body.orders || []).map(order => {
+      const trackingRow = tracking?.find(row => row.order_id === order.orderId) || null;
+      return {
+        ...order,
+        orderFulfillmentStatus: trackingRow?.status === "submitted" || trackingRow?.status === "delivered" ? "FULFILLED" : order.orderFulfillmentStatus,
+        tracking: trackingRow,
+        supplierTracking: supplierTracking?.find(row => row.ebay_order_id === order.orderId) || null,
+      };
+    }), storeId }, { headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "eBay siparişleri yüklenemedi." }, { status: 502 });
   }

@@ -8,14 +8,14 @@ export default function TrackSearchPage() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = number.trim().toUpperCase();
-    if (!/^AL[A-F0-9]{32}DE$/.test(value)) { setError("Bitte geben Sie eine gültige Statusreferenz ein."); return; }
+    if (!/^(?:AQ[A-Z0-9]{6,20}DE|AL[A-Z0-9]{6,40}DE)$/.test(value)) { setError("Bitte geben Sie eine gültige Sendungsnummer ein (z. B. AQ…DE oder AL…DE)."); return; }
     window.location.assign(`/track/${encodeURIComponent(value)}`);
   }
   return <main className="trackingShell">
     <header className="trackingBrand"><span className="trackingMark">S</span><div><strong>Sendungsverfolgung</strong><small>Shipment Tracking</small></div></header>
-    <section className="trackingCard"><span className="trackingEyebrow">LIEFERSTATUS</span><h1>Sendung verfolgen</h1><p>Geben Sie Ihre Statusreferenz ein, um den zuletzt erfassten Lieferstatus zu sehen.</p>
-      <form onSubmit={submit} className="trackingSearch"><label htmlFor="tracking-number">Statusreferenz</label><input id="tracking-number" autoComplete="off" value={number} onChange={event => { setNumber(event.target.value); setError(""); }} placeholder="AL…DE" /><button type="submit">Status anzeigen</button>{error && <span role="alert">{error}</span>}</form>
-      <small className="trackingNote">Diese Seite zeigt Lieferantenstatus und ist kein Paketdienst-Tracking.</small>
+    <section className="trackingCard"><span className="trackingEyebrow">LIEFERSTATUS</span><h1>Sendung verfolgen</h1><p>Geben Sie Ihre Sendungsnummer oder Statusreferenz ein, um den aktuellen Lieferstatus zu sehen.</p>
+      <form onSubmit={submit} className="trackingSearch"><label htmlFor="tracking-number">Sendungsnummer</label><input id="tracking-number" autoComplete="off" value={number} onChange={event => { setNumber(event.target.value); setError(""); }} placeholder="AQ…DE / AL…DE" /><button type="submit">Status anzeigen</button>{error && <span role="alert">{error}</span>}</form>
+      <small className="trackingNote">Geben Sie die mitgeteilte Referenznummer ein, um den Sendungsverlauf abzurufen.</small>
     </section>
     <footer>Aktualisiert, sobald neue Lieferanteninformationen vorliegen.</footer>
     <style>{trackingStyles}</style>

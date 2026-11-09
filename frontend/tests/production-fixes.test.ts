@@ -213,25 +213,30 @@ test("tracking validates real identifiers and only uses a provider's returned co
   } finally { global.fetch = originalFetch; process.env = saved; }
 });
 
-test("TBA supplier numbers auto-select 3PL and mock mode returns an AQ…DE code without provider credentials", async () => {
+test("TBA supplier numbers auto-select 3PL and internal provider mode returns a live Aquiline AQ…DE code with initial status history", async () => {
   const saved = { ...process.env };
   try {
-    process.env.TRACKING_MOCK_MODE = "true";
+    process.env.TRACKING_PROVIDER_MODE = "internal";
+    process.env.TRACKING_MOCK_MODE = "false";
     delete process.env.TRACKING_PROVIDER_URL;
     delete process.env.TRACKING_PROVIDER_API_KEY;
     const routed = routeSupplierTracking("TBA123456789000");
     assert.equal(routed.mode, "adapter");
-    assert.equal(routed.provider, "BLUECARE_EXPRESS");
     const result = await new HttpTrackingConverterProvider().convert({
       sourceTrackingNumber: routed.sourceTrackingId,
       recipientZip: "86150",
       recipientCity: "Augsburg",
       recipientCountry: "DE",
-      ebayOrderId: "mock-order",
+      ebayOrderId: "internal-order",
       provider: routed.provider!,
     });
-    assert.match(result.convertedTrackingNumber, /^AQ\d{12}DE$/);
+    assert.match(result.convertedTrackingNumber, /^AQ\d{10}DE$/);
     assert.equal(result.success, true);
+    assert.equal(result.isMock, false);
+    assert.equal(result.carrierName, "Aquiline");
     assert.equal(result.ebayCarrierCode, "OTHER");
+    assert.equal(result.status_history.length, 2);
+    assert.equal(result.status_history[0].description, "Auftragsdaten elektronisch übermittelt");
+    assert.equal(result.status_history[1].description, "Sendung wurde versandt");
   } finally { process.env = saved; }
 });
