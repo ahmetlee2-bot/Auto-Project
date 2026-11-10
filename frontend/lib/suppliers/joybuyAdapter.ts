@@ -3,8 +3,10 @@ import { load } from "cheerio";
 import type { NormalizedSupplierProduct, SupplierAdapter } from "./types";
 
 function productUrl(input: string): { url: URL; id: string } {
+  const raw = input.trim();
+  const sku = raw.match(/^(?:JB-)?(\d{6,20})$/i)?.[1];
   let url: URL;
-  try { url = new URL(/^\d+$/.test(input.trim()) ? `https://www.joybuy.de/dg/${input.trim()}` : input.trim()); }
+  try { url = new URL(sku ? `https://www.joybuy.de/dg/${sku}` : raw); }
   catch { throw new Error("Bitte eine gültige Joybuy.de Produkt-URL oder SKU eingeben."); }
   if (url.protocol !== "https:" || !/(^|\.)joybuy\.de$/i.test(url.hostname)) throw new Error("Nur Joybuy.de Produktlinks werden unterstützt.");
   const id = url.pathname.match(/\/(?:dp\/[^/]+\/|dg\/|landingPage\/dp\/)(\d{6,20})(?:\/|$)/i)?.[1];
@@ -42,4 +44,4 @@ async function read(url: URL, id: string): Promise<NormalizedSupplierProduct | n
   if (/risk control|security verification|captcha|sicherheitsüberprüfung/i.test(html)) return null;
   return harvest(html, url, id);
 }
-export const joybuyAdapter: SupplierAdapter = { id:"joybuy_de", canHandle(input) { try { return /(^|\.)joybuy\.de$/i.test(new URL(input).hostname) || /^\d{6,20}$/.test(input.trim()); } catch { return false; } }, async fetchProduct(input) { const {url,id}=productUrl(input); const product=await read(url,id).catch(()=>null); if(!product) throw new Error("Joybuy-Daten waren nicht vollständig verfügbar; ohne verifizierten Preis, Bestand und Bilder wurde kein Entwurf erstellt."); return product; } };
+export const joybuyAdapter: SupplierAdapter = { id:"joybuy_de", canHandle(input) { if (/^(?:JB-)?\d{6,20}$/i.test(input.trim())) return true; try { return /(^|\.)joybuy\.de$/i.test(new URL(input).hostname); } catch { return false; } }, async fetchProduct(input) { const {url,id}=productUrl(input); const product=await read(url,id).catch(()=>null); if(!product) throw new Error("Joybuy-Daten waren nicht vollständig verfügbar; ohne verifizierten Preis, Bestand und Bilder wurde kein Entwurf erstellt."); return product; } };

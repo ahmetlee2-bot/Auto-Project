@@ -4,6 +4,8 @@ import { getRequestUser, isAutolisterAdmin } from "../../../lib/dashboard/server
 import { computeSuggestedPrice } from "../../../lib/ebay/multi-store";
 import { fetchAmazonProductDetails, type AmazonMarketplace } from "../../../lib/repricer/amazon";
 import { repricerAdmin } from "../../../lib/repricer/admin";
+import { supplierRegistry } from "../../../lib/suppliers/registry";
+import { verifiedJoybuyImages } from "../../../lib/suppliers/joybuyImages";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -26,7 +28,81 @@ type PoolImport = {
   stock_status?: unknown;
   is_published?: unknown;
   is_demo?: unknown;
+  supplier?: unknown;
+  source_url?: unknown;
 };
+
+const AMAZON_DISCOVERY_TERMS = ["3D Drucker Zubehör", "Haustier Zubehör", "Küche Haushalt", "Auto Zubehör", "Garten Werkzeuge", "Hobby Basteln Werkzeug"];
+let amazonDiscoveryCache: { expiresAt: number; result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean } } | null = null;
+type SearchResult = { asin?: string; title?: string; image?: string; link?: string; price?: { value?: number | string; currency?: string }; product?: {
+  title?: string; brand?: string; description?: string; main_image?: { link?: string } | string; images?: Array<{ link?: string }>;
+  buybox_winner?: { price?: { value?: number | string; currency?: string }; shipping?: { value?: number | string }; availability?: { type?: string } };
+  feature_bullets?: Array<{ text?: string }>; specifications?: Array<{ name?: string; value?: string }>;
+}; };
+
+async function discoverAmazonProducts() {
+  if (amazonDiscoveryCache && amazonDiscoveryCache.expiresAt > Date.now()) return amazonDiscoveryCache.result;
+  const cache = (result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean }) => {
+    amazonDiscoveryCache = { expiresAt: Date.now() + 6 * 60 * 60_000, result };
+    return result;
+  };
+  const apiKey = process.env.RAINFOREST_API_KEY?.trim();
+  if (!apiKey) return cache({ discovered: 0, providerUnavailable: true });
+  const admin = repricerAdmin();
+  const candidates = new Map<string, PoolImport>();
+  const failedTerms: string[] = [];
+  for (const searchTerm of AMAZON_DISCOVERY_TERMS) {
+    try {
+      const url = new URL("https://api.rainforestapi.com/request");
+      url.search = new URLSearchParams({ api_key: apiKey, type: "search", amazon_domain: "amazon.de", search_term: searchTerm,
+        sort_by: "bestseller_rankings", number_of_results: "10", include_products_count: "10", exclude_sponsored: "true",
+        fields: "search_results.asin,search_results.title,search_results.link,search_results.image,search_results.price,search_results.product.title,search_results.product.brand,search_results.product.description,search_results.product.main_image,search_results.product.images,search_results.product.buybox_winner,search_results.product.feature_bullets,search_results.product.specifications" }).toString();
+      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
+      const body = await response.json().catch(() => null) as { request_info?: { success?: boolean; message?: string }; search_results?: SearchResult[] } | null;
+      if (!response.ok || !body?.request_info?.success) throw new Error(body?.request_info?.message || `HTTP ${response.status}`);
+      for (const result of body.search_results || []) {
+        const asin = String(result.asin || "").toUpperCase();
+        const detail = result.product;
+        const rawPrice = Number(detail?.buybox_winner?.price?.value ?? result.price?.value);
+        const currency = String(detail?.buybox_winner?.price?.currency ?? result.price?.currency ?? "EUR").toUpperCase();
+        const availability = String(detail?.buybox_winner?.availability?.type || "");
+        const inStock = /(?:^|\/)(?:InStock|LimitedAvailability|OnlineOnly)$/i.test(availability) || /in_stock|available/i.test(availability);
+        const main = typeof detail?.main_image === "string" ? detail.main_image : detail?.main_image?.link;
+        const images = [...new Set([main, ...(detail?.images || []).map((image) => image.link), result.image].filter((image): image is string => typeof image === "string" && image.startsWith("https://")))].slice(0, 12);
+        if (!/^[A-Z0-9]{10}$/.test(asin) || !detail?.title || !Number.isFinite(rawPrice) || rawPrice <= 0 || currency !== "EUR" || !inStock || !images.length) continue;
+        const shipping = Math.max(0, Number(detail.buybox_winner?.shipping?.value) || 0);
+        const suggested = computeSuggestedPrice(rawPrice, shipping, 20);
+        const profit = Number((suggested * 0.85 - rawPrice - shipping).toFixed(2));
+        if (profit < 5) continue;
+        const specifics = Object.fromEntries((detail.specifications || []).filter((item) => item.name && item.value).slice(0, 50).map((item) => [String(item.name).slice(0, 80), [String(item.value).slice(0, 200)]]));
+        candidates.set(asin, {
+          asin, source_marketplace: "AMZ_DE", supplier: "amazon_de", source_url: `https://www.amazon.de/dp/${asin}`,
+          title: String(detail.title).trim().slice(0, 200), description: premiumDescription({ title: detail.title, asin, brand: detail.brand || "", description: detail.description || (detail.feature_bullets || []).map((bullet) => bullet.text || "").join("\n"), itemSpecifics: specifics }),
+          brand: detail.brand || null, category_id: null, amazon_price: rawPrice, suggested_ebay_price: suggested, estimated_profit: profit,
+          estimated_shipping: shipping, images, item_specifics: specifics, condition: "NEW", is_vero_safe: false, stock_status: "in_stock", is_published: false, is_demo: false,
+        });
+      }
+    } catch { failedTerms.push(searchTerm); }
+  }
+  if (!candidates.size) return cache({ discovered: 0, checked: 0, failedTerms });
+  const rows = [...candidates.values()];
+  const { data: existing, error: existingError } = await admin.from("product_pool").select("asin").eq("source_marketplace", "AMZ_DE").in("asin", rows.map((row) => String(row.asin)));
+  if (existingError) throw existingError;
+  const existingAsins = new Set((existing || []).map((row) => String(row.asin)));
+  const insertedRows = rows.filter((row) => !existingAsins.has(String(row.asin))).map((row) => ({ ...row, last_checked_at: new Date().toISOString() }));
+  if (insertedRows.length) {
+    const { error } = await admin.from("product_pool").insert(insertedRows);
+    if (error) throw error;
+  }
+  const refreshes = rows.filter((row) => existingAsins.has(String(row.asin))).map((row) => admin.from("product_pool")
+    .update({ title: row.title, description: row.description, brand: row.brand, amazon_price: row.amazon_price,
+      suggested_ebay_price: row.suggested_ebay_price, estimated_profit: row.estimated_profit, estimated_shipping: row.estimated_shipping,
+      images: row.images, item_specifics: row.item_specifics, stock_status: row.stock_status, last_checked_at: new Date().toISOString() })
+    .eq("asin", String(row.asin)).eq("source_marketplace", "AMZ_DE"));
+  const refreshed = await Promise.all(refreshes);
+  if (refreshed.some((result) => result.error)) throw refreshed.find((result) => result.error)?.error;
+  return cache({ discovered: insertedRows.length, checked: rows.length, updated: refreshes.length, failedTerms });
+}
 
 function finiteMoney(value: unknown, label: string, optional = false): number | null {
   if ((value === null || value === undefined || value === "") && optional) return null;
@@ -66,10 +142,16 @@ export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams;
   const adminUser = isAutolisterAdmin(user.id);
   const includeReview = adminUser && query.get("includeReview") === "1";
-  let requestQuery = repricerAdmin().from("product_pool").select("id,asin,source_marketplace,supplier,source_url,title,description,brand,category_id,amazon_price,suggested_ebay_price,estimated_profit,estimated_shipping,images,item_specifics,condition,stock_status,last_checked_at,created_at,is_vero_safe,is_published,is_demo")
-  if (!includeReview) requestQuery = requestQuery.eq("is_published", true).eq("is_vero_safe", true).eq("stock_status", "in_stock").eq("is_demo", false);
+  let discovery: Awaited<ReturnType<typeof discoverAmazonProducts>> | null = null;
   const market = query.get("marketplace");
-  if (market === "AMZ_US" || market === "AMZ_DE") requestQuery = requestQuery.eq("source_marketplace", market);
+  if (includeReview && query.get("discover") === "1" && (!market || market === "AMZ_DE")) {
+    try { discovery = await discoverAmazonProducts(); }
+    catch { discovery = { discovered: 0, providerUnavailable: false }; }
+  }
+  let requestQuery = repricerAdmin().from("product_pool").select("id,asin,source_marketplace,supplier,source_url,title,description,brand,category_id,amazon_price,suggested_ebay_price,estimated_profit,estimated_shipping,images,item_specifics,condition,stock_status,last_checked_at,created_at,is_vero_safe,is_published,is_demo")
+  requestQuery = requestQuery.eq("is_demo", false);
+  if (!includeReview) requestQuery = requestQuery.eq("is_published", true).eq("is_vero_safe", true).eq("stock_status", "in_stock");
+  if (market === "AMZ_US" || market === "AMZ_DE" || market === "JOYBUY_DE") requestQuery = requestQuery.eq("source_marketplace", market);
   const category = query.get("category");
   if (category) requestQuery = requestQuery.eq("category_id", category);
   const maxPrice = Number(query.get("maxPrice"));
@@ -79,12 +161,14 @@ export async function GET(request: NextRequest) {
   const { data, error } = await requestQuery.order("estimated_profit", { ascending: false, nullsFirst: false }).limit(200);
   if (error) return NextResponse.json({ error: "Produktdepot konnte nicht geladen werden." }, { status: 500 });
   let categoryQuery = repricerAdmin().from("product_pool").select("category_id").not("category_id", "is", null).limit(200);
-  if (!includeReview) categoryQuery = categoryQuery.eq("is_published", true).eq("is_demo", false);
+  categoryQuery = categoryQuery.eq("is_demo", false);
+  if (!includeReview) categoryQuery = categoryQuery.eq("is_published", true);
   const { data: categories } = await categoryQuery;
   return NextResponse.json({
     products: data || [],
     categories: [...new Set((categories || []).map((row) => row.category_id).filter(Boolean))],
     canImport: adminUser,
+    discovery,
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -94,7 +178,36 @@ export async function POST(request: NextRequest) {
   if (!isAutolisterAdmin(user.id)) return NextResponse.json({ error: "Bu işlem AutoLister yöneticilerine açıktır." }, { status: 403 });
 
   try {
-    const body = await request.json() as { products?: PoolImport[]; asins?: unknown; sourceMarketplace?: unknown };
+    const body = await request.json() as { products?: PoolImport[]; asins?: unknown; sourceMarketplace?: unknown; source?: unknown };
+    if (body.source !== undefined) {
+      const inputs = [...new Set((Array.isArray(body.source) ? body.source : String(body.source).split(/[\s,;]+/)).map((value) => String(value).trim()).filter(Boolean))];
+      if (!inputs.length || inputs.length > 20) throw new Error("1–20 Amazon ASIN/URLs oder Joybuy-URLs/SKUs eingeben.");
+      const imported: Array<{ id: string; asin: string; title: string; is_published: boolean }> = [];
+      const failed: Array<{ asin: string; error: string }> = [];
+      for (const input of inputs) {
+        try {
+          const supplier = supplierRegistry.resolve(input);
+          const product = await supplier.fetchProduct(input);
+          const images = supplier.id === "joybuy_de" ? await verifiedJoybuyImages(product.images) : product.images;
+          if (!images.length) throw new Error("Kein verifiziertes HTTPS-Produktbild verfügbar.");
+          const asin = supplier.id === "joybuy_de" ? `JB-${product.supplierProductId}` : product.supplierProductId;
+          const suggested = computeSuggestedPrice(product.priceEur, 0, 20);
+          const specifics = Object.fromEntries(Object.entries(product.specifications).map(([key, value]) => [key, [value]]));
+          const row = {
+            asin, source_marketplace: supplier.id === "joybuy_de" ? "JOYBUY_DE" : "AMZ_DE", supplier: supplier.id, source_url: product.sourceUrl,
+            title: product.rawTitle.slice(0, 200), description: premiumDescription({ title: product.rawTitle, asin, brand: "", description: product.rawDescription || product.bulletPoints.join("\n"), itemSpecifics: specifics }),
+            brand: null, category_id: null, amazon_price: product.priceEur, suggested_ebay_price: suggested,
+            estimated_profit: Math.max(0, Number((suggested * 0.85 - product.priceEur).toFixed(2))), estimated_shipping: 0,
+            images, item_specifics: specifics, condition: "NEW", is_vero_safe: false, stock_status: product.inStock ? "in_stock" : "out_of_stock",
+            is_published: false, is_demo: false,
+          };
+          const { data, error } = await repricerAdmin().from("product_pool").upsert(row, { onConflict: "asin,source_marketplace" }).select("id,asin,title,is_published").single();
+          if (error) throw error;
+          imported.push(data);
+        } catch (cause) { failed.push({ asin: input.slice(0, 80), error: cause instanceof Error ? cause.message : "Produktdaten konnten nicht verifiziert werden." }); }
+      }
+      return NextResponse.json({ imported: imported.length, products: imported, failed, requiresReview: true }, { status: failed.length ? 207 : 201 });
+    }
   if (body.asins !== undefined) {
       const asins = [...new Set((Array.isArray(body.asins) ? body.asins : String(body.asins).split(/[\s,;]+/)).map((value) => String(value).trim().toUpperCase()).filter(Boolean))];
       if (asins.length < 1 || asins.length > 20 || asins.some((asin) => !/^[A-Z0-9]{10}$/.test(asin))) throw new Error("1–20 geçerli ASIN girin.");

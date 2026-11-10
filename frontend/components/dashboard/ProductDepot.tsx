@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useStores } from "../../lib/ebay/StoreContext";
 
@@ -10,7 +10,7 @@ type PoolProduct = {
   estimated_shipping: number; images: string[]; stock_status: string; condition: string; is_vero_safe: boolean; is_published: boolean;
   is_demo: boolean;
 };
-type DepotResponse = { products: PoolProduct[]; categories: string[]; canImport: boolean; error?: string };
+type DepotResponse = { products: PoolProduct[]; categories: string[]; canImport: boolean; discovery?: { discovered?: number; checked?: number; failedTerms?: string[]; providerUnavailable?: boolean } | null; error?: string };
 
 const money = (value: number | null | undefined, currency: string) => value === null || value === undefined
   ? "—"
@@ -28,12 +28,12 @@ export function ProductDepot() {
   const [selected, setSelected] = useState<string[]>([]);
   const [manualStoreIds, setManualStoreIds] = useState<string[]>([]);
   const [importJson, setImportJson] = useState("");
-  const [importMarketplace, setImportMarketplace] = useState("AMZ_DE");
   const [review, setReview] = useState<Record<string, { categoryId: string; isVeroSafe: boolean }>>({});
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [filtersRestored, setFiltersRestored] = useState(false);
+  const initialDiscoveryDone = useRef(false);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -44,47 +44,51 @@ export function ProductDepot() {
     return params.toString();
   }, [marketplace, category, maxPrice, minProfit]);
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (discover = false) => {
     setError("");
     const params = new URLSearchParams(query);
     params.set("includeReview", "1");
+    if (discover && (marketplace === "ALL" || marketplace === "AMZ_DE")) params.set("discover", "1");
     const response = await fetch(`/api/depot?${params}`, { cache: "no-store" });
     const body = await response.json() as DepotResponse;
     if (!response.ok) throw new Error(body.error || "Produktdepot konnte nicht geladen werden.");
     setProducts(body.products || []);
     setCategories(body.categories || []);
     setCanImport(body.canImport === true);
+    if (body.discovery) setNotice(body.discovery.providerUnavailable ? "Amazon-Produktentdeckung ist nicht konfiguriert (Rainforest-Key fehlt)." : `${body.discovery.discovered || 0} neue Amazon-DE-Produkte entdeckt; ${body.discovery.checked || 0} Vorschläge werden einzeln auf Bestand, eBay-Quelle und Markenrechte geprüft.${body.discovery.failedTerms?.length ? ` Teilweise fehlgeschlagen: ${body.discovery.failedTerms.join(", ")}.` : ""}`);
     setReview((current) => Object.fromEntries((body.products || []).map((product) => [product.id, current[product.id] || { categoryId: product.category_id || "", isVeroSafe: product.is_vero_safe }])));
     setSelected((current) => current.filter((id) => (body.products || []).some((product) => product.id === id)));
-  }, [query]);
+  }, [query, marketplace]);
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(window.sessionStorage.getItem("autolister-product-depot-filters") || "null") as null | { marketplace?: string; category?: string; maxPrice?: string; minProfit?: string; importMarketplace?: string };
+      const saved = JSON.parse(window.sessionStorage.getItem("autolister-product-depot-filters") || "null") as null | { marketplace?: string; category?: string; maxPrice?: string; minProfit?: string };
       if (saved) {
-        if (["ALL", "AMZ_DE", "AMZ_US"].includes(String(saved.marketplace))) setMarketplace(String(saved.marketplace));
+        if (["ALL", "AMZ_DE", "JOYBUY_DE"].includes(String(saved.marketplace))) setMarketplace(String(saved.marketplace));
         if (typeof saved.category === "string") setCategory(saved.category);
         if (typeof saved.maxPrice === "string") setMaxPrice(saved.maxPrice);
         if (typeof saved.minProfit === "string") setMinProfit(saved.minProfit);
-        if (["AMZ_DE", "AMZ_US"].includes(String(saved.importMarketplace))) setImportMarketplace(String(saved.importMarketplace));
       }
     } catch { /* Ignore stale or invalid saved filters. */ }
     setFiltersRestored(true);
   }, []);
   useEffect(() => {
     if (!filtersRestored) return;
-    window.sessionStorage.setItem("autolister-product-depot-filters", JSON.stringify({ marketplace, category, maxPrice, minProfit, importMarketplace }));
-  }, [filtersRestored, marketplace, category, maxPrice, minProfit, importMarketplace]);
+    window.sessionStorage.setItem("autolister-product-depot-filters", JSON.stringify({ marketplace, category, maxPrice, minProfit }));
+  }, [filtersRestored, marketplace, category, maxPrice, minProfit]);
   useEffect(() => {
     if (!filtersRestored) return;
-    void loadProducts().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Produktdepot konnte nicht geladen werden."));
+    const discover = !initialDiscoveryDone.current;
+    initialDiscoveryDone.current = true;
+    void loadProducts(discover).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Produktdepot konnte nicht geladen werden."));
   }, [filtersRestored, loadProducts]);
 
   const activeStores = stores.filter((store) => store.status === "active");
   const chosenStores = selectedStoreId === "ALL_STORES"
     ? (manualStoreIds.length ? manualStoreIds : activeStores.map((store) => store.id))
     : [selectedStoreId];
-  const currenciesByMarket: Record<string, string> = { AMZ_US: "USD", AMZ_DE: "EUR" };
+  const currenciesByMarket: Record<string, string> = { AMZ_DE: "EUR", JOYBUY_DE: "EUR" };
+  const canSelect = (product: PoolProduct) => !product.is_demo && product.is_published && product.is_vero_safe && product.stock_status === "in_stock";
 
   const enqueue = async (productIds: string[]) => {
     if (!chosenStores.length) { setError("Verbinden Sie zuerst einen aktiven eBay-Shop."); return; }
@@ -106,20 +110,28 @@ export function ProductDepot() {
       let payload: Record<string, unknown>;
       try {
         const parsed: unknown = JSON.parse(importJson);
-        if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) payload = { asins: parsed, sourceMarketplace: importMarketplace };
+        if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) payload = { source: parsed };
+        else if (Array.isArray(parsed) && parsed.every((item) => typeof item === "object" && item !== null && ("url" in item || "source_url" in item || "asin" in item || "sku" in item))) {
+          payload = { source: parsed.map((item) => { const row = item as Record<string, unknown>; return row.url || row.source_url || row.asin || row.sku; }) };
+        }
         else if (Array.isArray(parsed)) payload = { products: parsed };
-        else if (typeof parsed === "object" && parsed !== null && "products" in parsed) payload = parsed as Record<string, unknown>;
+        else if (typeof parsed === "object" && parsed !== null && "products" in parsed) {
+          const rows = (parsed as { products?: unknown }).products;
+          payload = Array.isArray(rows) && rows.every((item) => typeof item === "object" && item !== null && ("url" in item || "source_url" in item || "asin" in item || "sku" in item))
+            ? { source: rows.map((item) => { const row = item as Record<string, unknown>; return row.url || row.source_url || row.asin || row.sku; }) }
+            : parsed as Record<string, unknown>;
+        }
         else if (typeof parsed === "object" && parsed !== null && "asins" in parsed) payload = parsed as Record<string, unknown>;
-        else if (typeof parsed === "string") payload = { asins: parsed, sourceMarketplace: importMarketplace };
-        else throw new Error("Das JSON muss eine Produktliste oder ein ASIN-Objekt enthalten.");
+        else if (typeof parsed === "string") payload = { source: parsed };
+        else throw new Error("Das JSON muss eine Quellenliste oder ein Produktobjekt enthalten.");
       } catch (parseError) {
-        if (parseError instanceof SyntaxError) payload = { asins: importJson.split(/[\s,;]+/), sourceMarketplace: importMarketplace };
+        if (parseError instanceof SyntaxError) payload = { source: importJson.split(/[\s,;]+/) };
         else throw parseError;
       }
       const response = await fetch("/api/depot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json() as { imported?: number; failed?: Array<{ asin: string; error: string }>; requiresReview?: boolean; error?: string };
       if (!response.ok) throw new Error(body.error || "Der Import ist fehlgeschlagen.");
-      setNotice(`${body.imported || 0} Produkte zum Depot hinzugefügt.${body.requiresReview ? " Daten aus Rainforest oder dem direkten Amazon-Seitenparser. Titel, Bilder, Preis, Kategorie und Nutzungsrechte müssen vor einer Freigabe geprüft werden." : ""}${body.failed?.length ? ` Nicht abgerufen: ${body.failed.map((item) => `${item.asin} (${item.error})`).join("; ")}` : ""}`);
+      setNotice(`${body.imported || 0} Produkte zum Depot hinzugefügt.${body.requiresReview ? " Preis, Bestand, Produktbild, zulässige Bezugsquelle und Markenrechte müssen vor einer Freigabe geprüft werden." : ""}${body.failed?.length ? ` Nicht abgerufen: ${body.failed.map((item) => `${item.asin} (${item.error})`).join("; ")}` : ""}`);
       setImportJson("");
       await loadProducts();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Der Import ist fehlgeschlagen."); }
@@ -145,30 +157,31 @@ export function ProductDepot() {
       <section className="proPanel">
         <div className="proToolbar">
           <div className="proToolbarControls">
-            <label className="proLabel">Marktplatz<select className="proSelect" value={marketplace} onChange={(event) => setMarketplace(event.target.value)}><option value="ALL">Alle Märkte</option><option value="AMZ_DE">Amazon DE</option><option value="AMZ_US">Amazon US</option></select></label>
+            <label className="proLabel">Marktplatz<select className="proSelect" value={marketplace} onChange={(event) => setMarketplace(event.target.value)}><option value="ALL">Alle Marktplätze</option><option value="AMZ_DE">Amazon DE</option><option value="JOYBUY_DE">Joybuy DE</option></select></label>
             <label className="proLabel">eBay-Kategorie<select className="proSelect" value={category} onChange={(event) => setCategory(event.target.value)}><option value="ALL">Alle Kategorien</option>{categories.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label className="proLabel">Max. Einkaufspreis<input className="proInput" type="number" min="0" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} /></label>
             <label className="proLabel">Mindestgewinn (€)<input className="proInput" type="number" min="0" value={minProfit} onChange={(event) => setMinProfit(event.target.value)} /></label>
           </div>
-          <button className="proButton" type="button" onClick={() => void loadProducts().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Aktualisieren fehlgeschlagen."))}>Aktualisieren</button>
+          <button className="proButton" type="button" disabled={busy} onClick={() => void loadProducts(true).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Aktualisieren fehlgeschlagen."))}>Aktualisieren</button>
         </div>
+        <p className="proMuted">Amazon-DE-Vorschläge werden über den verbundenen Rainforest-Katalog aktualisiert. Joybuy hat hier keinen automatischen Feed; Joybuy-Produkte lassen sich über verifizierte SKU- oder Produkt-URL importieren.</p>
         {selectedStoreId === "ALL_STORES" && activeStores.length > 0 && <fieldset className="proStoreTargets"><legend>Ziel-Shops (ohne Auswahl werden alle aktiven Shops verwendet)</legend>{activeStores.map((store) => <label className="proCheckbox" key={store.id}><input type="checkbox" checked={manualStoreIds.includes(store.id)} onChange={(event) => setManualStoreIds((current) => event.target.checked ? [...current, store.id] : current.filter((id) => id !== store.id))} />{store.marketplace_id.replace("EBAY_", "")} · {store.store_name}</label>)}</fieldset>}
-        {canImport && <details className="proImport"><summary>Admin: Produkte per ASIN oder JSON importieren</summary><p className="proMuted">ASIN-Import nutzt Rainforest API, wenn konfiguriert, sonst den direkten Amazon.de/.com-Seitenparser. Amazon kann direkte Anfragen blockieren; Captchas werden nicht umgangen. ASIN-Importe bleiben bis zur Prüfung von Kategorie und Nutzungsrechten unveröffentlicht.</p><label className="proLabel">Amazon-Quelle<select className="proSelect" value={importMarketplace} onChange={(event) => setImportMarketplace(event.target.value)}><option value="AMZ_DE">Amazon Deutschland</option><option value="AMZ_US">Amazon USA</option></select></label><textarea className="proTextarea" value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder={'ASINs zeilenweise eingeben: B000000000\n\noder JSON: [{"asin":"B000000000","source_marketplace":"AMZ_DE","title":"Produktname","amazon_price":19.99,"images":["https://..."],"category_id":"eBay Kategorie-ID"}]'} /><button className="proButton proButtonPrimary" type="button" disabled={busy || !importJson.trim()} onClick={() => void importProducts()}>{busy ? "Daten werden abgerufen…" : "Produkte importieren"}</button></details>}
+        {canImport && <details className="proImport"><summary>Admin: Produkte per ASIN, Joybuy-SKU oder JSON importieren</summary><p className="proMuted">Amazon nutzt Rainforest, falls konfiguriert, sonst den direkten Produktseitenparser. Joybuy akzeptiert eine Joybuy.de-URL oder numerische Artikel-ID. Es werden nur echte Preis-, Bestands- und Bilddaten gespeichert; Importe bleiben bis zur Prüfung von VERO, Nutzungsrechten und zulässiger Lieferquelle gesperrt.</p><textarea className="proTextarea" value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder={'ASIN, Joybuy-SKU oder Produkt-URL zeilenweise eingeben\n\noder JSON: ["B000000000", "https://www.joybuy.de/dg/123456789"]'} /><button className="proButton proButtonPrimary" type="button" disabled={busy || !importJson.trim()} onClick={() => void importProducts()}>{busy ? "Daten werden abgerufen…" : "Produkte importieren"}</button></details>}
         {notice && <p className="proNotice" role="status">{notice}</p>}{error && <p className="proNotice proNoticeError" role="alert">{error}</p>}
-        <label className="proCheckbox"><input type="checkbox" checked={products.some((product) => !product.is_demo) && selected.length === products.filter((product) => !product.is_demo).length} onChange={(event) => setSelected(event.target.checked ? products.filter((product) => !product.is_demo).map((product) => product.id) : [])} />Alle freigabefähigen Produkte auswählen</label>
+        <label className="proCheckbox"><input type="checkbox" checked={products.some(canSelect) && products.filter(canSelect).every((product) => selected.includes(product.id))} onChange={(event) => setSelected(event.target.checked ? products.filter(canSelect).map((product) => product.id) : [])} />Alle freigegebenen Produkte auswählen</label>
         {selected.length > 0 && <div className="proBulkBar"><span>{selected.length} ausgewählt</span><button className="proButton proButtonPrimary" type="button" disabled={busy} onClick={() => void enqueue(selected)}>Auswahl zur Warteschlange hinzufügen</button></div>}
         <div className="proGrid">
           {products.map((product) => {
             const currency = currenciesByMarket[product.source_marketplace] || "EUR";
             return <article className="proCard" key={product.id}>
               <div className="proDepotImage">{product.images[0] ? <Image src={product.images[0]} alt="" width={220} height={160} unoptimized /> : <span>Kein Bild</span>}</div>
-              <div className="proDepotTop"><label className="proCheckbox"><input type="checkbox" checked={selected.includes(product.id)} disabled={product.is_demo} onChange={(event) => setSelected((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} />Auswählen</label><span className="proTag proTagSuccess">{product.source_marketplace.replace("AMZ_", "Amazon ")}</span>{product.is_demo && <span className="proTag proTagWarn">DEMO · NICHT VERÖFFENTLICHEN</span>}</div>
+              <div className="proDepotTop"><label className="proCheckbox"><input type="checkbox" checked={selected.includes(product.id)} disabled={!canSelect(product)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} />Auswählen</label><span className={`proTag ${product.source_marketplace === "JOYBUY_DE" ? "proTagWarn" : "proTagSuccess"}`}>{product.source_marketplace === "JOYBUY_DE" ? "Joybuy DE" : product.source_marketplace === "AMZ_US" ? "Amazon US" : "Amazon DE"}</span>{product.is_demo && <span className="proTag proTagWarn">DEMO · NICHT VERÖFFENTLICHEN</span>}</div>
               <h3>{product.title}</h3>
               <p className="proMuted"><span className="draftReadyBadge">{product.supplier === "joybuy_de" ? "Joybuy.de" : "Amazon.de"}</span> · <a href={product.source_url || `https://www.amazon.${product.source_marketplace === "AMZ_US" ? "com" : "de"}/dp/${product.asin}`} target="_blank" rel="noreferrer">Tedarikçide Aç ↗</a></p>
-              <p className="proMuted">ASIN {product.asin}{product.category_id ? ` · Kategorie ${product.category_id}` : ""}</p>
-              <div className="proDepotPrices"><span>Amazon <b>{money(product.amazon_price, currency)}</b></span><span>eBay-Vorschlag <b>{money(product.suggested_ebay_price, currency)}</b></span><span>Geschätzter Gewinn <b className="proProfit">{money(product.estimated_profit, currency)}</b></span><span>Bestand <b>{product.stock_status === "in_stock" ? "Verfügbar" : "Nicht verfügbar"}</b></span></div>
-              <div className="proToolbarControls"><button className="proButton proButtonPrimary" type="button" disabled={busy || product.is_demo || product.stock_status !== "in_stock" || !product.is_published} onClick={() => void enqueue([product.id])}>In Warteschlange aufnehmen</button>{product.is_demo ? <span className="proMuted">Produktquelle nicht verfügbar</span> : <a className="proButton" href={product.source_url || `https://www.amazon.${product.source_marketplace === "AMZ_US" ? "com" : "de"}/dp/${product.asin}`} target="_blank" rel="noreferrer">Tedarikçide Aç ↗</a>}</div>
-              {canImport && <div className="proPoolReview"><span className={`proTag ${product.is_published ? "proTagSuccess" : "proTagWarn"}`}>{product.is_published ? "Veröffentlicht" : product.is_demo ? "Demo-Daten · gesperrt" : "Prüfung erforderlich"}</span><label className="proLabel">eBay-Kategorie-ID<input className="proInput" disabled={product.is_demo} value={review[product.id]?.categoryId ?? product.category_id ?? ""} onChange={(event) => setReview((current) => ({ ...current, [product.id]: { categoryId: event.target.value, isVeroSafe: current[product.id]?.isVeroSafe ?? product.is_vero_safe } }))} /></label><label className="proCheckbox"><input type="checkbox" disabled={product.is_demo} checked={product.is_demo ? false : review[product.id]?.isVeroSafe ?? product.is_vero_safe} onChange={(event) => setReview((current) => ({ ...current, [product.id]: { categoryId: current[product.id]?.categoryId ?? product.category_id ?? "", isVeroSafe: event.target.checked } }))} />Nutzungsrechte geprüft und VERO-Risiko bewertet</label><div className="proToolbarControls"><button className="proButton" type="button" disabled={busy || product.is_demo || !review[product.id]?.isVeroSafe || !(review[product.id]?.categoryId || product.category_id)} onClick={() => void reviewProduct(product)}>{product.is_published ? "Freigabe aktualisieren" : "Prüfen und freigeben"}</button>{product.is_published && <button className="proButton proButtonDanger" type="button" disabled={busy} onClick={() => void reviewProduct(product, false)}>Veröffentlichung zurückziehen</button>}</div></div>}
+              <p className="proMuted">{product.supplier === "joybuy_de" ? "Joybuy SKU" : "ASIN"} {product.asin}{product.category_id ? ` · Kategorie ${product.category_id}` : ""}</p>
+              <div className="proDepotPrices"><span>Einkaufspreis <b>{money(product.amazon_price, currency)}</b></span><span>eBay-Vorschlag <b>{money(product.suggested_ebay_price, currency)}</b></span><span>Geschätzter Gewinn <b className="proProfit">{money(product.estimated_profit, currency)}</b></span><span>Bestand <b>{product.stock_status === "in_stock" ? "Verfügbar" : "Nicht verfügbar"}</b></span></div>
+              <div className="proToolbarControls"><button className="proButton proButtonPrimary" type="button" disabled={busy || !canSelect(product)} onClick={() => void enqueue([product.id])}>In Warteschlange aufnehmen</button>{product.is_demo ? <span className="proMuted">Produktquelle nicht verfügbar</span> : <a className="proButton" href={product.source_url || `https://www.amazon.${product.source_marketplace === "AMZ_US" ? "com" : "de"}/dp/${product.asin}`} target="_blank" rel="noreferrer">Tedarikçide Aç ↗</a>}</div>
+              {canImport && <div className="proPoolReview"><span className={`proTag ${product.is_published ? "proTagSuccess" : "proTagWarn"}`}>{product.is_published ? "Veröffentlicht" : product.is_demo ? "Demo-Daten · gesperrt" : "Prüfung erforderlich"}</span><label className="proLabel">eBay-Kategorie-ID<input className="proInput" disabled={product.is_demo} value={review[product.id]?.categoryId ?? product.category_id ?? ""} onChange={(event) => setReview((current) => ({ ...current, [product.id]: { categoryId: event.target.value, isVeroSafe: current[product.id]?.isVeroSafe ?? product.is_vero_safe } }))} /></label><label className="proCheckbox"><input type="checkbox" disabled={product.is_demo} checked={product.is_demo ? false : review[product.id]?.isVeroSafe ?? product.is_vero_safe} onChange={(event) => setReview((current) => ({ ...current, [product.id]: { categoryId: current[product.id]?.categoryId ?? product.category_id ?? "", isVeroSafe: event.target.checked } }))} />Markenrechte, VERO-Risiko und zulässige Lieferquelle geprüft</label><div className="proToolbarControls"><button className="proButton" type="button" disabled={busy || product.is_demo || !review[product.id]?.isVeroSafe || !(review[product.id]?.categoryId || product.category_id)} onClick={() => void reviewProduct(product)}>{product.is_published ? "Freigabe aktualisieren" : "Prüfen und freigeben"}</button>{product.is_published && <button className="proButton proButtonDanger" type="button" disabled={busy} onClick={() => void reviewProduct(product, false)}>Veröffentlichung zurückziehen</button>}</div></div>}
             </article>;
           })}
         </div>

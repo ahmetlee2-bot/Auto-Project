@@ -13,6 +13,7 @@ import { generateSku } from "../lib/ebay/sku";
 import { routeSupplierTracking } from "../lib/tracking/carrierRouter";
 import { HttpTrackingConverterProvider } from "../lib/tracking/providers/threePlProvider";
 import { isJoybuyTrackedProduct, verificationPendingState } from "../lib/repricer/sync";
+import { joybuyAdapter } from "../lib/suppliers/joybuyAdapter";
 
 test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads remain validation pending", () => {
   assert.equal(isJoybuyTrackedProduct({ supplier: "joybuy_de", amazon_asin: "JB-10520407" }), true);
@@ -22,6 +23,13 @@ test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads
   assert.equal(pending.sync_status, "error");
   assert.match(pending.last_error, /^VERIFICATION_PENDING:/);
   assert.match(pending.last_error, /zuletzt gespeicherten Werte bleiben erhalten/);
+});
+
+test("Joybuy depot imports accept a numeric SKU, JB-prefixed SKU, or Joybuy product URL", () => {
+  assert.equal(joybuyAdapter.canHandle("10520407"), true);
+  assert.equal(joybuyAdapter.canHandle("JB-10520407"), true);
+  assert.equal(joybuyAdapter.canHandle("https://www.joybuy.de/dg/10520407"), true);
+  assert.equal(joybuyAdapter.canHandle("https://evil.example/dg/10520407"), false);
 });
 
 test("a new SKU's eBay 404/25713 starts offer creation, while other failures stop it", () => {

@@ -25,7 +25,7 @@ function amazonShareUrl(value: unknown): string | null {
   try {
     const url = new URL(text);
     if (url.protocol !== "https:" || !/^(?:www\.)?amazon\.de$/i.test(url.hostname)) return null;
-    if (!/\/progress-tracker\/package\/|\/gp\/your-account\/ship-track/i.test(url.pathname)) return null;
+    if (!/\/progress-tracker\/package(?:\/|$)|\/gp\/your-account\/ship-track/i.test(url.pathname)) return null;
     return url.toString();
   } catch { return null; }
 }

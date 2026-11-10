@@ -609,7 +609,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case "SYNC_AMAZON_SUPPLIER_TRACKING": {
         const sourceUrl = String(_sender.url || "");
         if (_sender.id !== chrome.runtime.id || !/^https:\/\/(?:www\.)?amazon\.de\//i.test(sourceUrl)
-          || !/(?:\/gp\/your-account\/order-history|\/progress-tracker\/package\/|\/gp\/your-account\/ship-track)/i.test(new URL(sourceUrl).pathname)) {
+          || !/(?:\/gp\/your-account\/order-history|\/progress-tracker\/package(?:\/|$)|\/gp\/your-account\/ship-track)/i.test(new URL(sourceUrl).pathname)) {
           throw new Error("Amazon-Tracking darf nur von einer unterstützten Amazon-Bestellseite gesendet werden.");
         }
         return globalThis.AutoListerCloud.syncAmazonSupplierTracking(message.shipment);
@@ -626,7 +626,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (_sender.id !== chrome.runtime.id || _sender.url !== chrome.runtime.getURL("popup.html")) throw new Error("Untrusted extension sender.");
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         const url = new URL(tab?.url || "");
-        if (!/^www\.amazon\.de$/i.test(url.hostname) || !/(?:\/gp\/your-account\/order-history|\/progress-tracker\/package\/|\/gp\/your-account\/ship-track)/i.test(url.pathname)) {
+        if (!/^(?:www\.)?amazon\.de$/i.test(url.hostname) || !/(?:\/gp\/your-account\/order-history|\/progress-tracker\/package(?:\/|$)|\/gp\/your-account\/ship-track)/i.test(url.pathname)) {
           throw new Error("Öffne zuerst deine Amazon-Bestellübersicht oder die Paketverfolgung.");
         }
         let extracted;
