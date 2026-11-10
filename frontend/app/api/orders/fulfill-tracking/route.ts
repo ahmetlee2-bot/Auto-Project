@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
       }
 
       provider = convertedCarrier.toUpperCase().includes("AQUILINE") ? "Aquiline" : convertedCarrier;
-      carrierCode = "OTHER";
+      carrierCode = provider || "Aquiline";
       trackingNumber = convertedTracking.replace(/[^a-zA-Z0-9]/g, "");
       if (!conversionId) throw new Error("Die Tracking-Konvertierung konnte nicht dauerhaft gespeichert werden.");
     } else {
@@ -185,12 +185,23 @@ export async function POST(request: NextRequest) {
     if (saveError) throw new Error(saveError.message);
 
     try {
-      await ebayApiRequest<null>(scope, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`, "POST", {
-        lineItems,
-        shippedDate: new Date().toISOString(),
-        shippingCarrierCode: is3PlMode ? "OTHER" : carrierCode,
-        trackingNumber: sanitizedTrackingNumber,
-      });
+      const shippedDate = new Date().toISOString();
+      try {
+        await ebayApiRequest<null>(scope, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`, "POST", {
+          lineItems,
+          shippedDate,
+          shippingCarrierCode: is3PlMode ? "Aquiline" : carrierCode,
+          trackingNumber: sanitizedTrackingNumber,
+        });
+      } catch (firstError) {
+        if (!is3PlMode) throw firstError;
+        await ebayApiRequest<null>(scope, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`, "POST", {
+          lineItems,
+          shippedDate,
+          shippingCarrierCode: "OTHER",
+          trackingNumber: sanitizedTrackingNumber,
+        });
+      }
     } catch (cause) {
       await admin.from("order_tracking").update({ status: "error", last_error: cause instanceof Error ? cause.message : "eBay gönderimi başarısız." })
         .eq("user_id", user.id).eq("store_id", storeId).eq("order_id", orderId);

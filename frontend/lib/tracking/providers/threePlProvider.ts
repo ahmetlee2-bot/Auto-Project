@@ -20,7 +20,7 @@ export type TrackingConversionResult = {
   success: boolean;
   convertedTrackingNumber: string;
   carrierName: "Aquiline" | "BlueCare Express";
-  ebayCarrierCode: "OTHER" | "BLUECARE";
+  ebayCarrierCode: "Aquiline" | "BLUECARE" | "OTHER";
   isMock: boolean;
   status_history: TrackingStatusHistoryEntry[];
   rawResponse: unknown;
@@ -60,7 +60,12 @@ function validateResult(value: unknown, provider: ThreePlProviderName): Tracking
     throw new Error("Der 3PL-Dienst konnte keine gültige umgewandelte Sendungsnummer liefern.");
   }
   const carrierName = body.carrierName === "Aquiline" || provider === "AQUILINE" ? "Aquiline" : "BlueCare Express";
-  const ebayCarrierCode = String(body.ebayCarrierCode || "OTHER").toUpperCase() === "BLUECARE" ? "BLUECARE" : "OTHER";
+  const rawCarrierCode = String(body.ebayCarrierCode || "Aquiline").trim();
+  const ebayCarrierCode = rawCarrierCode.toUpperCase() === "BLUECARE"
+    ? "BLUECARE"
+    : rawCarrierCode.toUpperCase() === "OTHER"
+      ? "OTHER"
+      : "Aquiline";
   const statusHistory = Array.isArray(body.status_history) && body.status_history.length > 0
     ? (body.status_history as TrackingStatusHistoryEntry[])
     : buildInitialStatusHistory();
@@ -95,14 +100,14 @@ export class HttpTrackingConverterProvider implements ITrackingConverterProvider
         isMock: false,
         convertedTrackingNumber: tracking,
         carrierName: "Aquiline" as const,
-        ebayCarrierCode: "OTHER" as const,
+        ebayCarrierCode: "Aquiline" as const,
         status_history: statusHistory,
       };
       return {
         success: true,
         convertedTrackingNumber: tracking,
         carrierName: "Aquiline",
-        ebayCarrierCode: "OTHER",
+        ebayCarrierCode: "Aquiline",
         isMock: false,
         status_history: statusHistory,
         rawResponse,

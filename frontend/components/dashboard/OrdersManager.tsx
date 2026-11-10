@@ -58,8 +58,8 @@ const carriers = [
   ["DHL", "DHL"], ["DPD", "DPD"], ["HERMES", "Hermes"], ["GLS", "GLS"],
   ["UPS", "UPS"], ["FEDEX", "FedEx"], ["USPS", "USPS"], ["ROYAL_MAIL", "Royal Mail"],
   ["DEUTSCHE_POST", "Deutsche Post"], ["AUSTRALIA_POST", "Australia Post"],
-  ["CANADA_POST", "Canada Post"], ["ARAMEX", "Aramex"], ["BLUECARE_EXPRESS", "BlueCare Express (eBay: Other)"],
-  ["AQUILINE", "Aquiline (eBay: Other)"], ["OTHER", "Other"],
+  ["CANADA_POST", "Canada Post"], ["ARAMEX", "Aramex"], ["AQUILINE", "Aquiline"],
+  ["BLUECARE_EXPRESS", "BlueCare Express"], ["OTHER", "Other"],
 ];
 
 export function OrdersManager() {
@@ -162,7 +162,7 @@ export function OrdersManager() {
       if (typeof body.walletBalance === "number") setCreditBalance(body.walletBalance);
       const updatedProvider = body.provider || (values.mode === "adapter" ? "Aquiline" : null);
       const updatedTrackingNumber = body.trackingNumber || values.trackingNumber || "";
-      const updatedCarrierCode = body.carrierCode || (values.mode === "adapter" ? "OTHER" : values.carrierCode);
+      const updatedCarrierCode = body.carrierCode || (values.mode === "adapter" ? "Aquiline" : values.carrierCode);
       const updatedSourceTracking = body.sourceTrackingId ?? (values.sourceTrackingId || null);
 
       setOrders((current) =>
@@ -215,7 +215,7 @@ export function OrdersManager() {
             : row,
         ),
       );
-      setNotice(`Tracking wurde für Bestellung ${orderId} an eBay übermittelt${body.carrierCode ? ` (${body.carrierCode})` : ""}.${notifyBuyer[key] === false ? " Käufernachricht übersprungen." : body.buyerMessageSent ? " Käufer wurde per eBay-Nachricht informiert." : body.buyerMessageText ? " Nachricht konnte nicht automatisch gesendet werden; Vorlage steht zum Kopieren bereit." : " Kein interner Statuslink für eine Nachricht vorhanden."}`);
+      setNotice(`Tracking wurde für Bestellung ${orderId} an eBay übermittelt (${updatedProvider || updatedCarrierCode || "Aquiline"}).${notifyBuyer[key] === false ? " Käufernachricht übersprungen." : body.buyerMessageSent ? " Käufer wurde per eBay-Nachricht informiert." : body.buyerMessageText ? " Nachricht konnte nicht automatisch gesendet werden; Vorlage steht zum Kopieren bereit." : " Kein interner Statuslink für eine Nachricht vorhanden."}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Trackingdaten konnten nicht übertragen werden."); }
     finally { setBusy(""); }
   };
@@ -227,7 +227,7 @@ export function OrdersManager() {
 
   return <main className="proWorkspace">
     <div className="proPageHeading"><div><span className="proEyebrow">Versand</span><h1>eBay-Bestellungen</h1><p>Bestellungen aus verbundenen Shops laden und nach dem tatsächlichen Versand die vom Carrier bestätigten Daten eintragen.</p></div><div className="proToolbar"><span className="proTag" aria-live="polite">Credits: {isUnlimited ? "∞ Unlimited" : creditBalance === null ? "…" : creditBalance}</span>{!isUnlimited && <button className="proButton proButtonPrimary" type="button" onClick={() => setShowTopUp(true)}>+ Kredi Yükle</button>}<button className="proButton" type="button" disabled={loading} onClick={() => { void loadOrders(); void loadWallet(); }}>Aktualisieren</button></div></div>
-    <p className="proNotice">Übertrage nur reale Trackingdaten. Im 3PL-Modus wird die Lieferanten-Trackingnummer umgewandelt (z. B. Aquiline · AQ…DE) und mit dem eBay-Carrier-Code „OTHER“ an eBay übertragen.</p>
+    <p className="proNotice">Übertrage nur reale Trackingdaten. Im 3PL-Modus wird die Lieferanten-Trackingnummer umgewandelt (Aquiline · AQ…DE) und als „Aquiline“ an eBay übertragen.</p>
     {notice && <p className="proNotice" role="status">{notice}</p>}{error && <p className="proNotice proNoticeError" role="alert">{error}</p>}
     <section className="proPanel"><div className="proToolbar"><h2>Offene Bestellungen</h2><span className="proTag">{orders.length}</span></div>
       {loading ? <div className="proEmpty">eBay-Bestellungen werden geladen…</div> : orders.length ? <div className="proGridTwo">{orders.map(({ storeId, order }) => {

@@ -53,6 +53,7 @@ function normalizeEbayCarrier(value: unknown): string {
 
   // These are 3PL/provider names, not eBay carrier codes. If eBay does not
   // expose a dedicated value, use its documented generic "Other" carrier.
+  if (key === "AQUILINE") return "Aquiline";
   if (CUSTOM_3PL_CARRIERS[key] || /^(BLUECARE(?:_EXPRESS)?|AQUILINE)$/.test(key)) return "Other";
   throw new Error("Der eBay-Trägercode wird nicht unterstützt. Wähle einen eBay-Träger oder Other.");
 }

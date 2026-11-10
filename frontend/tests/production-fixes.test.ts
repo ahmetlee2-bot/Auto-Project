@@ -245,7 +245,7 @@ test("TBA supplier numbers auto-select 3PL and internal provider mode returns a 
     assert.equal(result.success, true);
     assert.equal(result.isMock, false);
     assert.equal(result.carrierName, "Aquiline");
-    assert.equal(result.ebayCarrierCode, "OTHER");
+    assert.equal(result.ebayCarrierCode, "Aquiline");
     assert.equal(result.status_history.length, 2);
     assert.equal(result.status_history[0].description, "Auftragsdaten elektronisch übermittelt");
     assert.equal(result.status_history[1].description, "Sendung wurde versandt");
