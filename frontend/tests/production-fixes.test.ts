@@ -14,7 +14,9 @@ import { routeSupplierTracking } from "../lib/tracking/carrierRouter";
 import { HttpTrackingConverterProvider } from "../lib/tracking/providers/threePlProvider";
 import { isJoybuyTrackedProduct, verificationPendingState } from "../lib/repricer/sync";
 import { joybuyAdapter } from "../lib/suppliers/joybuyAdapter";
-import { CURATED_DEPOT_CATALOG, filterCuratedDepotCatalog } from "../lib/depot/curatedCatalog";
+import { ALL_CURATED_DEPOT_PRODUCTS, CURATED_DEPOT_CATALOG, filterCuratedDepotCatalog, getRotatedCuratedCatalog } from "../lib/depot/curatedCatalog";
+import { analyzeProductVero } from "../lib/depot/veroChecker";
+import { getGermanSeasonalContext } from "../lib/depot/seasonalEngine";
 
 test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads remain validation pending", () => {
   assert.equal(isJoybuyTrackedProduct({ supplier: "joybuy_de", amazon_asin: "JB-10520407" }), true);
@@ -238,6 +240,34 @@ test("curated depot catalog provides 20 Amazon DE and 10 Joybuy DE products unlo
   assert.ok(filteredByProfit.length > 0 && filteredByProfit.every((item) => item.estimated_profit >= 12));
   const filteredByMaxPrice = filterCuratedDepotCatalog({ maxPrice: 12 });
   assert.ok(filteredByMaxPrice.length > 0 && filteredByMaxPrice.every((item) => item.amazon_price <= 12));
+
+  assert.equal(ALL_CURATED_DEPOT_PRODUCTS.length, 60);
+  const cycle0 = getRotatedCuratedCatalog(0).map((item) => item.asin);
+  const cycle1 = getRotatedCuratedCatalog(1).map((item) => item.asin);
+  assert.equal(cycle0.length, 30);
+  assert.equal(cycle1.length, 30);
+  assert.notDeepEqual(cycle0, cycle1);
+});
+
+test("interactive VERO check and German seasonal rotation engine return live verdicts and upcoming holidays", async () => {
+  const highRisk = await analyzeProductVero({
+    asin: "B0TESTVERO1",
+    title: "Bosch Professional 18V Akku Schlagbohrschrauber",
+    brand: "Bosch",
+  });
+  assert.equal(highRisk.riskLevel, "HIGH");
+  assert.equal(highRisk.isVeroSafe, false);
+
+  const safeGeneric = await analyzeProductVero({
+    asin: "B0773QXFHZ",
+    title: "Sompex Flame LED Echtwachskerze mit Timer",
+    brand: "Sompex",
+  });
+  assert.ok(safeGeneric.riskLevel === "LOW" || safeGeneric.riskLevel === "MEDIUM");
+
+  const seasonal = getGermanSeasonalContext(new Date("2026-11-11T10:00:00Z"));
+  assert.ok(seasonal.upcomingHolidays.length > 0);
+  assert.ok(seasonal.hoursUntilNextRotation > 0 && seasonal.hoursUntilNextRotation <= 72);
 });
 
 test("tracking validates real identifiers and only uses a provider's returned conversion", async () => {

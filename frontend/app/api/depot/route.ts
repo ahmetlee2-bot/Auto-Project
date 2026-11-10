@@ -6,7 +6,15 @@ import { fetchAmazonProductDetails, type AmazonMarketplace } from "../../../lib/
 import { repricerAdmin } from "../../../lib/repricer/admin";
 import { supplierRegistry } from "../../../lib/suppliers/registry";
 import { verifiedJoybuyImages } from "../../../lib/suppliers/joybuyImages";
-import { CURATED_DEPOT_CATALOG, filterCuratedDepotCatalog } from "../../../lib/depot/curatedCatalog";
+import {
+  ALL_CURATED_DEPOT_PRODUCTS,
+  CURATED_DEPOT_CATALOG,
+  filterCuratedDepotCatalog,
+} from "../../../lib/depot/curatedCatalog";
+import {
+  discoverLiveSeasonalAmazonProducts,
+  getGermanSeasonalContext,
+} from "../../../lib/depot/seasonalEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -46,11 +54,46 @@ type DepotDiscoveryResult = {
 
 let curatedSeedCacheUntil = 0;
 
-async function ensureCuratedDepotSeeded(force = false): Promise<DepotDiscoveryResult> {
-  if (!force && curatedSeedCacheUntil > Date.now()) {
+async function getUserExcludedAsins(userId: string): Promise<Set<string>> {
+  const excluded = new Set<string>();
+  try {
+    const admin = repricerAdmin();
+    const [trackedRes, draftsRes, storeListingsRes, queueRes] = await Promise.all([
+      admin.from("tracked_products").select("amazon_asin").eq("user_id", userId).limit(1000),
+      admin.from("draft_products").select("asin").eq("user_id", userId).limit(1000),
+      admin.from("store_listings").select("asin").eq("user_id", userId).limit(1000),
+      admin.from("listing_queue").select("asin").eq("user_id", userId).limit(1000),
+    ]);
+    for (const row of trackedRes.data || []) {
+      const code = String(row.amazon_asin || "").trim().toUpperCase();
+      if (code) excluded.add(code);
+    }
+    for (const row of draftsRes.data || []) {
+      const code = String(row.asin || "").trim().toUpperCase();
+      if (code) excluded.add(code);
+    }
+    for (const row of storeListingsRes.data || []) {
+      const code = String(row.asin || "").trim().toUpperCase();
+      if (code) excluded.add(code);
+    }
+    for (const row of queueRes.data || []) {
+      const code = String(row.asin || "").trim().toUpperCase();
+      if (code) excluded.add(code);
+    }
+  } catch {
+    /* Ignore transient read error; fallback catalog is still non-overlapping */
+  }
+  return excluded;
+}
+
+async function ensureCuratedDepotSeeded(
+  excludedAsins: Set<string>,
+  forceLiveDiscover = false,
+): Promise<DepotDiscoveryResult> {
+  if (!forceLiveDiscover && curatedSeedCacheUntil > Date.now()) {
     return {
       discovered: 0,
-      checked: CURATED_DEPOT_CATALOG.length,
+      checked: ALL_CURATED_DEPOT_PRODUCTS.length,
       updated: 0,
       skippedRecent: true,
       quotaExhausted: false,
@@ -60,7 +103,9 @@ async function ensureCuratedDepotSeeded(force = false): Promise<DepotDiscoveryRe
   try {
     const admin = repricerAdmin();
     const nowIso = new Date().toISOString();
-    const seedRows = CURATED_DEPOT_CATALOG.map((item) => ({
+    const seedRows = ALL_CURATED_DEPOT_PRODUCTS.filter(
+      (item) => !excludedAsins.has(item.asin.toUpperCase()),
+    ).map((item) => ({
       id: item.id,
       asin: item.asin,
       source_marketplace: item.source_marketplace,
@@ -83,19 +128,28 @@ async function ensureCuratedDepotSeeded(force = false): Promise<DepotDiscoveryRe
       is_demo: false,
       last_checked_at: nowIso,
     }));
-    const { error } = await admin.from("product_pool").upsert(seedRows, { onConflict: "asin,source_marketplace" });
-    if (!error) {
-      await admin
-        .from("product_pool")
-        .update({ is_published: true, is_vero_safe: true })
-        .eq("is_demo", false)
-        .or("is_published.eq.false,is_vero_safe.eq.false");
-      curatedSeedCacheUntil = Date.now() + 60 * 60_000;
+
+    if (seedRows.length) {
+      await admin.from("product_pool").upsert(seedRows, { onConflict: "asin,source_marketplace" });
     }
+
+    let liveDiscoveredCount = 0;
+    if (forceLiveDiscover) {
+      const liveRows = await discoverLiveSeasonalAmazonProducts(new Set(excludedAsins), 8);
+      if (liveRows.length) {
+        const { data } = await admin
+          .from("product_pool")
+          .upsert(liveRows, { onConflict: "asin,source_marketplace" })
+          .select("id");
+        liveDiscoveredCount = data?.length || liveRows.length;
+      }
+    }
+
+    curatedSeedCacheUntil = Date.now() + 60 * 60_000;
     return {
-      discovered: CURATED_DEPOT_CATALOG.length,
-      checked: CURATED_DEPOT_CATALOG.length,
-      updated: CURATED_DEPOT_CATALOG.length,
+      discovered: liveDiscoveredCount || seedRows.length,
+      checked: seedRows.length + liveDiscoveredCount,
+      updated: seedRows.length,
       skippedRecent: false,
       quotaExhausted: false,
       providerUnavailable: false,
@@ -155,15 +209,30 @@ export async function GET(request: NextRequest) {
   const maxPrice = hasMaxPrice ? Number(query.get("maxPrice")) : null;
   const hasMinProfit = query.has("minProfit") && query.get("minProfit") !== "";
   const minProfit = hasMinProfit ? Number(query.get("minProfit")) : null;
+  const cycleOffset = Math.max(0, Number(query.get("cycleOffset") || 0) || 0);
 
-  const discovery = await ensureCuratedDepotSeeded(query.get("discover") === "1");
+  const seasonal = getGermanSeasonalContext();
+  const effectiveCycleIndex = seasonal.cycleIndex + cycleOffset;
+  const excludedAsins = await getUserExcludedAsins(user.id);
+  // Also exclude fake legacy SKUs if ever present
+  excludedAsins.add("JB-10384920");
+  excludedAsins.add("JB-10492815");
 
-  const fallbackProducts = filterCuratedDepotCatalog({
+  const discovery = await ensureCuratedDepotSeeded(excludedAsins, query.get("discover") === "1");
+
+  const rotatedCurated = filterCuratedDepotCatalog({
     marketplace: market,
     category,
     maxPrice: maxPrice !== null && Number.isFinite(maxPrice) ? maxPrice : null,
     minProfit: minProfit !== null && Number.isFinite(minProfit) ? minProfit : null,
+    cycleIndex: effectiveCycleIndex,
+    excludedAsins,
   });
+
+  const seasonByAsin = new Map(
+    ALL_CURATED_DEPOT_PRODUCTS.map((item) => [item.asin.toUpperCase(), item.season_tag]),
+  );
+  const rotatedAsinSet = new Set(rotatedCurated.map((item) => item.asin.toUpperCase()));
 
   let dbProducts: Array<Record<string, unknown>> = [];
   let dbCategories: string[] = [];
@@ -191,7 +260,13 @@ export async function GET(request: NextRequest) {
       .order("estimated_profit", { ascending: false, nullsFirst: false })
       .limit(200);
     if (!error && Array.isArray(data)) {
-      dbProducts = data;
+      dbProducts = data.filter((row) => {
+        const asin = String(row.asin || "").trim().toUpperCase();
+        if (!asin || excludedAsins.has(asin)) return false;
+        // If the row is one of the 60 curated items, only show the 30 active for the current 3-day rotation cycle
+        if (seasonByAsin.has(asin) && !rotatedAsinSet.has(asin)) return false;
+        return true;
+      });
     }
 
     const { data: categoriesData } = await repricerAdmin()
@@ -202,14 +277,20 @@ export async function GET(request: NextRequest) {
       .limit(200);
     dbCategories = (categoriesData || []).map((row) => String(row.category_id || "")).filter(Boolean);
   } catch {
-    // Fall back to curated catalog if DB read fails.
+    // Fall back to rotated curated catalog if DB read fails.
   }
 
   const mergedByKey = new Map<string, Record<string, unknown>>();
   for (const row of dbProducts) {
-    const key = `${String(row.source_marketplace || "AMZ_DE")}:${String(row.asin || "")}`;
+    const asin = String(row.asin || "").toUpperCase();
+    const key = `${String(row.source_marketplace || "AMZ_DE")}:${asin}`;
+    const specifics = (row.item_specifics && typeof row.item_specifics === "object" && !Array.isArray(row.item_specifics))
+      ? (row.item_specifics as Record<string, string[]>)
+      : {};
+    const seasonTag = seasonByAsin.get(asin) || specifics.Saison?.[0] || seasonal.campaignBadge;
     mergedByKey.set(key, {
       ...row,
+      season_tag: seasonTag,
       is_published: true,
       is_vero_safe: true,
       is_approved: true,
@@ -218,8 +299,8 @@ export async function GET(request: NextRequest) {
       stock_status: row.stock_status === "out_of_stock" ? "out_of_stock" : "in_stock",
     });
   }
-  for (const fallback of fallbackProducts) {
-    const key = `${fallback.source_marketplace}:${fallback.asin}`;
+  for (const fallback of rotatedCurated) {
+    const key = `${fallback.source_marketplace}:${fallback.asin.toUpperCase()}`;
     if (!mergedByKey.has(key)) {
       mergedByKey.set(key, { ...fallback });
     }
@@ -231,7 +312,7 @@ export async function GET(request: NextRequest) {
   const categories = [
     ...new Set([
       ...dbCategories,
-      ...CURATED_DEPOT_CATALOG.map((item) => item.category_id).filter(Boolean),
+      ...ALL_CURATED_DEPOT_PRODUCTS.map((item) => item.category_id).filter(Boolean),
     ]),
   ];
 
@@ -240,6 +321,16 @@ export async function GET(request: NextRequest) {
     categories,
     canImport: adminUser,
     discovery: query.get("discover") === "1" ? discovery : null,
+    seasonal: {
+      activeCampaign: seasonal.activeCampaign,
+      campaignBadge: seasonal.campaignBadge,
+      seasonSummary: seasonal.seasonSummary,
+      upcomingHolidays: seasonal.upcomingHolidays,
+      cycleIndex: effectiveCycleIndex,
+      nextRotationAt: seasonal.nextRotationAt,
+      hoursUntilNextRotation: seasonal.hoursUntilNextRotation,
+      excludedUserListingsCount: Math.max(0, excludedAsins.size - 2),
+    },
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

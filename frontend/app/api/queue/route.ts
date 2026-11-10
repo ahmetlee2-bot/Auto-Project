@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser } from "../../../lib/dashboard/server-auth";
 import { computeSuggestedPrice, marketplaceCurrency } from "../../../lib/ebay/multi-store";
 import { repricerAdmin } from "../../../lib/repricer/admin";
-import { CURATED_DEPOT_CATALOG } from "../../../lib/depot/curatedCatalog";
+import { ALL_CURATED_DEPOT_PRODUCTS } from "../../../lib/depot/curatedCatalog";
 
 export const runtime = "nodejs";
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     if (storeError) throw storeError;
     if (!stores || stores.length !== storeIds.length) throw new Error("Seçilen mağazalardan biri bu hesaba ait değil.");
     if (stores.some((store) => store.status !== "active")) throw new Error("Duraklatılmış veya yeniden bağlanması gereken mağazaya ürün kuyruğa eklenemez.");
-    const matchedCurated = CURATED_DEPOT_CATALOG.filter((item) => productIds.includes(item.id));
+    const matchedCurated = ALL_CURATED_DEPOT_PRODUCTS.filter((item) => productIds.includes(item.id));
     if (matchedCurated.length) {
       await admin.from("product_pool").upsert(
         matchedCurated.map((item) => ({

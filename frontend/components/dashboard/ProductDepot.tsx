@@ -26,12 +26,54 @@ type PoolProduct = {
   is_approved?: boolean;
   canPublish?: boolean;
   is_demo: boolean;
+  season_tag?: string;
+};
+
+type SeasonalHolidayInfo = {
+  id: string;
+  nameDe: string;
+  nameTr: string;
+  daysUntil: number;
+  badge: string;
+};
+
+type SeasonalMetadata = {
+  activeCampaign: string;
+  campaignBadge: string;
+  seasonSummary: string;
+  rotationCycleIndex: number;
+  nextRotationAt: string;
+  hoursUntilNextRotation: number;
+  upcomingHolidays: SeasonalHolidayInfo[];
+  recommendedSearchQueries: string[];
+  excludedUserListingsCount?: number;
+  totalRotationPoolSize?: number;
+};
+
+type VeroCheckResult = {
+  asin: string;
+  isVeroSafe: boolean;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  riskScore: number;
+  detectedBrand: string | null;
+  verdictLabel: string;
+  reason: string;
+  actionAdvice: string;
+  checkedBy: "dictionary" | "gemini_ai" | "hybrid";
+  checkedAt: string;
+};
+
+type VeroUiState = {
+  step: "idle" | "prompt" | "loading" | "done" | "error";
+  result?: VeroCheckResult;
+  errorMessage?: string;
 };
 
 type DepotResponse = {
   products: PoolProduct[];
   categories: string[];
   canImport: boolean;
+  seasonal?: SeasonalMetadata | null;
   discovery?: {
     discovered?: number;
     checked?: number;
@@ -39,6 +81,7 @@ type DepotResponse = {
     providerUnavailable?: boolean;
     skippedRecent?: boolean;
     quotaExhausted?: boolean;
+    seasonalLiveDiscovered?: number;
   } | null;
   error?: string;
 };
@@ -53,6 +96,8 @@ export function ProductDepot() {
   const [products, setProducts] = useState<PoolProduct[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [canImport, setCanImport] = useState(false);
+  const [seasonal, setSeasonal] = useState<SeasonalMetadata | null>(null);
+  const [cycleOffset, setCycleOffset] = useState(0);
   const [marketplace, setMarketplace] = useState("ALL");
   const [category, setCategory] = useState("ALL");
   const [maxPrice, setMaxPrice] = useState("");
@@ -64,6 +109,7 @@ export function ProductDepot() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [filtersRestored, setFiltersRestored] = useState(false);
+  const [veroStates, setVeroStates] = useState<Record<string, VeroUiState>>({});
   const initialDiscoveryDone = useRef(false);
 
   const query = useMemo(() => {
@@ -72,8 +118,9 @@ export function ProductDepot() {
     if (category !== "ALL") params.set("category", category);
     if (maxPrice) params.set("maxPrice", maxPrice);
     if (minProfit) params.set("minProfit", minProfit);
+    if (cycleOffset > 0) params.set("cycleOffset", String(cycleOffset));
     return params.toString();
-  }, [marketplace, category, maxPrice, minProfit]);
+  }, [marketplace, category, maxPrice, minProfit, cycleOffset]);
 
   const loadProducts = useCallback(async (discover = false) => {
     setError("");
@@ -92,8 +139,13 @@ export function ProductDepot() {
     setProducts(unlockedProducts);
     setCategories(body.categories || []);
     setCanImport(body.canImport === true);
+    if (body.seasonal) setSeasonal(body.seasonal);
     if (discover) {
-      setNotice(`Katalog aktualisiert: ${unlockedProducts.length} freigegebene Amazon-DE- & Joybuy-DE-Produkte verfügbar.`);
+      const excludedCount = body.seasonal?.excludedUserListingsCount ?? 0;
+      setNotice(
+        `Katalog aktualisiert: ${unlockedProducts.length} freigegebene Amazon-DE- & Joybuy-DE-Produkte verfügbar` +
+          (excludedCount > 0 ? ` (${excludedCount} bereits in Ihrem eBay-Shop gelistete Produkte automatisch ausgeblendet).` : "."),
+      );
     }
     setSelected((current) => current.filter((id) => unlockedProducts.some((product) => product.id === id)));
   }, [query]);
@@ -144,6 +196,58 @@ export function ProductDepot() {
       : [selectedStoreId];
   const currenciesByMarket: Record<string, string> = { AMZ_DE: "EUR", JOYBUY_DE: "EUR" };
   const canSelect = (product: PoolProduct) => !product.is_demo && product.stock_status !== "out_of_stock";
+
+  const openVeroPrompt = (productId: string) => {
+    setVeroStates((prev) => {
+      const current = prev[productId];
+      if (current?.step === "prompt") {
+        return { ...prev, [productId]: { step: "idle" } };
+      }
+      if (current?.step === "done") {
+        return prev;
+      }
+      return { ...prev, [productId]: { step: "prompt" } };
+    });
+  };
+
+  const runVeroCheck = async (product: PoolProduct) => {
+    setVeroStates((prev) => ({
+      ...prev,
+      [product.id]: { step: "loading" },
+    }));
+    try {
+      const response = await fetch("/api/depot/vero-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asin: product.asin,
+          title: product.title,
+          brand: product.brand,
+          description: product.description,
+          sourceMarketplace: product.source_marketplace,
+        }),
+      });
+      const data = (await response.json()) as { result?: VeroCheckResult; error?: string };
+      if (!response.ok || !data.result) {
+        throw new Error(data.error || "VERO kontrolü tamamlanamadı.");
+      }
+      setVeroStates((prev) => ({
+        ...prev,
+        [product.id]: {
+          step: "done",
+          result: data.result,
+        },
+      }));
+    } catch (cause) {
+      setVeroStates((prev) => ({
+        ...prev,
+        [product.id]: {
+          step: "error",
+          errorMessage: cause instanceof Error ? cause.message : "VERO kontrolü sırasında hata oluştu.",
+        },
+      }));
+    }
+  };
 
   const enqueue = async (productIds: string[]) => {
     if (!chosenStores.length) {
@@ -260,14 +364,84 @@ export function ProductDepot() {
     <main className="proWorkspace">
       <div className="proPageHeading">
         <div>
-          <span className="proEyebrow">Produktauswahl</span>
+          <span className="proEyebrow">Produktauswahl · Otonom Sezon &amp; VERO Motoru</span>
           <h1>Curated Product Depot</h1>
           <p>
-            Kuratierter Produktkatalog aus Amazon DE und Joybuy DE. Alle Produkte sind sofort freigegeben und können mit
-            einem Klick in Ihre Shop-Warteschlange aufgenommen werden.
+            Almanya bayram/sezon takvimine göre her 3 günde bir otomatik yenilenen, mağazanızda aktif listelediğiniz
+            ürünleri otomatik hariç tutan (Anti-Duplication) Amazon DE &amp; Joybuy DE ürün havuzu.
           </p>
         </div>
       </div>
+
+      {seasonal && (
+        <section
+          className="proPanel"
+          style={{
+            marginBottom: "16px",
+            border: "1px solid rgba(59, 130, 246, 0.35)",
+            background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+                <span className="proTag proTagSuccess">{seasonal.campaignBadge}</span>
+                <span className="proTag proTagWarn">
+                  🔄 3 Günlük Otonom Rotasyon (Sonraki değişim: ~{seasonal.hoursUntilNextRotation} saat)
+                </span>
+                {typeof seasonal.excludedUserListingsCount === "number" && seasonal.excludedUserListingsCount > 0 && (
+                  <span className="proTag" style={{ background: "rgba(16, 185, 129, 0.18)", color: "#6ee7b7" }}>
+                    🛡️ {seasonal.excludedUserListingsCount} Mevcut eBay İlanınız Hariç Tutuldu (%0 Çakışma)
+                  </span>
+                )}
+              </div>
+              <p className="proMuted" style={{ margin: "4px 0" }}>
+                <b>Aktif Sezon Odakları ({seasonal.activeCampaign}):</b> {seasonal.seasonSummary}
+              </p>
+              {seasonal.upcomingHolidays.length > 0 && (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                  {seasonal.upcomingHolidays.map((holiday) => (
+                    <span
+                      key={holiday.id}
+                      style={{
+                        fontSize: "12px",
+                        padding: "3px 10px",
+                        borderRadius: "999px",
+                        background: "rgba(59, 130, 246, 0.15)",
+                        border: "1px solid rgba(59, 130, 246, 0.3)",
+                        color: "#bfdbfe",
+                      }}
+                    >
+                      {holiday.badge} · <b>{holiday.nameTr}</b> (
+                      {holiday.daysUntil === 0 ? "Bugün / Aktif!" : `${holiday.daysUntil} gün kaldı`})
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                className="proButton"
+                type="button"
+                disabled={busy}
+                onClick={() => setCycleOffset((prev) => prev + 1)}
+                title="3 gün beklemeden bir sonraki rotasyon paketindeki 30 ürünü göster"
+              >
+                🔄 Sonraki 3 Günlük Listeye Geç (Grup #{(cycleOffset % 2) + 1})
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="proPanel">
         <div className="proToolbar">
           <div className="proToolbarControls">
@@ -326,7 +500,8 @@ export function ProductDepot() {
         </div>
         <p className="proMuted">
           Amazon-DE- und Joybuy-DE-Produkte werden direkt über den integrierten Produktseitenparser (Direct Scraper)
-          und den kuratierten Bestseller-Pool bereitgestellt – komplett ohne externe API-Gebühren.
+          und den kuratierten Saisonal-Pool bereitgestellt – komplett ohne externe API-Gebühren. Für jedes Produkt
+          können Sie über das <b>⚠️ VERO?</b>-Symbol eine sofortige Live-VERO-Prüfung durchführen.
         </p>
         {selectedStoreId === "ALL_STORES" && activeStores.length > 0 && (
           <fieldset className="proStoreTargets">
@@ -359,7 +534,7 @@ export function ProductDepot() {
               value={importJson}
               onChange={(event) => setImportJson(event.target.value)}
               placeholder={
-                'ASIN, Joybuy-SKU oder Produkt-URL zeilenweise eingeben\n\noder JSON: ["B087T2GBPX", "https://www.joybuy.de/dg/102447826"]'
+                'ASIN, Joybuy-SKU oder Produkt-URL zeilenweise eingeben\n\noder JSON: ["B0773QXFHZ", "https://www.joybuy.de/dp/xiaomi-smart-band/10396605"]'
               }
             />
             <button
@@ -411,6 +586,7 @@ export function ProductDepot() {
         <div className="proGrid">
           {products.map((product) => {
             const currency = currenciesByMarket[product.source_marketplace] || "EUR";
+            const veroState = veroStates[product.id] || { step: "idle" };
             return (
               <article className="proCard" key={product.id}>
                 <div className="proDepotImage">
@@ -420,7 +596,7 @@ export function ProductDepot() {
                     <span>Kein Bild</span>
                   )}
                 </div>
-                <div className="proDepotTop">
+                <div className="proDepotTop" style={{ flexWrap: "wrap", gap: "6px" }}>
                   <label className="proCheckbox">
                     <input
                       type="checkbox"
@@ -448,8 +624,156 @@ export function ProductDepot() {
                         ? "Amazon US"
                         : "Amazon DE"}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => openVeroPrompt(product.id)}
+                    title="VERO kontrolü uyarısını aç"
+                    style={{
+                      cursor: "pointer",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      padding: "2px 8px",
+                      borderRadius: "999px",
+                      border:
+                        veroState.step === "done"
+                          ? veroState.result?.riskLevel === "HIGH"
+                            ? "1px solid rgba(239, 68, 68, 0.7)"
+                            : veroState.result?.riskLevel === "MEDIUM"
+                              ? "1px solid rgba(245, 158, 11, 0.7)"
+                              : "1px solid rgba(16, 185, 129, 0.7)"
+                          : "1px solid rgba(245, 158, 11, 0.55)",
+                      background:
+                        veroState.step === "done"
+                          ? veroState.result?.riskLevel === "HIGH"
+                            ? "rgba(239, 68, 68, 0.2)"
+                            : veroState.result?.riskLevel === "MEDIUM"
+                              ? "rgba(245, 158, 11, 0.2)"
+                              : "rgba(16, 185, 129, 0.2)"
+                          : "rgba(245, 158, 11, 0.14)",
+                      color:
+                        veroState.step === "done"
+                          ? veroState.result?.riskLevel === "HIGH"
+                            ? "#fca5a5"
+                            : veroState.result?.riskLevel === "MEDIUM"
+                              ? "#fde68a"
+                              : "#6ee7b7"
+                          : "#fcd34d",
+                    }}
+                  >
+                    {veroState.step === "done"
+                      ? veroState.result?.riskLevel === "HIGH"
+                        ? "🔴 VERO Riskli"
+                        : veroState.result?.riskLevel === "MEDIUM"
+                          ? "🟡 VERO Orta"
+                          : "🟢 VERO Temiz"
+                      : "⚠️ VERO?"}
+                  </button>
                 </div>
+
+                {veroState.step === "prompt" && (
+                  <div
+                    style={{
+                      margin: "8px 0",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: "rgba(245, 158, 11, 0.12)",
+                      border: "1px solid rgba(245, 158, 11, 0.4)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <div style={{ marginBottom: "6px", color: "#fde68a" }}>
+                      ⚠️ Lütfen listelemeden önce bu ürün için VERO marka kontrolünü yapınız.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void runVeroCheck(product)}
+                      style={{
+                        cursor: "pointer",
+                        width: "100%",
+                        padding: "6px 10px",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(59, 130, 246, 0.6)",
+                        background: "rgba(37, 99, 235, 0.35)",
+                        color: "#eff6ff",
+                        fontWeight: 600,
+                        fontSize: "12px",
+                      }}
+                    >
+                      🔍 VERO kontrolünü yapınız (Otomatik Analiz)
+                    </button>
+                  </div>
+                )}
+
+                {veroState.step === "loading" && (
+                  <div
+                    style={{
+                      margin: "8px 0",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: "rgba(59, 130, 246, 0.12)",
+                      border: "1px solid rgba(59, 130, 246, 0.35)",
+                      fontSize: "12px",
+                      color: "#bfdbfe",
+                    }}
+                  >
+                    ⏳ eBay DE VeRO veritabanı ve AI marka analizi yapılıyor…
+                  </div>
+                )}
+
+                {veroState.step === "error" && (
+                  <div
+                    style={{
+                      margin: "8px 0",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: "rgba(239, 68, 68, 0.15)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      fontSize: "12px",
+                      color: "#fca5a5",
+                    }}
+                  >
+                    ❌ {veroState.errorMessage || "VERO kontrolü yapılamadı."}
+                  </div>
+                )}
+
+                {veroState.step === "done" && veroState.result && (
+                  <div
+                    style={{
+                      margin: "8px 0",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background:
+                        veroState.result.riskLevel === "HIGH"
+                          ? "rgba(239, 68, 68, 0.14)"
+                          : veroState.result.riskLevel === "MEDIUM"
+                            ? "rgba(245, 158, 11, 0.14)"
+                            : "rgba(16, 185, 129, 0.14)",
+                      border:
+                        veroState.result.riskLevel === "HIGH"
+                          ? "1px solid rgba(239, 68, 68, 0.45)"
+                          : veroState.result.riskLevel === "MEDIUM"
+                            ? "1px solid rgba(245, 158, 11, 0.45)"
+                            : "1px solid rgba(16, 185, 129, 0.45)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: "4px" }}>{veroState.result.verdictLabel}</div>
+                    {veroState.result.detectedBrand && (
+                      <div style={{ opacity: 0.9, marginBottom: "3px" }}>
+                        Marka: <b>{veroState.result.detectedBrand}</b> (Risk Skoru: {veroState.result.riskScore}/100)
+                      </div>
+                    )}
+                    <div style={{ opacity: 0.92, marginBottom: "4px" }}>{veroState.result.reason}</div>
+                    <div style={{ opacity: 0.8, fontStyle: "italic" }}>💡 {veroState.result.actionAdvice}</div>
+                  </div>
+                )}
+
                 <h3>{product.title}</h3>
+                {product.season_tag && (
+                  <p style={{ margin: "2px 0 6px", fontSize: "11px", color: "#93c5fd" }}>
+                    🎯 Sezon Etiketi: <b>{product.season_tag}</b>
+                  </p>
+                )}
                 <p className="proMuted">
                   <span className="draftReadyBadge">
                     {product.supplier === "joybuy_de" || product.source_marketplace === "JOYBUY_DE"
