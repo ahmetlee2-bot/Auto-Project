@@ -33,7 +33,7 @@ type PoolImport = {
 };
 
 const AMAZON_DISCOVERY_TERMS = ["3D Drucker Zubehör", "Haustier Zubehör", "Küche Haushalt", "Auto Zubehör", "Garten Werkzeuge", "Hobby Basteln Werkzeug"];
-let amazonDiscoveryCache: { expiresAt: number; result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean } } | null = null;
+let amazonDiscoveryCache: { expiresAt: number; result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean; skippedRecent?: boolean } } | null = null;
 type SearchResult = { asin?: string; title?: string; image?: string; link?: string; price?: { value?: number | string; currency?: string }; product?: {
   title?: string; brand?: string; description?: string; main_image?: { link?: string } | string; images?: Array<{ link?: string }>;
   buybox_winner?: { price?: { value?: number | string; currency?: string }; shipping?: { value?: number | string }; availability?: { type?: string } };
@@ -42,13 +42,18 @@ type SearchResult = { asin?: string; title?: string; image?: string; link?: stri
 
 async function discoverAmazonProducts() {
   if (amazonDiscoveryCache && amazonDiscoveryCache.expiresAt > Date.now()) return amazonDiscoveryCache.result;
-  const cache = (result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean }) => {
+  const cache = (result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean; skippedRecent?: boolean }) => {
     amazonDiscoveryCache = { expiresAt: Date.now() + 6 * 60 * 60_000, result };
     return result;
   };
   const apiKey = process.env.RAINFOREST_API_KEY?.trim();
   if (!apiKey) return cache({ discovered: 0, providerUnavailable: true });
   const admin = repricerAdmin();
+  const freshSince = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
+  const { count: freshCount, error: freshError } = await admin.from("product_pool").select("id", { count: "exact", head: true })
+    .eq("source_marketplace", "AMZ_DE").eq("is_demo", false).gte("last_checked_at", freshSince);
+  if (freshError) throw freshError;
+  if ((freshCount || 0) >= 30) return cache({ discovered: 0, checked: freshCount || 0, updated: 0, skippedRecent: true });
   const candidates = new Map<string, PoolImport>();
   const failedTerms: string[] = [];
   for (const searchTerm of AMAZON_DISCOVERY_TERMS) {

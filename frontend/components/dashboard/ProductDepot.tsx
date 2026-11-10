@@ -10,7 +10,7 @@ type PoolProduct = {
   estimated_shipping: number; images: string[]; stock_status: string; condition: string; is_vero_safe: boolean; is_published: boolean;
   is_demo: boolean;
 };
-type DepotResponse = { products: PoolProduct[]; categories: string[]; canImport: boolean; discovery?: { discovered?: number; checked?: number; failedTerms?: string[]; providerUnavailable?: boolean } | null; error?: string };
+type DepotResponse = { products: PoolProduct[]; categories: string[]; canImport: boolean; discovery?: { discovered?: number; checked?: number; failedTerms?: string[]; providerUnavailable?: boolean; skippedRecent?: boolean } | null; error?: string };
 
 const money = (value: number | null | undefined, currency: string) => value === null || value === undefined
   ? "—"
@@ -55,7 +55,7 @@ export function ProductDepot() {
     setProducts(body.products || []);
     setCategories(body.categories || []);
     setCanImport(body.canImport === true);
-    if (body.discovery) setNotice(body.discovery.providerUnavailable ? "Amazon-Produktentdeckung ist nicht konfiguriert (Rainforest-Key fehlt)." : `${body.discovery.discovered || 0} neue Amazon-DE-Produkte entdeckt; ${body.discovery.checked || 0} Vorschläge werden einzeln auf Bestand, eBay-Quelle und Markenrechte geprüft.${body.discovery.failedTerms?.length ? ` Teilweise fehlgeschlagen: ${body.discovery.failedTerms.join(", ")}.` : ""}`);
+    if (body.discovery) setNotice(body.discovery.providerUnavailable ? "Amazon-Produktentdeckung ist nicht konfiguriert (Rainforest-Key fehlt)." : body.discovery.skippedRecent ? `Amazon-Katalog vor kurzem aktualisiert (${body.discovery.checked || 0} Produkte). Eine neue Datenabfrage ist nach sechs Stunden möglich.` : `${body.discovery.discovered || 0} neue Amazon-DE-Produkte entdeckt; ${body.discovery.checked || 0} Vorschläge werden einzeln auf Bestand, eBay-Quelle und Markenrechte geprüft.${body.discovery.failedTerms?.length ? ` Teilweise fehlgeschlagen: ${body.discovery.failedTerms.join(", ")}.` : ""}`);
     setReview((current) => Object.fromEntries((body.products || []).map((product) => [product.id, current[product.id] || { categoryId: product.category_id || "", isVeroSafe: product.is_vero_safe }])));
     setSelected((current) => current.filter((id) => (body.products || []).some((product) => product.id === id)));
   }, [query, marketplace]);
