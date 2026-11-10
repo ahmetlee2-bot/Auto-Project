@@ -14,6 +14,7 @@ import { routeSupplierTracking } from "../lib/tracking/carrierRouter";
 import { HttpTrackingConverterProvider } from "../lib/tracking/providers/threePlProvider";
 import { isJoybuyTrackedProduct, verificationPendingState } from "../lib/repricer/sync";
 import { joybuyAdapter } from "../lib/suppliers/joybuyAdapter";
+import { CURATED_DEPOT_CATALOG, filterCuratedDepotCatalog } from "../lib/depot/curatedCatalog";
 
 test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads remain validation pending", () => {
   assert.equal(isJoybuyTrackedProduct({ supplier: "joybuy_de", amazon_asin: "JB-10520407" }), true);
@@ -186,20 +187,26 @@ test("seller identity falls back to the authenticated Trading GetUser call", asy
   } finally { global.fetch = originalFetch; }
 });
 
-test("exhausted provider falls back to Amazon HTML and is bypassed on the next request", async () => {
+test("direct scraper is used by default and exhausted Rainforest provider never blocks product scraping", async () => {
   const saved = { ...process.env }, originalFetch = global.fetch;
   let providerCalls = 0, directCalls = 0;
   try {
     process.env.RAINFOREST_API_KEY = "exhausted-test-key";
+    delete process.env.RAINFOREST_ENABLED;
     global.fetch = async (input) => {
       if (String(input).includes("rainforest")) { providerCalls++; return Response.json({ request_info: { success: false, message: "You have used up your free credits, please consider upgrading to a paid plan." } }, { status: 402 }); }
       directCalls++;
-      return new Response('<span id="productTitle">Test product</span><div id="availability"><span>Auf Lager</span></div><div id="corePrice_feature_div"><span class="a-price"><span class="a-offscreen">12,99 €</span></span></div>');
+      return new Response('<span id="productTitle">Test product</span><meta property="og:image" content="https://m.media-amazon.com/images/I/31JZwMeBIdL.jpg"><div id="availability"><span>Auf Lager</span></div><div id="corePrice_feature_div"><span class="a-price"><span class="a-offscreen">12,99 €</span></span></div>');
     };
     const first = await fetchAmazonProductDetails("B09R4T5WPB", "AMZ_DE");
     assert.equal(first.price, 12.99); assert.equal(first.inStock, true);
+    assert.equal(first.images[0], "https://m.media-amazon.com/images/I/31JZwMeBIdL.jpg");
+    assert.equal(providerCalls, 0); assert.equal(directCalls, 1);
+
+    process.env.RAINFOREST_ENABLED = "true";
     await fetchAmazonProductDetails("B09R4T5WPB", "AMZ_DE");
     assert.equal(providerCalls, 1); assert.equal(directCalls, 2);
+
     global.fetch = async () => new Response('<span id="productTitle">US product</span><script type="application/ld+json">{"@type":"Product","name":"US product","offers":{"price":"14.95","priceCurrency":"USD","availability":"https://schema.org/OutOfStock"}}</script>');
     assert.equal((await fetchAmazonProductDetails("B09R4T5WPB", "AMZ_US")).inStock, false);
     global.fetch = async () => new Response('<span id="productTitle">Buyable product</span><div id="desktop_qualifiedBuyBox"><div id="availability"><span></span></div><input id="add-to-cart-button" type="submit"><input id="buy-now-button" type="submit"><select id="quantity"><option value="1" selected>1</option></select></div><div id="corePrice_feature_div"><span class="a-price"><span class="a-offscreen">8,49 €</span></span></div>');
@@ -208,6 +215,29 @@ test("exhausted provider falls back to Amazon HTML and is bypassed on the next r
     await assert.rejects(fetchAmazonProductDetails("B09R4T5WPB", "AMZ_DE"), /Bestand/);
     assert.throws(() => parseAsin("https://evil.example/dp/B09R4T5WPB"));
   } finally { global.fetch = originalFetch; process.env = saved; }
+});
+
+test("curated depot catalog provides 20 Amazon DE and 10 Joybuy DE products unlocked for immediate selection", () => {
+  assert.equal(CURATED_DEPOT_CATALOG.length, 30);
+  const amazonItems = filterCuratedDepotCatalog({ marketplace: "AMZ_DE" });
+  const joybuyItems = filterCuratedDepotCatalog({ marketplace: "JOYBUY_DE" });
+  assert.equal(amazonItems.length, 20);
+  assert.equal(joybuyItems.length, 10);
+  for (const item of CURATED_DEPOT_CATALOG) {
+    assert.equal(item.is_published, true);
+    assert.equal(item.is_vero_safe, true);
+    assert.equal(item.is_approved, true);
+    assert.equal(item.canPublish, true);
+    assert.equal(item.is_demo, false);
+    assert.equal(item.stock_status, "in_stock");
+    assert.ok(item.images.length >= 1 && item.images[0].startsWith("https://"));
+    assert.ok(item.amazon_price > 0);
+    assert.ok(item.estimated_profit >= 5);
+  }
+  const filteredByProfit = filterCuratedDepotCatalog({ minProfit: 12 });
+  assert.ok(filteredByProfit.length > 0 && filteredByProfit.every((item) => item.estimated_profit >= 12));
+  const filteredByMaxPrice = filterCuratedDepotCatalog({ maxPrice: 12 });
+  assert.ok(filteredByMaxPrice.length > 0 && filteredByMaxPrice.every((item) => item.amazon_price <= 12));
 });
 
 test("tracking validates real identifiers and only uses a provider's returned conversion", async () => {

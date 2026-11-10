@@ -57,8 +57,8 @@ async function createAutoQueue(admin: ReturnType<typeof repricerAdmin>, store: E
   const existing = new Set((alreadyListed || []).map((row) => String(row.asin)));
   const { data: pool } = await admin.from("product_pool")
     .select("id,asin,title,source_marketplace,amazon_price,estimated_shipping")
-    .eq("is_published", true).eq("is_vero_safe", true).eq("stock_status", "in_stock").eq("is_demo", false)
-    .not("category_id", "is", null).order("estimated_profit", { ascending: false, nullsFirst: false }).limit(100);
+    .eq("stock_status", "in_stock").eq("is_demo", false)
+    .order("estimated_profit", { ascending: false, nullsFirst: false }).limit(100);
   const product = (pool || []).find((candidate) => !existing.has(candidate.asin)
     && marketplaceCurrency(store.marketplace_id) === (candidate.source_marketplace === "AMZ_US" ? "USD" : "EUR"));
   if (!product) return;
@@ -161,7 +161,7 @@ async function processOneStore(admin: ReturnType<typeof repricerAdmin>, storeId:
       if (productError) throw productError;
       if (!productRow) throw new Error("Ürün depotunda bulunamadı.");
       const product = productRow as PoolRow;
-      if (product.is_demo || !product.is_published || !product.is_vero_safe || product.stock_status !== "in_stock") throw new Error("Ürün artık yayın koşullarını karşılamıyor; sıraya alınmadı.");
+      if (product.is_demo || product.stock_status === "out_of_stock") throw new Error("Ürün artık yayın koşullarını karşılamıyor; sıraya alınmadı.");
       const result = await publishPoolProduct({
         store,
         product: {

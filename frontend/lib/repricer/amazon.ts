@@ -55,19 +55,22 @@ export async function fetchAmazonSnapshot(asin: string): Promise<AmazonSnapshot>
 let providerDisabledUntil = 0;
 let desktopAgent = 0;
 const desktopAgents = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
 ];
 
-/** Exhausted providers are bypassed for one hour; source uncertainty stays explicit. */
+/** Direct scraper is primary; Rainforest is only used if explicitly enabled and never blocks on 402/403. */
 export async function fetchAmazonProductDetails(asin: string, marketplace: AmazonMarketplace): Promise<AmazonProductDetails> {
   if (!/^[A-Z0-9]{10}$/i.test(asin)) throw new Error("Die ASIN muss aus zehn Buchstaben oder Ziffern bestehen.");
   const normalizedAsin = asin.toUpperCase();
   const apiKey = process.env.RAINFOREST_API_KEY?.trim();
-  if (apiKey && Date.now() >= providerDisabledUntil) {
+  const rainforestEnabled = process.env.RAINFOREST_ENABLED === "true";
+  if (rainforestEnabled && apiKey && Date.now() >= providerDisabledUntil) {
     try { return await fetchRainforestProduct(normalizedAsin, marketplace, apiKey); }
-    catch (cause) {
-      if (cause instanceof Error && /HTTP (401|402|403|429)|free credits|upgrade|upgrading|quota|credit|limit exceeded/i.test(cause.message)) providerDisabledUntil = Date.now() + 60 * 60_000;
+    catch {
+      providerDisabledUntil = Date.now() + 6 * 60 * 60_000;
     }
   }
   return fetchPublicProductPage(normalizedAsin, marketplace);
@@ -152,12 +155,10 @@ async function fetchPublicProductPage(asin: string, marketplace: AmazonMarketpla
   const hasBuyableOffer = buyBox.find('input#add-to-cart-button[type="submit"]:not([disabled])').length > 0
     && buyBox.find('input#buy-now-button[type="submit"]:not([disabled])').length > 0
     && Number(buyBox.find("select#quantity option:selected").val()) > 0;
-  const inStock = stockFromJsonLd ?? parseAvailabilityText(availabilityText, marketplace) ?? (hasBuyableOffer ? true : null);
-  if (inStock === null) throw new Error("Amazon hat den Bestand nicht eindeutig angegeben; der Bestand bleibt unverändert.");
 
   const offerCurrency = String(offers?.priceCurrency || config.currency).toUpperCase();
   let price = parseNumericPrice(offers?.price, config.currency);
-  if (price === null) price = parseLocalizedPrice($("#corePrice_feature_div .a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-price .a-offscreen").first().text(), config.currency);
+  if (price === null) price = parseLocalizedPrice($("#corePrice_feature_div .a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-price .a-offscreen, .a-price .a-offscreen").first().text(), config.currency);
   if (price === null) {
     const itempropPrice = html.match(/<[^>]*itemprop=["']price["'][^>]*content=["']([^"']+)["']/i)?.[1]
       || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*itemprop=["']price["']/i)?.[1];
@@ -173,6 +174,8 @@ async function fetchPublicProductPage(asin: string, marketplace: AmazonMarketpla
       if (price !== null) break;
     }
   }
+  const inStock = stockFromJsonLd ?? parseAvailabilityText(availabilityText, marketplace) ?? (hasBuyableOffer ? true : (price !== null ? true : null));
+  if (inStock === null) throw new Error("Amazon hat den Bestand nicht eindeutig angegeben; der Bestand bleibt unverändert.");
   if (inStock && (price === null || offerCurrency !== config.currency)) {
     throw new Error(`Amazon ${config.domain} hat keinen eindeutigen ${config.currency}-Preis zurückgegeben.`);
   }
@@ -250,6 +253,8 @@ function parseAmazonImages(html: string, jsonLdImages: unknown): string[] {
     const url = typeof item === "string" ? item : typeof item === "object" && item !== null ? String((item as { url?: unknown }).url || "") : "";
     if (url) candidates.push({ url, size: 0 });
   }
+  const ogImage = metaContent(html, "og:image") || metaContent(html, "twitter:image");
+  if (ogImage) candidates.push({ url: ogImage, size: 0 });
   candidates.sort((left, right) => right.size - left.size);
   return uniqueHttpsImages(candidates.map((item) => item.url));
 }

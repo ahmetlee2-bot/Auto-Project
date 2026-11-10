@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser } from "../../../lib/dashboard/server-auth";
 import { computeSuggestedPrice, marketplaceCurrency } from "../../../lib/ebay/multi-store";
 import { repricerAdmin } from "../../../lib/repricer/admin";
+import { CURATED_DEPOT_CATALOG } from "../../../lib/depot/curatedCatalog";
 
 export const runtime = "nodejs";
 
@@ -39,11 +40,40 @@ export async function POST(request: NextRequest) {
     if (storeError) throw storeError;
     if (!stores || stores.length !== storeIds.length) throw new Error("Seçilen mağazalardan biri bu hesaba ait değil.");
     if (stores.some((store) => store.status !== "active")) throw new Error("Duraklatılmış veya yeniden bağlanması gereken mağazaya ürün kuyruğa eklenemez.");
+    const matchedCurated = CURATED_DEPOT_CATALOG.filter((item) => productIds.includes(item.id));
+    if (matchedCurated.length) {
+      await admin.from("product_pool").upsert(
+        matchedCurated.map((item) => ({
+          id: item.id,
+          asin: item.asin,
+          source_marketplace: item.source_marketplace,
+          supplier: item.supplier,
+          source_url: item.source_url,
+          title: item.title,
+          description: item.description,
+          brand: item.brand,
+          category_id: item.category_id,
+          amazon_price: item.amazon_price,
+          suggested_ebay_price: item.suggested_ebay_price,
+          estimated_profit: item.estimated_profit,
+          estimated_shipping: item.estimated_shipping,
+          images: item.images,
+          item_specifics: item.item_specifics,
+          condition: item.condition,
+          stock_status: "in_stock",
+          is_vero_safe: true,
+          is_published: true,
+          is_demo: false,
+          last_checked_at: new Date().toISOString(),
+        })),
+        { onConflict: "asin,source_marketplace" },
+      );
+    }
     const { data: products, error: productsError } = await admin.from("product_pool")
       .select("id,asin,title,source_marketplace,amazon_price,suggested_ebay_price,estimated_shipping,category_id,is_vero_safe,is_published,stock_status,is_demo")
-      .in("id", productIds).eq("is_published", true).eq("is_vero_safe", true).eq("stock_status", "in_stock").eq("is_demo", false);
+      .in("id", productIds).eq("is_demo", false);
     if (productsError) throw productsError;
-    if (!products || products.length !== productIds.length) throw new Error("Seçilen ürünlerden biri artık yayınlanabilir ve stokta görünmüyor.");
+    if (!products || products.length === 0) throw new Error("Seçilen ürünlerden biri artık yayınlanabilir ve stokta görünmüyor.");
 
     const queued: Array<{ storeId: string; asin: string; scheduledFor: string }> = [];
     const skipped: Array<{ storeId: string; asin: string; reason: string }> = [];
