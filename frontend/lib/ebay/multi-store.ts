@@ -5,6 +5,7 @@ import { repricerAdmin } from "../repricer/admin";
 
 export const EBAY_OAUTH_COOKIE = "autolister_ebay_oauth_state";
 export const EBAY_SCOPES = [
+  "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
   "https://api.ebay.com/oauth/api_scope/sell.account",
@@ -20,6 +21,7 @@ export type EbayStore = {
   user_id: string;
   store_name: string;
   seller_username: string | null;
+  sku_prefix: string | null;
   marketplace_id: MarketplaceId;
   token_expires_at: string;
   refresh_token_expires_at: string | null;
@@ -123,6 +125,101 @@ export function allowedMarketplace(value: string | null | undefined): Marketplac
   return marketplace;
 }
 
+export type EbayBusinessPolicySnapshot = {
+  fulfillmentPolicies: Array<Record<string, unknown>>;
+  paymentPolicies: Array<Record<string, unknown>>;
+  returnPolicies: Array<Record<string, unknown>>;
+};
+
+export async function ensureSellingPolicyManagement(accessToken: string, marketplace: MarketplaceId): Promise<EbayBusinessPolicySnapshot> {
+  const language = marketplace === "EBAY_DE" ? "de-DE" : marketplace === "EBAY_GB" ? "en-GB" : marketplace === "EBAY_US" ? "en-US" : "en";
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/json",
+    "Accept-Language": language,
+    "Content-Language": language,
+    "X-EBAY-C-MARKETPLACE-ID": marketplace,
+  };
+  const request = async (path: string, init: RequestInit = {}) => {
+    const response = await fetch(`${ebayApiOrigin()}${path}`, {
+      ...init,
+      headers: { ...headers, ...(init.headers || {}) },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) {
+      const first = Array.isArray(body.errors) ? body.errors[0] as Record<string, unknown> | undefined : undefined;
+      const message = [first?.longMessage, first?.message].map((item) => String(item || "").trim()).find((item) => item.length > 2 && item !== ".");
+      throw new Error(message || `eBay seller setup returned HTTP ${response.status}.`);
+    }
+    return body;
+  };
+  const getPrograms = () => request("/sell/account/v1/program/get_opted_in_programs");
+  const isEnrolled = (body: Record<string, unknown>) => Array.isArray(body.programs)
+    && body.programs.some((item) => item && typeof item === "object" && (item as Record<string, unknown>).programType === "SELLING_POLICY_MANAGEMENT");
+  const programs = await getPrograms();
+  if (!isEnrolled(programs)) {
+    await request("/sell/account/v1/program/opt_in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ programType: "SELLING_POLICY_MANAGEMENT" }),
+    });
+    if (!isEnrolled(await getPrograms())) throw new Error("eBay Selling Policy Management enrollment could not be confirmed.");
+  }
+  const marketplaceQuery = `marketplace_id=${encodeURIComponent(marketplace)}`;
+  const [fulfillment, payment, returns] = await Promise.all([
+    request(`/sell/account/v1/fulfillment_policy?${marketplaceQuery}`),
+    request(`/sell/account/v1/payment_policy?${marketplaceQuery}`),
+    request(`/sell/account/v1/return_policy?${marketplaceQuery}`),
+  ]);
+  const rows = (value: unknown): Array<Record<string, unknown>> => Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    : [];
+  return {
+    fulfillmentPolicies: rows(fulfillment.fulfillmentPolicies),
+    paymentPolicies: rows(payment.paymentPolicies),
+    returnPolicies: rows(returns.returnPolicies),
+  };
+}
+
+export async function ensureStoreListingSetup(store: EbayStoreCredentials): Promise<Pick<EbayStore, "merchant_location_key" | "fulfillment_policy_id" | "payment_policy_id" | "return_policy_id">> {
+  const token = await validEbayToken(store.id, store.user_id);
+  const [policies, locationResponse] = await Promise.all([
+    ensureSellingPolicyManagement(token, store.marketplace_id),
+    ebayApiRequest<{ locations?: Array<Record<string, unknown>> }>(store, "/sell/inventory/v1/location?limit=100&offset=0", "GET"),
+  ]);
+  const locations = Array.isArray(locationResponse.locations) ? locationResponse.locations : [];
+  const uniqueId = (rows: Array<Record<string, unknown>>, field: string) => rows.length === 1 ? String(rows[0][field] || "").trim() || null : null;
+  const updates: Partial<Pick<EbayStore, "merchant_location_key" | "fulfillment_policy_id" | "payment_policy_id" | "return_policy_id">> = {};
+  if (!store.merchant_location_key) updates.merchant_location_key = uniqueId(locations, "merchantLocationKey");
+  if (!store.fulfillment_policy_id) updates.fulfillment_policy_id = uniqueId(policies.fulfillmentPolicies, "fulfillmentPolicyId");
+  if (!store.payment_policy_id) updates.payment_policy_id = uniqueId(policies.paymentPolicies, "paymentPolicyId");
+  if (!store.return_policy_id) updates.return_policy_id = uniqueId(policies.returnPolicies, "returnPolicyId");
+  for (const key of Object.keys(updates) as Array<keyof typeof updates>) if (!updates[key]) delete updates[key];
+  if (Object.keys(updates).length) {
+    const { error } = await repricerAdmin().from("ebay_stores").update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", store.id).eq("user_id", store.user_id);
+    if (error) throw new Error(`eBay mağaza ayarları kaydedilemedi: ${error.message}`);
+    Object.assign(store, updates);
+  }
+  const missing = [
+    ["merchant_location_key", store.merchant_location_key],
+    ["fulfillment_policy_id", store.fulfillment_policy_id],
+    ["payment_policy_id", store.payment_policy_id],
+    ["return_policy_id", store.return_policy_id],
+  ].filter(([, value]) => !value).map(([key]) => key);
+  if (missing.length) {
+    throw new Error(`eBay bağlantısı ve izinleri hazır. Bu mağaza için eksik ayarlar: ${missing.join(", ")}. eBay hesabında gerçek mağaza adresini ve iş politikalarını bir kez tanımlayın.`);
+  }
+  return {
+    merchant_location_key: store.merchant_location_key,
+    fulfillment_policy_id: store.fulfillment_policy_id,
+    payment_policy_id: store.payment_policy_id,
+    return_policy_id: store.return_policy_id,
+  };
+}
+
 export function marketplaceCurrency(marketplaceId: MarketplaceId): string {
   if (["EBAY_US"].includes(marketplaceId)) return "USD";
   if (["EBAY_GB"].includes(marketplaceId)) return "GBP";
@@ -176,6 +273,8 @@ export async function validEbayToken(storeId: string, userId: string): Promise<s
       Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
+    // Omitting scope preserves each seller's existing consent set; expanded
+    // scopes take effect only after the seller reconnects and consents again.
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: decryptEbayToken(store.refresh_token) }),
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
@@ -231,12 +330,24 @@ export async function fetchSellerUsername(accessToken: string): Promise<string |
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
+    if (response.ok) {
+      const body = await response.json() as { username?: string };
+      if (body.username?.trim()) return body.username.trim();
+    }
+  } catch { /* The Identity API is not enabled for every eBay application. */ }
+  try {
+    const response = await fetch(`${ebayApiOrigin()}/ws/api.dll`, {
+      method: "POST",
+      headers: { "Content-Type": "text/xml", "X-EBAY-API-CALL-NAME": "GetUser", "X-EBAY-API-SITEID": "77", "X-EBAY-API-COMPATIBILITY-LEVEL": "1423", "X-EBAY-API-IAF-TOKEN": accessToken },
+      body: '<?xml version="1.0" encoding="utf-8"?><GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents"><DetailLevel>ReturnSummary</DetailLevel></GetUserRequest>',
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!response.ok) return null;
-    const body = await response.json() as { username?: string };
-    return body.username?.trim() || null;
-  } catch {
-    return null;
-  }
+    const xml = await response.text();
+    if (!/<Ack>(?:Success|Warning)<\/Ack>/i.test(xml)) return null;
+    return xml.match(/<UserID>([^<]+)<\/UserID>/i)?.[1]?.trim().replace(/&amp;/g, "&") || null;
+  } catch { return null; }
 }
 
 export function createInventorySku(storeId: string, asin: string): string {
@@ -257,13 +368,11 @@ export async function publishPoolProduct(input: {
   targetPrice: number;
 }): Promise<{ sku: string; offerId: string; ebayItemId: string }> {
   const { store, product, targetPrice } = input;
-  const locationKey = store.merchant_location_key || process.env.EBAY_MERCHANT_LOCATION_KEY?.trim();
-  const fulfillmentPolicyId = store.fulfillment_policy_id || process.env.EBAY_FULFILLMENT_POLICY_ID?.trim();
-  const paymentPolicyId = store.payment_policy_id || process.env.EBAY_PAYMENT_POLICY_ID?.trim();
-  const returnPolicyId = store.return_policy_id || process.env.EBAY_RETURN_POLICY_ID?.trim();
-  if (!locationKey || !fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) {
-    throw new Error("eBay mağazası için gönderim konumu ve ödeme, iade, kargo politikaları ayarlanmalı.");
-  }
+  const setup = await ensureStoreListingSetup(store);
+  const locationKey = setup.merchant_location_key as string;
+  const fulfillmentPolicyId = setup.fulfillment_policy_id as string;
+  const paymentPolicyId = setup.payment_policy_id as string;
+  const returnPolicyId = setup.return_policy_id as string;
   if (!product.category_id) throw new Error("Ürün için eBay kategori kimliği gerekli.");
   if (!product.images.length) throw new Error("Yayınlamak için en az bir ürün görseli gerekli.");
   const sku = createInventorySku(store.id, product.asin);

@@ -1,22 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StoreConnectModal } from "./StoreConnectModal";
 import { useStores } from "../../lib/ebay/StoreContext";
-
-const marketplaces = [
-  ["EBAY_DE", "🇩🇪 DE"],
-  ["EBAY_US", "🇺🇸 US"],
-  ["EBAY_GB", "🇬🇧 UK"],
-  ["EBAY_AU", "🇦🇺 AU"],
-  ["EBAY_CA", "🇨🇦 CA"],
-  ["EBAY_FR", "🇫🇷 FR"],
-  ["EBAY_IT", "🇮🇹 IT"],
-  ["EBAY_ES", "🇪🇸 ES"],
-] as const;
 
 export function StoreSwitcher() {
   const { stores, selectedStoreId, setSelectedStoreId, loading, error, connectionMessage, refreshStores } = useStores();
   const [marketplace, setMarketplace] = useState("EBAY_DE");
+  const [connectOpen, setConnectOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<{ configured: boolean; environment: string; missing: string[] } | null>(null);
   const selected = stores.find((store) => store.id === selectedStoreId);
   const status = selected?.status || "active";
@@ -32,6 +23,7 @@ export function StoreSwitcher() {
 
   return (
     <div className="proStoreSwitch" aria-label="eBay mağaza seçimi">
+      <StoreConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} marketplace={marketplace} onMarketplaceChange={setMarketplace} />
       <span className={`proStoreDot ${status === "active" ? "isActive" : "isWarn"}`} aria-hidden="true" />
       <label className="srOnly" htmlFor="pro-store-select">Aktif mağaza</label>
       <select id="pro-store-select" value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)}>
@@ -43,14 +35,11 @@ export function StoreSwitcher() {
           </option>
         ))}
       </select>
-      <select aria-label="Yeni mağaza pazaryeri" value={marketplace} onChange={(event) => setMarketplace(event.target.value)}>
-        {marketplaces.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-      </select>
       {apiStatus?.configured === false ? <span className="proStoreError" role="status" title={apiStatus.missing.join(", ")}>
         eBay API ayarı gerekli ({apiStatus.environment === "sandbox" ? "Sandbox" : "Production"}) · {apiStatus.missing.length} eksik
-      </span> : <a className="proButton proButtonPrimary" href={`/api/ebay/stores/connect?marketplace=${marketplace}`}>
+      </span> : <button type="button" className="proButton proButtonPrimary" onClick={() => setConnectOpen(true)}>
         + Mağaza bağla
-      </a>}
+      </button>}
       <button className="proIconButton" type="button" onClick={() => void refreshStores()} disabled={loading} aria-label="Mağazaları yenile">
         ↻
       </button>

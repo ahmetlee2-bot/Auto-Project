@@ -1,36 +1,30 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { draftRequestUser } from "../../../../lib/drafts/server";
-import { calculateDraftTargetPrice } from "../../../../lib/drafts/pricing";
 import { repricerAdmin } from "../../../../lib/repricer/admin";
-import { getEbayListingSetup, publishEbayDraftProduct, type EbayListingSetup } from "../../../../lib/repricer/ebay";
-import { syncProductById } from "../../../../lib/repricer/sync";
-import { parseDraftImages } from "../../../../lib/drafts/server";
-import { processMainImage } from "../../../../lib/images/processMainImage";
+import { drainDraftListingQueue } from "../../../../lib/drafts/listing-jobs";
+import type { EbayListingSetup } from "../../../../lib/repricer/ebay";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 type PublishSettings = Pick<EbayListingSetup["defaults"], "merchantLocationKey" | "fulfillmentPolicyId" | "paymentPolicyId" | "returnPolicyId">;
-type Result = { id: string; published: boolean; trackingLinked?: boolean; listingId?: string; error?: string; syncWarning?: string; imageWarning?: string };
 
-function validSettings(settings: PublishSettings, setup: EbayListingSetup) {
-  const has = (value: string, options: Array<{ id: string }>, fallback: string) =>
-    Boolean(value) && (options.some((option) => option.id === value) || value === fallback);
-  return has(settings.merchantLocationKey, setup.merchantLocations, setup.defaults.merchantLocationKey)
-    && has(settings.fulfillmentPolicyId, setup.fulfillmentPolicies, setup.defaults.fulfillmentPolicyId)
-    && has(settings.paymentPolicyId, setup.paymentPolicies, setup.defaults.paymentPolicyId)
-    && has(settings.returnPolicyId, setup.returnPolicies, setup.defaults.returnPolicyId);
+function validSettings(settings: PublishSettings) {
+  return /^[A-Za-z0-9_-]{1,128}$/.test(settings.merchantLocationKey)
+    && /^[A-Za-z0-9_-]{1,64}$/.test(settings.fulfillmentPolicyId)
+    && /^[A-Za-z0-9_-]{1,64}$/.test(settings.paymentPolicyId)
+    && /^[A-Za-z0-9_-]{1,64}$/.test(settings.returnPolicyId);
 }
 
 export async function POST(request: Request) {
   const user = await draftRequestUser(request);
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Oturum açmanız gerekiyor." }, { status: 401 });
   try {
-    const body = await request.json() as { ids?: unknown; id?: unknown; imageRightsConfirmed?: unknown; settings?: Partial<PublishSettings> };
-    if (body.imageRightsConfirmed !== true) return NextResponse.json({ error: "Bitte bestätige vor der Veröffentlichung die Rechte zur Nutzung der Produktbilder." }, { status: 400 });
+    const body = await request.json() as { ids?: unknown; id?: unknown; storeId?: unknown; imageRightsConfirmed?: unknown; settings?: Partial<PublishSettings> };
+    if (body.imageRightsConfirmed !== true) return NextResponse.json({ error: "Ürün görsellerini yayınlama haklarını onaylamanız gerekiyor." }, { status: 400 });
     const ids = [...new Set(Array.isArray(body.ids) ? body.ids.map(String) : body.id ? [String(body.id)] : [])];
-    if (!ids.length || ids.length > 2 || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
-      return NextResponse.json({ error: "Bitte wähle 1 bis 2 gültige Entwürfe aus. Größere Auswahl wird in mehreren sicheren Batches verarbeitet." }, { status: 400 });
+    if (!ids.length || ids.length > 100 || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
+      return NextResponse.json({ error: "1 ile 100 arasında geçerli taslak seçin." }, { status: 400 });
     }
     const settings: PublishSettings = {
       merchantLocationKey: String(body.settings?.merchantLocationKey || ""),
@@ -38,104 +32,92 @@ export async function POST(request: Request) {
       paymentPolicyId: String(body.settings?.paymentPolicyId || ""),
       returnPolicyId: String(body.settings?.returnPolicyId || ""),
     };
-    const setup = await getEbayListingSetup(user.id);
-    if (!validSettings(settings, setup)) {
-      return NextResponse.json({ error: "Die eBay-Verkaufsrichtlinien oder der Standort fehlen bzw. gehören nicht zu diesem Verkäuferkonto. Bitte lade die eBay-Einstellungen neu und wähle sie erneut aus." }, { status: 400 });
-    }
     const admin = repricerAdmin();
-    const results: Result[] = [];
+    const requestedStoreId = String(body.storeId || "").trim() || undefined;
+    let storeId = requestedStoreId || null;
+    if (requestedStoreId) {
+      const { data: store, error: storeError } = await admin.from("ebay_stores").select("id,marketplace_id")
+        .eq("id", requestedStoreId).eq("user_id", user.id).eq("status", "active").maybeSingle();
+      if (storeError) throw storeError;
+      if (!store || store.marketplace_id !== "EBAY_DE") return NextResponse.json({ error: "Der ausgewählte eBay-Shop ist nicht aktiv oder gehört nicht zu diesem Konto." }, { status: 400 });
+      storeId = store.id;
+    } else {
+      const { data: stores, error: storesError } = await admin.from("ebay_stores").select("id,marketplace_id")
+        .eq("user_id", user.id).eq("marketplace_id", "EBAY_DE").eq("status", "active").limit(2);
+      if (storesError) throw storesError;
+      if ((stores || []).length > 1) return NextResponse.json({ error: "Bitte wähle im Shop-Umschalter einen eBay-DE-Shop aus." }, { status: 400 });
+      storeId = stores?.[0]?.id || null;
+    }
+    if (!validSettings(settings)) return NextResponse.json({ error: "eBay Standort oder Richtlinien fehlen oder sind ungültig." }, { status: 400 });
 
-    for (const id of ids) {
-      const { data: draft, error: readError } = await admin.from("draft_products").select("*").eq("id", id).eq("user_id", user.id).maybeSingle();
-      if (readError) {
-        results.push({ id, published: false, error: readError.message });
-        continue;
-      }
-      if (!draft) {
-        results.push({ id, published: false, error: "Entwurf nicht gefunden." });
-        continue;
-      }
-      const { data: claimed, error: claimError } = await admin.from("draft_products").update({ status: "publishing", last_error: null, updated_at: new Date().toISOString() })
-        .eq("id", id).eq("user_id", user.id).in("status", ["draft", "error"]).select("id").maybeSingle();
-      if (claimError || !claimed) {
-        results.push({ id, published: false, error: claimError?.message || "Dieser Entwurf wird bereits bearbeitet oder wurde veröffentlicht." });
-        continue;
-      }
-      try {
-        const sourceImages = parseDraftImages(draft.images);
-        const price = calculateDraftTargetPrice({ source_price: draft.source_price, shipping_cost: draft.shipping_cost, profit_margin_percent: draft.profit_margin_percent });
-        if (!draft.source_price || !price) throw new Error("Für eine Veröffentlichung werden ein gültiger Amazon-Preis und eine berechenbare eBay-Zielsumme benötigt.");
-        if (!String(draft.title || "").trim() || String(draft.title).length > 80) throw new Error("Der Titel muss zwischen 1 und 80 Zeichen lang sein.");
-        if (!String(draft.selected_category_id || setup.defaults.categoryId || "").trim()) throw new Error("Bitte trage im Entwurf eine eBay-Kategorie-ID ein oder konfiguriere EBAY_DEFAULT_CATEGORY_ID serverseitig.");
-        if (!sourceImages.length) throw new Error("Vor der Veröffentlichung muss mindestens ein Produktbild vorhanden sein.");
-        const shouldFrame = draft.apply_custom_frame !== false;
-        const cachedCover = shouldFrame && draft.cover_source_url === sourceImages[0] ? String(draft.cover_image_url || "") : "";
-        const coverUrl = shouldFrame ? cachedCover || await processMainImage(sourceImages[0], draft.id) : sourceImages[0];
-        const images = [...new Set([coverUrl, ...sourceImages.slice(1)])].slice(0, 12);
-        const imageWarning = shouldFrame && coverUrl === sourceImages[0]
-          ? "Das Cover konnte nicht gerahmt werden; das unveränderte Originalbild wurde veröffentlicht."
-          : undefined;
-        const { error: imageSaveError } = await admin.from("draft_products").update({
-          cover_image_url: coverUrl !== sourceImages[0] ? coverUrl : null,
-          cover_source_url: coverUrl !== sourceImages[0] ? sourceImages[0] : null,
-          published_images: images,
-          updated_at: new Date().toISOString(),
-        }).eq("id", id).eq("user_id", user.id).eq("status", "publishing");
-        if (imageSaveError) throw new Error(`Die Bildauswahl konnte nicht gespeichert werden: ${imageSaveError.message}`);
-        const listing = await publishEbayDraftProduct({
-          userId: user.id,
-          id: draft.id,
-          title: draft.title,
-          descriptionHtml: draft.description_html || "",
-          images,
-          categoryId: draft.selected_category_id,
-          price,
-          settings,
-        });
+    const { data: drafts, error: readError } = await admin.from("draft_products").select("id,status,ebay_item_id,title,source_price,manual_sale_price,images")
+      .eq("user_id", user.id).in("id", ids);
+    if (readError) throw readError;
+    if (!drafts || drafts.length !== ids.length) return NextResponse.json({ error: "Mindestens ein ausgewählter Entwurf wurde nicht gefunden." }, { status: 404 });
+    for (const draft of drafts) {
+      if (draft.status === "published") return NextResponse.json({ error: "Ein ausgewählter Entwurf ist bereits veröffentlicht." }, { status: 409 });
+      if (!String(draft.title || "").trim() || String(draft.title).length > 80) return NextResponse.json({ error: "Jeder Entwurf benötigt einen Titel mit höchstens 80 Zeichen." }, { status: 400 });
+      if (!Array.isArray(draft.images) || !draft.images.length) return NextResponse.json({ error: "Jeder Entwurf benötigt mindestens ein Produktbild." }, { status: 400 });
+      if ((draft.source_price == null || Number(draft.source_price) <= 0) && (draft.manual_sale_price == null || Number(draft.manual_sale_price) <= 0)) return NextResponse.json({ error: "Für jeden Entwurf ist ein gültiger Einkaufs- oder eBay-Verkaufspreis erforderlich." }, { status: 400 });
+    }
 
-        const { data: tracked, error: trackError } = await admin.from("tracked_products").upsert({
-          user_id: user.id,
-          title: draft.title,
-          image_url: images[0] || null,
-          amazon_asin: draft.asin,
-          amazon_url: draft.source_url,
-          amazon_price: draft.source_price,
-          amazon_stock_status: null,
-          ebay_item_id: listing.itemId,
-          ebay_url: `https://www.ebay.de/itm/${listing.itemId}`,
-          ebay_price: listing.price,
-          ebay_quantity: listing.quantity,
-          target_margin_percent: draft.profit_margin_percent,
-          estimated_shipping: draft.shipping_cost,
-          desired_quantity: 1,
-          active: true,
-          last_error: "Erste Amazon-Prüfung wird gestartet.",
-        }, { onConflict: "user_id,ebay_item_id" }).select("id").single();
-        if (trackError || !tracked) {
-          const message = `eBay-Angebot ${listing.itemId} wurde veröffentlicht, aber die Überwachung konnte nicht verknüpft werden: ${trackError?.message || "unbekannter Datenbankfehler"}`;
-          await admin.from("draft_products").update({ status: "error", ebay_sku: listing.sku, ebay_offer_id: listing.offerId, ebay_item_id: listing.itemId, last_error: message, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id);
-          results.push({ id, published: false, listingId: listing.itemId, error: message, ...(imageWarning ? { imageWarning } : {}) });
-          continue;
-        }
-        const { error: markError } = await admin.from("draft_products").update({ status: "published", ebay_sku: listing.sku, ebay_offer_id: listing.offerId, ebay_item_id: listing.itemId, last_error: null, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id);
-        if (markError) {
-          const statusWarning = `Überwachung ist aktiv; der Veröffentlichungsstatus konnte nicht gespeichert werden: ${markError.message}`;
-          await admin.from("draft_products").update({ status: "error", ebay_sku: listing.sku, ebay_offer_id: listing.offerId, ebay_item_id: listing.itemId, last_error: statusWarning.slice(0, 500), updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id);
-          results.push({ id, published: true, trackingLinked: true, listingId: listing.itemId, syncWarning: statusWarning, ...(imageWarning ? { imageWarning } : {}) });
-          continue;
-        }
-        let syncWarning: string | undefined;
-        try { await syncProductById(tracked.id, user.id); }
-        catch (cause) { syncWarning = cause instanceof Error ? cause.message : "Die erste Amazon-Prüfung ist fehlgeschlagen."; }
-        results.push({ id, published: true, trackingLinked: true, listingId: listing.itemId, ...(syncWarning ? { syncWarning } : {}), ...(imageWarning ? { imageWarning } : {}) });
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : "eBay-Veröffentlichung fehlgeschlagen.";
-        await admin.from("draft_products").update({ status: "error", last_error: message.slice(0, 500), updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id);
-        results.push({ id, published: false, error: message });
+    const { data: existing, error: existingError } = await admin.from("draft_listing_jobs").select("id,draft_id,status,progress,current_step,created_at")
+      .eq("user_id", user.id).in("draft_id", ids).in("status", ["queued", "processing"]);
+    if (existingError) throw existingError;
+    const activeByDraft = new Map((existing || []).map((job) => [job.draft_id, job]));
+    const insertQueuedJobs = async (draftIds: string[]) => {
+      if (!draftIds.length) return { data: [], error: null };
+      return admin.from("draft_listing_jobs").insert(draftIds.map((draftId) => ({
+        user_id: user.id, draft_id: draftId, store_id: storeId, settings,
+        status: "queued", progress: 0, current_step: "Sırada bekliyor", image_rights_confirmed: true,
+      }))).select("id,draft_id,status,progress,current_step,created_at");
+    };
+    let newIds = ids.filter((id) => !activeByDraft.has(id));
+    let insertResult = await insertQueuedJobs(newIds);
+    if (insertResult.error?.code === "23505") {
+      // Resolve a concurrent double-submit in one lookup, then insert only the
+      // still-missing jobs as one batch instead of serial per-product writes.
+      const { data: raced, error: racedError } = await admin.from("draft_listing_jobs").select("id,draft_id,status,progress,current_step,created_at")
+        .eq("user_id", user.id).in("draft_id", ids).in("status", ["queued", "processing"]);
+      if (racedError) throw racedError;
+      for (const job of raced || []) activeByDraft.set(job.draft_id, job);
+      newIds = ids.filter((id) => !activeByDraft.has(id));
+      insertResult = await insertQueuedJobs(newIds);
+    }
+    if (insertResult.error) throw insertResult.error;
+    const inserted = (insertResult.data || []) as Array<{ id: string; draft_id: string; status: string; progress: number; current_step: string; created_at: string }>;
+    if (inserted.length) {
+      const insertedIds = inserted.map((job) => job.draft_id);
+      const { data: updatedDrafts, error: draftError } = await admin.from("draft_products").update({ status: "publishing", last_error: null, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id).in("id", insertedIds).in("status", ["draft", "error", "publishing"]).select("id");
+      if (draftError || (updatedDrafts || []).length !== insertedIds.length) {
+        const message = draftError?.message || "Mindestens ein Entwurf ist nicht mehr verfügbar.";
+        await admin.from("draft_listing_jobs").update({ status: "failed", last_error: message.slice(0, 500), completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .in("id", inserted.map((job) => job.id)).eq("status", "queued");
+        if (draftError) throw draftError;
+        return NextResponse.json({ error: "Ein ausgewählter Entwurf hat sich geändert. Bitte aktualisiere die Seite und versuche es erneut." }, { status: 409 });
       }
     }
-    return NextResponse.json({ results, published: results.filter((result) => result.published).length }, { status: 200 });
+    for (const job of inserted) activeByDraft.set(job.draft_id, job);
+
+    const { data: queueRows } = await admin.from("draft_listing_jobs").select("id,draft_id,status,progress,current_step,created_at")
+      .eq("user_id", user.id).eq("status", "queued").order("created_at", { ascending: true });
+    const queuePositionById = new Map((queueRows || []).map((job, index) => [job.id, index + 1]));
+    const jobs = ids.map((id) => {
+      const job = activeByDraft.get(id);
+      return job ? { ...job, queuePosition: job.status === "queued" ? queuePositionById.get(job.id) ?? null : null } : null;
+    }).filter(Boolean);
+
+    after(async () => {
+      try { await drainDraftListingQueue(100); }
+      catch (error) { console.error("Draft listing queue worker failed:", error); }
+    });
+    const singleJob = jobs.length === 1 ? jobs[0] : null;
+    return NextResponse.json({
+      success: true, jobs, queued: inserted.length,
+      ...(singleJob ? { jobId: singleJob.id, productId: singleJob.draft_id, status: singleJob.status.toUpperCase(), queuePosition: singleJob.queuePosition } : {}),
+    }, { status: 202, headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
-    return NextResponse.json({ error: cause instanceof Error ? cause.message : "eBay-Veröffentlichung konnte nicht gestartet werden." }, { status: 502 });
+    return NextResponse.json({ error: cause instanceof Error ? cause.message : "Listeauftrag konnte nicht eingereiht werden." }, { status: 500 });
   }
 }

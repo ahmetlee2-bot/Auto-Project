@@ -46,6 +46,7 @@ async function overlayInput(): Promise<Buffer> {
 function allowedSource(url: URL): boolean {
   if (url.protocol !== "https:") return false;
   if (/(^|\.)(media-amazon\.com|ssl-images-amazon\.com|images-amazon\.com|ebayimg\.com)$/i.test(url.hostname)) return true;
+  if (/(^|\.)joy-sourcing\.com$/i.test(url.hostname)) return true;
   const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : "";
   return Boolean(supabaseHost && url.hostname === supabaseHost && url.pathname.startsWith("/storage/v1/object/public/"));
 }
@@ -113,7 +114,7 @@ export async function processMainImage(mainImageUrl: string, identifier: string)
     if (!data.publicUrl.startsWith("https://")) throw new Error("Cover public URL is invalid");
     return data.publicUrl;
   } catch (cause) {
-    console.error("Cover composition failed; using original image:", cause);
+    console.warn("Cover composition failed; keeping the original product image:", cause);
     return original;
   }
 }

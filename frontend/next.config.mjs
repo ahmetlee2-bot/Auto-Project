@@ -14,10 +14,11 @@ const nextConfig = {
           "base-uri 'self'",
           "object-src 'none'",
           "frame-ancestors 'none'",
+          "frame-src 'self' about:",
           "form-action 'self'",
           "script-src 'self' 'unsafe-inline'",
           "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data: blob: https://*.supabase.co https://i.ebayimg.com https://*.ebayimg.com https://*.media-amazon.com https://*.ssl-images-amazon.com",
+          "img-src 'self' data: blob: https://*.supabase.co https://i.ebayimg.com https://*.ebayimg.com https://*.media-amazon.com https://*.ssl-images-amazon.com https://*.joy-sourcing.com",
           "font-src 'self' data:",
           "connect-src 'self' https://*.supabase.co https://api.autolister-app.de",
           "upgrade-insecure-requests"

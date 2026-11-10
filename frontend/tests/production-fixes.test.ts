@@ -12,6 +12,17 @@ import { inventoryItemDescription, isMissingOfferResponse } from "../lib/reprice
 import { generateSku } from "../lib/ebay/sku";
 import { routeSupplierTracking } from "../lib/tracking/carrierRouter";
 import { HttpTrackingConverterProvider } from "../lib/tracking/providers/threePlProvider";
+import { isJoybuyTrackedProduct, verificationPendingState } from "../lib/repricer/sync";
+
+test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads remain validation pending", () => {
+  assert.equal(isJoybuyTrackedProduct({ supplier: "joybuy_de", amazon_asin: "JB-10520407" }), true);
+  assert.equal(isJoybuyTrackedProduct({ supplier: "amazon_de", amazon_asin: "JB-10519931" }), true);
+  assert.equal(isJoybuyTrackedProduct({ amazon_asin: "B0CMXKCXG4" }), false);
+  const pending = verificationPendingState("Amazon");
+  assert.equal(pending.sync_status, "error");
+  assert.match(pending.last_error, /^VERIFICATION_PENDING:/);
+  assert.match(pending.last_error, /zuletzt gespeicherten Werte bleiben erhalten/);
+});
 
 test("a new SKU's eBay 404/25713 starts offer creation, while other failures stop it", () => {
   assert.equal(isMissingOfferResponse(404, [{ errorId: 25713 }]), true);

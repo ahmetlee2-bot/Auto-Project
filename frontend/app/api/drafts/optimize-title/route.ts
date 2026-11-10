@@ -1,40 +1,60 @@
 import { NextResponse } from "next/server";
 import { draftRequestUser } from "../../../../lib/drafts/server";
+import { fetchAmazonProductDetails } from "../../../../lib/repricer/amazon";
+import { generateProductCopy, type ProductFacts } from "../../../../lib/ai/gemini-product";
+import { ebayHtmlTemplate } from "../../../../lib/ebay/ebayHtmlTemplate";
+import { cleanEbayTitle, deterministicEbayTitle } from "../../../../lib/ebay/seo-title";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const user = await draftRequestUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "Die KI-Titeloptimierung ist noch nicht konfiguriert. OPENAI_API_KEY muss serverseitig gesetzt sein." }, { status: 503 });
   try {
-    const body = await request.json() as { title?: unknown };
+    const body = await request.json() as Record<string, unknown>;
     const title = String(body.title || "").trim().slice(0, 500);
+    const asin = String(body.asin || "").trim().toUpperCase();
     if (title.length < 3) return NextResponse.json({ error: "Bitte gib zuerst einen Produkttitel ein." }, { status: 400 });
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-6-astra",
-        instructions: "Du optimierst Produkttitel für eBay.de. Erzeuge genau einen klaren, suchfreundlichen deutschen Produkttitel mit höchstens 80 Zeichen. Bewahre Marke, Modell und tatsächlich genannte Produktmerkmale. Erfinde keine technischen Daten, Kompatibilität, Rabatte oder Zustandsangaben. Keine Anführungszeichen, kein Zusatztext.",
-        input: `Amazon-Produkttitel:\n${title}`,
-        max_output_tokens: 100,
-        store: false,
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(25_000),
+
+    // A draft may contain an already shortened title and generated HTML. Refresh the
+    // original Amazon facts instead of feeding those previous outputs back to Gemini.
+    let facts: ProductFacts | null = null;
+    if (/^[A-Z0-9]{10}$/.test(asin)) {
+      try {
+        const amazon = await fetchAmazonProductDetails(asin, "AMZ_DE");
+        facts = {
+          raw_title: amazon.title,
+          features: amazon.description.split(/\n|[•●▪]/).map((part) => part.trim()).filter(Boolean).slice(0, 15),
+          specifications: amazon.itemSpecifics,
+          description: amazon.description,
+        };
+      } catch { /* No unverified product facts are substituted. */ }
+    }
+    if (!facts) {
+      const features = Array.isArray(body.features) ? body.features.map(String).slice(0, 15) : [];
+      const rawSpecifics = body.item_specifics ?? body.specifications;
+      const specifications = rawSpecifics && typeof rawSpecifics === "object" && !Array.isArray(rawSpecifics)
+        ? Object.fromEntries(Object.entries(rawSpecifics as Record<string, unknown>).map(([key, value]) => [key, (Array.isArray(value) ? value : [value]).map(String)])) : {};
+      const rawTitle = String(body.raw_title || "").trim();
+      const description = String(body.raw_description || "").trim();
+      if (rawTitle && (features.length || description || Object.keys(specifications).length)) {
+        facts = { raw_title: rawTitle.slice(0, 500), features, specifications, description: description.slice(0, 5000) };
+      }
+    }
+    const copy = facts && process.env.GEMINI_API_KEY?.trim() ? await generateProductCopy(facts).catch(() => null) : null;
+    if (copy) return NextResponse.json({
+      title: cleanEbayTitle(copy.seo_title, 80),
+      title_alternatives: copy.seo_title_alternatives,
+      description_html: ebayHtmlTemplate(copy),
+      item_specifics: Object.fromEntries(copy.item_specifics.map((item) => [item.key, [item.value]])),
+      source: "ai", providerConfigured: true, fallbackReason: null,
     });
-    const result = await response.json().catch(() => ({})) as {
-      output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
-      error?: { message?: string };
-    };
-    if (!response.ok) return NextResponse.json({ error: result.error?.message || `KI-Anfrage fehlgeschlagen (HTTP ${response.status}).` }, { status: 502 });
-    const optimized = (result.output || []).flatMap((item) => item.type === "message" ? item.content || [] : [])
-      .filter((part) => part.type === "output_text").map((part) => part.text || "").join(" ").replace(/[\r\n"“”]+/g, " ").replace(/\s+/g, " ").trim();
-    if (!optimized) return NextResponse.json({ error: "Die KI hat keinen Titel zurückgegeben." }, { status: 502 });
-    return NextResponse.json({ title: optimized.slice(0, 80).trimEnd() });
-  } catch (cause) {
-    return NextResponse.json({ error: cause instanceof Error ? cause.message : "KI-Titeloptimierung fehlgeschlagen." }, { status: 502 });
+    return NextResponse.json({
+      title: deterministicEbayTitle(facts?.raw_title || title), source: "local",
+      providerConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+      fallbackReason: facts ? "provider_unavailable" : "source_unavailable",
+    });
+  } catch {
+    return NextResponse.json({ error: "Titel konnte nicht optimiert werden." }, { status: 400 });
   }
 }

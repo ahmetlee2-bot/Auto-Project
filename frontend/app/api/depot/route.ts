@@ -1,3 +1,4 @@
+import { premiumDescription } from "../../../lib/ebay/premium-description";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser, isAutolisterAdmin } from "../../../lib/dashboard/server-auth";
 import { computeSuggestedPrice } from "../../../lib/ebay/multi-store";
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams;
   const adminUser = isAutolisterAdmin(user.id);
   const includeReview = adminUser && query.get("includeReview") === "1";
-  let requestQuery = repricerAdmin().from("product_pool").select("id,asin,source_marketplace,title,description,brand,category_id,amazon_price,suggested_ebay_price,estimated_profit,estimated_shipping,images,item_specifics,condition,stock_status,last_checked_at,created_at,is_vero_safe,is_published,is_demo")
+  let requestQuery = repricerAdmin().from("product_pool").select("id,asin,source_marketplace,supplier,source_url,title,description,brand,category_id,amazon_price,suggested_ebay_price,estimated_profit,estimated_shipping,images,item_specifics,condition,stock_status,last_checked_at,created_at,is_vero_safe,is_published,is_demo")
   if (!includeReview) requestQuery = requestQuery.eq("is_published", true).eq("is_vero_safe", true).eq("stock_status", "in_stock").eq("is_demo", false);
   const market = query.get("marketplace");
   if (market === "AMZ_US" || market === "AMZ_DE") requestQuery = requestQuery.eq("source_marketplace", market);
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
               asin,
               source_marketplace: sourceMarketplace,
               title: product.title,
-              description: product.description,
+              description: premiumDescription(product),
               brand: product.brand,
               category_id: null,
               amazon_price: sourcePrice,
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest) {
         asin,
         source_marketplace: market,
         title,
-        description: String(product.description || "").slice(0, 50_000),
+        description: premiumDescription({ title, asin, brand: String(product.brand || ""), description: String(product.description || ""), itemSpecifics: specifics }),
         brand: String(product.brand || "").trim() || null,
         category_id: String(product.category_id || "").trim() || null,
         amazon_price: amazonPrice,

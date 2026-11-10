@@ -7,6 +7,7 @@ export type TrackedProduct = {
   image_url: string | null;
   amazon_asin: string;
   amazon_url: string;
+  supplier?: "amazon_de" | "joybuy_de";
   amazon_price: number | null;
   amazon_stock_status: boolean | null;
   ebay_item_id: string;
@@ -19,6 +20,7 @@ export type TrackedProduct = {
   payment_fee_percent: number;
   desired_quantity: number;
   minimum_sale_price: number;
+  manual_sale_price: number | null;
   manual_quantity_override: number | null;
   amazon_price_delta: number | null;
   last_checked_at: string | null;

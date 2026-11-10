@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useStores } from "../../lib/ebay/StoreContext";
 
 type PoolProduct = {
-  id: string; asin: string; source_marketplace: string; title: string; description: string; brand: string | null;
+  id: string; asin: string; source_marketplace: string; supplier?: "amazon_de" | "joybuy_de"; source_url?: string | null; title: string; description: string; brand: string | null;
   category_id: string | null; amazon_price: number; suggested_ebay_price: number | null; estimated_profit: number | null;
   estimated_shipping: number; images: string[]; stock_status: string; condition: string; is_vero_safe: boolean; is_published: boolean;
   is_demo: boolean;
@@ -33,6 +33,7 @@ export function ProductDepot() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filtersRestored, setFiltersRestored] = useState(false);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -57,7 +58,27 @@ export function ProductDepot() {
     setSelected((current) => current.filter((id) => (body.products || []).some((product) => product.id === id)));
   }, [query]);
 
-  useEffect(() => { void loadProducts().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Produktdepot konnte nicht geladen werden.")); }, [loadProducts]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem("autolister-product-depot-filters") || "null") as null | { marketplace?: string; category?: string; maxPrice?: string; minProfit?: string; importMarketplace?: string };
+      if (saved) {
+        if (["ALL", "AMZ_DE", "AMZ_US"].includes(String(saved.marketplace))) setMarketplace(String(saved.marketplace));
+        if (typeof saved.category === "string") setCategory(saved.category);
+        if (typeof saved.maxPrice === "string") setMaxPrice(saved.maxPrice);
+        if (typeof saved.minProfit === "string") setMinProfit(saved.minProfit);
+        if (["AMZ_DE", "AMZ_US"].includes(String(saved.importMarketplace))) setImportMarketplace(String(saved.importMarketplace));
+      }
+    } catch { /* Ignore stale or invalid saved filters. */ }
+    setFiltersRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!filtersRestored) return;
+    window.sessionStorage.setItem("autolister-product-depot-filters", JSON.stringify({ marketplace, category, maxPrice, minProfit, importMarketplace }));
+  }, [filtersRestored, marketplace, category, maxPrice, minProfit, importMarketplace]);
+  useEffect(() => {
+    if (!filtersRestored) return;
+    void loadProducts().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Produktdepot konnte nicht geladen werden."));
+  }, [filtersRestored, loadProducts]);
 
   const activeStores = stores.filter((store) => store.status === "active");
   const chosenStores = selectedStoreId === "ALL_STORES"
@@ -143,9 +164,10 @@ export function ProductDepot() {
               <div className="proDepotImage">{product.images[0] ? <Image src={product.images[0]} alt="" width={220} height={160} unoptimized /> : <span>Kein Bild</span>}</div>
               <div className="proDepotTop"><label className="proCheckbox"><input type="checkbox" checked={selected.includes(product.id)} disabled={product.is_demo} onChange={(event) => setSelected((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} />Auswählen</label><span className="proTag proTagSuccess">{product.source_marketplace.replace("AMZ_", "Amazon ")}</span>{product.is_demo && <span className="proTag proTagWarn">DEMO · NICHT VERÖFFENTLICHEN</span>}</div>
               <h3>{product.title}</h3>
+              <p className="proMuted"><span className="draftReadyBadge">{product.supplier === "joybuy_de" ? "Joybuy.de" : "Amazon.de"}</span> · <a href={product.source_url || `https://www.amazon.${product.source_marketplace === "AMZ_US" ? "com" : "de"}/dp/${product.asin}`} target="_blank" rel="noreferrer">Tedarikçide Aç ↗</a></p>
               <p className="proMuted">ASIN {product.asin}{product.category_id ? ` · Kategorie ${product.category_id}` : ""}</p>
               <div className="proDepotPrices"><span>Amazon <b>{money(product.amazon_price, currency)}</b></span><span>eBay-Vorschlag <b>{money(product.suggested_ebay_price, currency)}</b></span><span>Geschätzter Gewinn <b className="proProfit">{money(product.estimated_profit, currency)}</b></span><span>Bestand <b>{product.stock_status === "in_stock" ? "Verfügbar" : "Nicht verfügbar"}</b></span></div>
-              <div className="proToolbarControls"><button className="proButton proButtonPrimary" type="button" disabled={busy || product.is_demo || product.stock_status !== "in_stock" || !product.is_published} onClick={() => void enqueue([product.id])}>In Warteschlange aufnehmen</button>{product.is_demo ? <span className="proMuted">Amazon-Link für Demo deaktiviert</span> : <a className="proButton" href={`https://www.amazon.${product.source_marketplace === "AMZ_US" ? "com" : "de"}/dp/${product.asin}`} target="_blank" rel="noreferrer">Bei Amazon öffnen ↗</a>}</div>
+              <div className="proToolbarControls"><button className="proButton proButtonPrimary" type="button" disabled={busy || product.is_demo || product.stock_status !== "in_stock" || !product.is_published} onClick={() => void enqueue([product.id])}>In Warteschlange aufnehmen</button>{product.is_demo ? <span className="proMuted">Produktquelle nicht verfügbar</span> : <a className="proButton" href={product.source_url || `https://www.amazon.${product.source_marketplace === "AMZ_US" ? "com" : "de"}/dp/${product.asin}`} target="_blank" rel="noreferrer">Tedarikçide Aç ↗</a>}</div>
               {canImport && <div className="proPoolReview"><span className={`proTag ${product.is_published ? "proTagSuccess" : "proTagWarn"}`}>{product.is_published ? "Veröffentlicht" : product.is_demo ? "Demo-Daten · gesperrt" : "Prüfung erforderlich"}</span><label className="proLabel">eBay-Kategorie-ID<input className="proInput" disabled={product.is_demo} value={review[product.id]?.categoryId ?? product.category_id ?? ""} onChange={(event) => setReview((current) => ({ ...current, [product.id]: { categoryId: event.target.value, isVeroSafe: current[product.id]?.isVeroSafe ?? product.is_vero_safe } }))} /></label><label className="proCheckbox"><input type="checkbox" disabled={product.is_demo} checked={product.is_demo ? false : review[product.id]?.isVeroSafe ?? product.is_vero_safe} onChange={(event) => setReview((current) => ({ ...current, [product.id]: { categoryId: current[product.id]?.categoryId ?? product.category_id ?? "", isVeroSafe: event.target.checked } }))} />Nutzungsrechte geprüft und VERO-Risiko bewertet</label><div className="proToolbarControls"><button className="proButton" type="button" disabled={busy || product.is_demo || !review[product.id]?.isVeroSafe || !(review[product.id]?.categoryId || product.category_id)} onClick={() => void reviewProduct(product)}>{product.is_published ? "Freigabe aktualisieren" : "Prüfen und freigeben"}</button>{product.is_published && <button className="proButton proButtonDanger" type="button" disabled={busy} onClick={() => void reviewProduct(product, false)}>Veröffentlichung zurückziehen</button>}</div></div>}
             </article>;
           })}

@@ -1,4 +1,5 @@
 import "server-only";
+import { load } from "cheerio";
 
 export type AmazonMarketplace = "AMZ_DE" | "AMZ_US";
 export type AmazonSnapshot = { price: number | null; inStock: boolean; title?: string; imageUrl?: string };
@@ -51,14 +52,25 @@ export async function fetchAmazonSnapshot(asin: string): Promise<AmazonSnapshot>
   return { price: product.price, inStock: product.inStock, title: product.title, imageUrl: product.images[0] };
 }
 
-/** Uses Rainforest when configured; otherwise reads the public product page once. */
+let providerDisabledUntil = 0;
+let desktopAgent = 0;
+const desktopAgents = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+];
+
+/** Exhausted providers are bypassed for one hour; source uncertainty stays explicit. */
 export async function fetchAmazonProductDetails(asin: string, marketplace: AmazonMarketplace): Promise<AmazonProductDetails> {
   if (!/^[A-Z0-9]{10}$/i.test(asin)) throw new Error("Die ASIN muss aus zehn Buchstaben oder Ziffern bestehen.");
   const normalizedAsin = asin.toUpperCase();
   const apiKey = process.env.RAINFOREST_API_KEY?.trim();
-  return apiKey
-    ? fetchRainforestProduct(normalizedAsin, marketplace, apiKey)
-    : fetchPublicProductPage(normalizedAsin, marketplace);
+  if (apiKey && Date.now() >= providerDisabledUntil) {
+    try { return await fetchRainforestProduct(normalizedAsin, marketplace, apiKey); }
+    catch (cause) {
+      if (cause instanceof Error && /HTTP (401|402|403|429)|free credits|upgrade|upgrading|quota|credit|limit exceeded/i.test(cause.message)) providerDisabledUntil = Date.now() + 60 * 60_000;
+    }
+  }
+  return fetchPublicProductPage(normalizedAsin, marketplace);
 }
 
 async function fetchRainforestProduct(asin: string, marketplace: AmazonMarketplace, apiKey: string): Promise<AmazonProductDetails> {
@@ -72,7 +84,7 @@ async function fetchRainforestProduct(asin: string, marketplace: AmazonMarketpla
   } | null;
   const product = body?.product;
   if (!response.ok || !body?.request_info?.success || !product?.title) {
-    throw new Error(body?.request_info?.message || `Amazon-Datenanbieter: HTTP ${response.status}`);
+    throw new Error(`Amazon-Datenanbieter: HTTP ${response.status}: ${body?.request_info?.message || "Produktdaten fehlen"}`);
   }
   if (product.asin && product.asin.toUpperCase() !== asin) throw new Error("Amazon lieferte eine andere ASIN; Import abgebrochen.");
 
@@ -110,7 +122,7 @@ async function fetchPublicProductPage(asin: string, marketplace: AmazonMarketpla
   const config = MARKETPLACE_CONFIG[marketplace];
   const response = await fetch(`https://www.${config.domain}/dp/${asin}`, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "User-Agent": desktopAgents[desktopAgent++ % desktopAgents.length],
       "Accept-Language": config.language,
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
@@ -121,13 +133,14 @@ async function fetchPublicProductPage(asin: string, marketplace: AmazonMarketpla
   if (!response.ok) throw new Error(`Amazon ${config.domain} antwortete mit HTTP ${response.status}; es wurden keine Produktdaten gespeichert.`);
 
   const html = await response.text();
-  if (/captcha|robot check|automatisierte zugriffe|enter the characters/i.test(html)) {
+  if (/<title>[^<]*robot check|<form[^>]*validateCaptcha|automatisierte zugriffe|enter the characters you see/i.test(html)) {
     throw new Error(`Amazon ${config.domain} hat die Anfrage blockiert. Ohne Rainforest-Key werden Captcha- oder Robot-Checks nicht umgangen.`);
   }
   const landedAsin = response.url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|\?|$)/i)?.[1];
   if (landedAsin && landedAsin.toUpperCase() !== asin) throw new Error("Amazon leitete auf eine andere ASIN weiter; Import abgebrochen.");
 
   const jsonProducts = readJsonLdProducts(html);
+  const $ = load(html);
   const product = jsonProducts.find((item) => item.type.includes("Product"));
   const offers = Array.isArray(product?.offers) ? product?.offers[0] : product?.offers;
   const title = extractById(html, "productTitle") || stringValue(product?.name) || metaContent(html, "og:title");
@@ -135,11 +148,16 @@ async function fetchPublicProductPage(asin: string, marketplace: AmazonMarketpla
 
   const stockFromJsonLd = parseAvailability(offers?.availability);
   const availabilityText = extractById(html, "availability");
-  const inStock = stockFromJsonLd ?? parseAvailabilityText(availabilityText, marketplace);
+  const buyBox = $("#desktop_qualifiedBuyBox");
+  const hasBuyableOffer = buyBox.find('input#add-to-cart-button[type="submit"]:not([disabled])').length > 0
+    && buyBox.find('input#buy-now-button[type="submit"]:not([disabled])').length > 0
+    && Number(buyBox.find("select#quantity option:selected").val()) > 0;
+  const inStock = stockFromJsonLd ?? parseAvailabilityText(availabilityText, marketplace) ?? (hasBuyableOffer ? true : null);
   if (inStock === null) throw new Error("Amazon hat den Bestand nicht eindeutig angegeben; der Bestand bleibt unverändert.");
 
   const offerCurrency = String(offers?.priceCurrency || config.currency).toUpperCase();
   let price = parseNumericPrice(offers?.price, config.currency);
+  if (price === null) price = parseLocalizedPrice($("#corePrice_feature_div .a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-price .a-offscreen").first().text(), config.currency);
   if (price === null) {
     const itempropPrice = html.match(/<[^>]*itemprop=["']price["'][^>]*content=["']([^"']+)["']/i)?.[1]
       || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*itemprop=["']price["']/i)?.[1];
@@ -262,9 +280,7 @@ function extractItemSpecifics(html: string): Record<string, string[]> {
 }
 
 function extractById(html: string, id: string): string {
-  const safeId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const tag = html.match(new RegExp(`<([a-z][a-z0-9]*)\\b[^>]*\\bid=["']${safeId}["'][^>]*>([\\s\\S]*?)<\\/\\1>`, "i"));
-  return tag ? cleanText(stripHtml(tag[2])) : "";
+  return cleanText(load(html)(`[id="${id}"]`).first().text());
 }
 
 function metaContent(html: string, name: string): string {
@@ -276,16 +292,16 @@ function metaContent(html: string, name: string): string {
 function parseAvailability(value: unknown): boolean | null {
   const text = Array.isArray(value) ? value.join(" ") : String(value ?? "");
   if (!text) return null;
-  if (/(?:^|\/)(?:InStock|LimitedAvailability|OnlineOnly)$/i.test(text) || /in_stock|available/i.test(text)) return true;
   if (/(?:^|\/)(?:OutOfStock|SoldOut|Discontinued|PreOrder|PreSale)$/i.test(text) || /out_of_stock|unavailable|sold.?out/i.test(text)) return false;
+  if (/(?:^|\/)(?:InStock|LimitedAvailability|OnlineOnly)$/i.test(text) || /in_stock|available/i.test(text)) return true;
   return null;
 }
 
 function parseAvailabilityText(text: string, marketplace: AmazonMarketplace): boolean | null {
   if (!text) return null;
   if (marketplace === "AMZ_DE") {
+    if (/nicht verfügbar|nicht auf lager|nicht lieferbar|ausverkauft/i.test(text)) return false;
     if (/auf lager|sofort lieferbar|auf lagerbestand|lieferbar/i.test(text)) return true;
-    if (/derzeit nicht verfügbar|momentan nicht verfügbar|nicht auf lager|ausverkauft/i.test(text)) return false;
   } else {
     if (/in stock|available to ship|usually ships/i.test(text)) return true;
     if (/currently unavailable|out of stock|temporarily out of stock/i.test(text)) return false;

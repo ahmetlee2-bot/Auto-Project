@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { premiumDescription } from "../../../lib/ebay/premium-description";
+import { ebayHtmlTemplate } from "../../../lib/ebay/ebayHtmlTemplate";
+import { generateProductCopy, type ProductFacts } from "../../../lib/ai/gemini-product";
+import { cleanEbayTitle } from "../../../lib/ebay/seo-title";
 import { repricerAdmin } from "../../../lib/repricer/admin";
 import { calculateDraftTargetPrice } from "../../../lib/drafts/pricing";
 import { draftRequestUser, parseDraftAmazonUrl, parseDraftImages } from "../../../lib/drafts/server";
+import { dedupeSimilarProductImages } from "../../../lib/images/dedupeSimilarProductImages";
 
 export const runtime = "nodejs";
+export const maxDuration = 90;
 
 export async function GET(request: Request) {
   const user = await draftRequestUser(request);
@@ -31,18 +37,34 @@ export async function POST(request: Request) {
     if (!Number.isFinite(margin) || margin < 0 || margin > 300) throw new Error("Die Zielmarge muss zwischen 0 und 300 % liegen.");
     if (!Number.isFinite(shipping) || shipping < 0 || shipping > 100_000) throw new Error("Die Versandkosten sind ungültig.");
     const rawImages = body.images ?? (body.image_url || body.imageUrl ? [body.image_url || body.imageUrl] : []);
-    const images = parseDraftImages(rawImages);
+    const images = await dedupeSimilarProductImages(parseDraftImages(rawImages));
     if (body.apply_custom_frame !== undefined && typeof body.apply_custom_frame !== "boolean") throw new Error("Die Rahmen-Option muss wahr oder falsch sein.");
+    const features = Array.isArray(body.features) ? body.features.map((value) => String(value).trim()).filter(Boolean).slice(0, 20) : [];
+    const rawSpecifications = body.specifications && typeof body.specifications === "object" && !Array.isArray(body.specifications)
+      ? body.specifications as Record<string, unknown> : {};
+    const specifications = Object.fromEntries(Object.entries(rawSpecifications).flatMap(([key, rawValue]) => {
+      const values = (Array.isArray(rawValue) ? rawValue : [rawValue]).map((value) => String(value).trim()).filter(Boolean).slice(0, 10);
+      return values.length ? [[key.slice(0, 100), values]] : [];
+    }));
+    const rawTitle = String(body.raw_title || title).trim().slice(0, 500);
+    const rawDescription = String(body.raw_description ?? body.description ?? "").trim().slice(0, 5000);
+    const facts: ProductFacts = { raw_title: rawTitle, features, specifications, description: rawDescription };
+    const copy = process.env.GEMINI_API_KEY?.trim() ? await generateProductCopy(facts).catch(() => null) : null;
+    const generatedSpecifics = Object.fromEntries((copy?.item_specifics || []).map((item) => [item.key, [item.value]]));
+    const itemSpecifics = { ...generatedSpecifics, ...specifications };
+    const listingTitle = copy?.seo_title ? cleanEbayTitle(copy.seo_title, 80) : title;
     const draft = {
       user_id: user.id,
       asin,
       source_url: sourceUrl,
       source_price: sourcePrice,
+      manual_sale_price: null,
       profit_margin_percent: margin,
       shipping_cost: shipping,
       target_price: calculateDraftTargetPrice({ source_price: sourcePrice, shipping_cost: shipping, profit_margin_percent: margin }),
-      title,
-      description_html: String(body.description_html ?? body.descriptionHtml ?? "").slice(0, 50_000),
+      title: listingTitle,
+      description_html: copy ? ebayHtmlTemplate(copy) : premiumDescription({ title: rawTitle || title, asin, description: rawDescription, features, itemSpecifics }),
+      item_specifics: itemSpecifics,
       images,
       apply_custom_frame: body.apply_custom_frame ?? true,
       selected_category_id: String(body.selected_category_id ?? body.categoryId ?? "").trim() || null,
@@ -72,12 +94,12 @@ export async function PATCH(request: Request) {
     if (!ids.length || ids.length > 200 || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) throw new Error("Bitte wähle gültige Entwürfe aus.");
     if (!Number.isFinite(margin) || margin < 0 || margin > 300) throw new Error("Die Zielmarge muss zwischen 0 und 300 % liegen.");
     const admin = repricerAdmin();
-    const { data: rows, error: readError } = await admin.from("draft_products").select("id,source_price,shipping_cost")
+    const { data: rows, error: readError } = await admin.from("draft_products").select("id,source_price,shipping_cost,manual_sale_price")
       .eq("user_id", user.id).in("id", ids).in("status", ["draft", "error"]).is("ebay_item_id", null);
     if (readError) throw new Error(readError.message);
     const updated: string[] = [];
     for (const row of rows || []) {
-      const targetPrice = calculateDraftTargetPrice({ source_price: row.source_price, shipping_cost: row.shipping_cost, profit_margin_percent: margin });
+      const targetPrice = row.manual_sale_price ?? calculateDraftTargetPrice({ source_price: row.source_price, shipping_cost: row.shipping_cost, profit_margin_percent: margin });
       const { error } = await admin.from("draft_products").update({ profit_margin_percent: margin, target_price: targetPrice, status: "draft", last_error: null, updated_at: new Date().toISOString() })
         .eq("id", row.id).eq("user_id", user.id).in("status", ["draft", "error"]).is("ebay_item_id", null);
       if (error) throw new Error(error.message);

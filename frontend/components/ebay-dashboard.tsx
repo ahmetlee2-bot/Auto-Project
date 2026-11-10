@@ -5,36 +5,15 @@ import { createClient } from "../lib/supabase/client";
 import { HeaderPreferences } from "./header-preferences";
 import { ProductTable } from "./dashboard/ProductTable";
 import { FavoritesPool } from "./dashboard/FavoritesPool";
+import { calculateDraftTargetPrice } from "../lib/drafts/pricing";
+import { StoreConnectModal } from "./dashboard/StoreConnectModal";
+import { useStores } from "../lib/ebay/StoreContext";
 import { DraftsTab } from "./dashboard/DraftsTab";
 import { useLocale } from "../lib/locale";
 import { translate } from "../lib/messages";
+import { DraftListingQueueWidget } from "./dashboard/DraftListingQueueWidget";
 
-type Draft = {
-  id: string;
-  sku?: string;
-  offerId?: string;
-  title?: string;
-  price?: string;
-  quantity?: number;
-  status?: string;
-  imageUrls?: string[];
-};
-type Listing = {
-  listingId?: string;
-  title?: string;
-  price?: string;
-  quantity?: number;
-  status?: string;
-  imageUrls?: string[];
-  source?: string;
-};
-type DraftJob = {
-  jobId: string;
-  sourceId: string;
-  status: string;
-  message?: string;
-  result?: { listingId?: string; draftId?: string };
-};
+type Listing = { listingId?: string; title?: string; price?: string; quantity?: number; status?: string; imageUrls?: string[]; source?: string };
 type Margin = {
   sourcePrice: number;
   sellingPrice: number;
@@ -56,8 +35,8 @@ type Automation = {
       stock: number;
     }>;
   };
-  margin: Margin;
-  tracking: {
+  margin: Margin | null;
+  tracking: null | {
     configured: boolean;
     total: number;
     withTracking: number;
@@ -73,43 +52,51 @@ const money = new Intl.NumberFormat("de-DE", {
   style: "currency",
   currency: "EUR",
 });
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.autolister-app.de"
-).replace(/\/$/, "");
+const dashboardTabs = ["server-import", "live", "pool", "drafts", "automation", "archive", "settings"];
 
-function ProductThumbnail({ src, title }: { src?: string; title?: string }) {
-  const [failed, setFailed] = useState(false);
-  const { locale } = useLocale();
-  if (!src || failed)
-    return (
-      <div
-        className="productPlaceholder"
-        role="img"
-        aria-label={`${title || (locale === "de" ? "Produkt" : locale === "en" ? "Product" : "Ürün")}: ${locale === "de" ? "kein Bild verfügbar" : locale === "en" ? "image unavailable" : "görsel bulunamadı"}`}
-      >
-        <span aria-hidden="true">▧</span>
-        <small>{translate(locale, "Bild nicht verfügbar")}</small>
-      </div>
-    );
-  return (
-    <img
-      className="productThumbnail"
-      src={src}
-      alt={title || translate(locale, "Bild nicht verfügbar")}
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
-export function EbayDashboard({ email }: { email: string }) {
+export function EbayDashboard({ email, initialTab = "server-import" }: { email: string; initialTab?: string }) {
   const { locale } = useLocale();
   const tr = (text: string) => translate(locale, text);
-  const [activeTab, setActiveTab] = useState("server-import");
-  const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [jobs, setJobs] = useState<DraftJob[]>([]);
+  const { stores } = useStores();
+  const [showStoreConnect, setShowStoreConnect] = useState(false);
+  const [summary, setSummary] = useState<{ pending: number; listed: number; warnings: number } | null>(null);
+  const refreshSummary = useCallback(async () => {
+    try { const response = await fetch("/api/dashboard/summary", { cache: "no-store" }); if (response.ok) setSummary(await response.json()); } catch { /* Keep last known counts. */ }
+  }, []);
+  useEffect(() => {
+    void refreshSummary();
+    window.addEventListener("products-changed", refreshSummary);
+    const timer = window.setInterval(refreshSummary, 30000);
+    return () => { window.removeEventListener("products-changed", refreshSummary); window.clearInterval(timer); };
+  }, [refreshSummary]);
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const navigateTab = useCallback((tab: string) => {
+    if (!dashboardTabs.includes(tab)) return;
+    setActiveTab(tab);
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem("autolister-dashboard-tab", tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.pushState({ autolisterTab: tab }, "", url);
+  }, []);
+  useEffect(() => {
+    const restore = () => {
+      const url = new URL(window.location.href);
+      const queryTab = url.searchParams.get("tab");
+      const stored = window.sessionStorage.getItem("autolister-dashboard-tab");
+      const selected = dashboardTabs.includes(queryTab || "") ? queryTab! : dashboardTabs.includes(stored || "") ? stored! : initialTab;
+      setActiveTab(selected);
+      if (!queryTab) {
+        url.searchParams.set("tab", selected);
+        window.history.replaceState({ autolisterTab: selected }, "", url);
+      }
+    };
+    const onPopState = () => restore();
+    restore();
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [initialTab]);
+  const [mappings, setMappings] = useState<Array<{ id: string; title: string; amazon_asin: string; ebay_item_id: string; amazon_url: string; ebay_url: string }>>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [automation, setAutomation] = useState<Automation | null>(null);
   const [listedCount, setListedCount] = useState<number | null>(null);
@@ -123,7 +110,6 @@ export function EbayDashboard({ email }: { email: string }) {
   const [importAmazonUrl, setImportAmazonUrl] = useState("");
   const [importMargin, setImportMargin] = useState("20");
   const [importQuantity, setImportQuantity] = useState("1");
-  const [importAutoPublish, setImportAutoPublish] = useState(false);
   const [imageRightsConfirmed, setImageRightsConfirmed] = useState(false);
   const [importNotice, setImportNotice] = useState("");
   const [importBusy, setImportBusy] = useState(false);
@@ -136,104 +122,44 @@ export function EbayDashboard({ email }: { email: string }) {
   } | null>(null);
   const [connectBusy, setConnectBusy] = useState(false);
   const [setupNotice, setSetupNotice] = useState("");
-  const api = useCallback(
-    async (path: string, init: RequestInit = {}) => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const response = await fetch(`${API_BASE}/api/v1${path}`, {
-        ...init,
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {}),
-          ...(init.headers || {}),
-        },
-        cache: "no-store",
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(body.error || `API-Fehler (${response.status})`);
-      return body;
-    },
-    [supabase],
-  );
   const refresh = useCallback(async () => {
-    setBusy(true);
-    setError("");
-    const requests = await Promise.allSettled([
-      api("/ebay/drafts"),
-      api("/ebay/draft-jobs"),
-      api("/automation/overview"),
-      api("/ebay/active-listings"),
-    ]);
-    const labels = [
-      "Entwürfe",
-      "Server-Aufträge",
-      "Synchronisierung",
-      "eBay-Angebote",
-    ];
+    setBusy(true); setError("");
+    const read = async (path: string) => { const response = await fetch(path, { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error || "Veriler alınamadı."); return body; };
+    const results = await Promise.allSettled([read("/api/ebay/listings"), read("/api/tracked-products")]);
     const failures: string[] = [];
-    requests.forEach((result, index) => {
-      if (result.status === "rejected") {
-        failures.push(
-          `${labels[index]}: ${result.reason instanceof Error ? result.reason.message : "Laden fehlgeschlagen"}`,
-        );
-        return;
-      }
-      const body = result.value;
-      if (index === 0) setDrafts(body.drafts || []);
-      if (index === 1) setJobs(body.jobs || []);
-      if (index === 2) {
-        setAutomation(body);
-        setMargin(body.margin || null);
-      }
-      if (index === 3) {
-        setListings(body.listings || []);
-        setListedCount((body.listings || []).length);
-      }
-    });
-    if (failures.length)
-      setError(
-        `Einige Dashboard-Daten konnten nicht geladen werden. ${failures.join(" · ")}`,
-      );
+    if (results[0].status === "fulfilled") {
+      const body = results[0].value;
+      setListings(body.listings || []); setListedCount((body.listings || []).length); setConnectionStatus({ ok: body.connected === true });
+    } else { failures.push(results[0].reason.message); }
+    if (results[1].status === "fulfilled") {
+      const products = results[1].value.products || [];
+      setMappings(products);
+      setAutomation({ inventory: {
+        total: products.length, active: products.filter((p: { active: boolean }) => p.active).length,
+        lowStock: products.filter((p: { active: boolean; ebay_quantity: number }) => p.active && p.ebay_quantity > 0 && p.ebay_quantity < 3).length,
+        outOfStock: products.filter((p: { active: boolean; amazon_stock_status: boolean | null }) => p.active && p.amazon_stock_status === false).length,
+        attention: products.filter((p: { active: boolean; sync_status: string; last_error?: string | null }) => p.active && ["error", "out_of_stock"].includes(p.sync_status) && !p.last_error?.startsWith("VERIFICATION_PENDING:")).map((p: { id: string; title: string; amazon_asin: string; ebay_quantity: number }) => ({ id: p.id, title: p.title, asin: p.amazon_asin, stock: p.ebay_quantity })),
+      }, margin: null, tracking: null });
+    } else { failures.push(results[1].reason.message); }
+    if (failures.length) setError(failures.join(" · "));
     setBusy(false);
-  }, [api]);
+  }, []);
   useEffect(() => {
     void refresh();
-  }, [refresh]);
-  useEffect(() => {
-    let active = true;
-    void api("/ebay/connection-status")
-      .then((status) => {
-        if (active) setConnectionStatus(status);
-      })
-      .catch(() => {
-        if (active)
-          setConnectionStatus({
-            error:
-              "Das eBay-Verkäuferkonto ist noch nicht verbunden oder für dieses AutoLister-Konto nicht freigeschaltet.",
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, [api]);
-  useEffect(() => {
-    if (!jobs.some((job) => job.status === "RUNNING")) return;
-    const timer = window.setInterval(() => void refresh(), 5000);
+    const timer = window.setInterval(() => void refresh(), 60000);
     return () => window.clearInterval(timer);
-  }, [jobs, refresh]);
+  }, [refresh]);
   async function calculateMargin(
     targetMarginPercent = targetMargin,
     showPreview = false,
   ) {
     try {
-      const result = await api("/automation/margin/calculate", {
-        method: "POST",
-        body: JSON.stringify({ sourcePrice, targetMarginPercent }),
-      });
+      const cost = Number(sourcePrice), requestedMargin = Number(targetMarginPercent);
+      const recommendedSalePrice = calculateDraftTargetPrice({ source_price: cost, shipping_cost: 0, profit_margin_percent: requestedMargin });
+      if (recommendedSalePrice == null || cost <= 0 || !Number.isFinite(requestedMargin) || requestedMargin < 0 || requestedMargin > 300) throw new Error("Geçerli fiyat ve %0–300 arası marj girin.");
+      const ebayFee = Math.round(recommendedSalePrice * 0.15 * 100) / 100;
+      const profit = Math.round((recommendedSalePrice - cost - ebayFee) * 100) / 100;
+      const result = { sourcePrice: cost, sellingPrice: recommendedSalePrice, recommendedSalePrice, ebayFee, profit, marginPercent: Math.round(profit / cost * 10000) / 100 };
       setMargin(result);
       if (showPreview) setMarginPreviewRequested(true);
       setError("");
@@ -245,13 +171,11 @@ export function EbayDashboard({ email }: { email: string }) {
   }
   async function saveMapping() {
     try {
-      await api("/automation/mapping", {
-        method: "POST",
-        body: JSON.stringify({
-          itemId: mappingItemId,
-          amazonUrl: mappingAmazonUrl,
-        }),
-      });
+      const response = await fetch("/api/tracked-products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ebayItemId: mappingItemId, amazonUrl: mappingAmazonUrl }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      window.dispatchEvent(new Event("products-changed"));
+      await refresh();
       setMappingItemId("");
       setMappingAmazonUrl("");
       setMappingNotice("Amazon-Zuordnung gespeichert.");
@@ -277,10 +201,10 @@ export function EbayDashboard({ email }: { email: string }) {
     if (
       !Number.isFinite(Number(importMargin)) ||
       Number(importMargin) < 0 ||
-      Number(importMargin) > 500
+      Number(importMargin) > 300
     ) {
       setImportNotice(
-        "Bitte eine gültige Zielmarge zwischen 0 und 500 eingeben.",
+        "Bitte eine gültige Zielmarge zwischen 0 und 300 eingeben.",
       );
       return;
     }
@@ -294,19 +218,21 @@ export function EbayDashboard({ email }: { email: string }) {
     setImportBusy(true);
     setImportNotice("Verbinde mit dem Server und starte den Amazon-Auftrag …");
     try {
-      const result = await api("/ebay/import-amazon", {
+      const response = await fetch("/api/favorites/import", {
+        headers: { "Content-Type": "application/json" },
         method: "POST",
         body: JSON.stringify({
           amazonUrl: importAmazonUrl.trim(),
           targetMarginPercent: Number(importMargin),
           quantity: Number(importQuantity),
-          autoPublish: importAutoPublish,
           imageRightsConfirmed,
         }),
       });
-      setImportNotice(
-        `Server-Auftrag gestartet${result.sourceId ? `: ${result.sourceId}` : ""}. Der Auftrag läuft auch bei geschlossenem Browser weiter.`,
-      );
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Ürün alınamadı.");
+      setImportNotice(locale === "tr" ? "Ürün havuzuna eklendi. İnceleyip düzenleyebilirsiniz." : locale === "en" ? "Added to the pool. Review and edit before publishing." : "Im Produktpool gespeichert. Vor der Veröffentlichung prüfen und bearbeiten.");
+      window.dispatchEvent(new Event("products-changed"));
+      navigateTab("pool");
       setImportAmazonUrl("");
       await refresh();
     } catch (cause) {
@@ -319,78 +245,32 @@ export function EbayDashboard({ email }: { email: string }) {
       setImportBusy(false);
     }
   }
-  async function publishDraft(draft: Draft) {
-    if (!draft.offerId || !draft.id) {
-      setError("Für dieses Produkt fehlen eBay-Angebots-ID oder Entwurfs-ID.");
-      return;
-    }
-    try {
-      setError("");
-      setBusy(true);
-      await api("/ebay/publish", {
-        method: "POST",
-        body: JSON.stringify({ draftId: draft.id }),
-      });
-      setImportNotice(
-        `„${draft.title || "Produkt"}“ wurde an eBay zur Veröffentlichung übergeben.`,
-      );
-      await refresh();
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Das Produkt konnte nicht veröffentlicht werden.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
   async function logout() {
     await supabase.auth.signOut();
     window.location.assign("/login");
   }
-  async function connectEbay() {
-    setConnectBusy(true);
-    setSetupNotice("");
-    try {
-      const result = await api("/ebay/auth-url");
-      const authorizationUrl = new URL(String(result.authorizationUrl || ""));
-      if (
-        authorizationUrl.protocol !== "https:" ||
-        authorizationUrl.hostname !== "auth.ebay.com"
-      )
-        throw new Error(
-          "Die eBay-Anmeldeseite konnte nicht sicher geöffnet werden.",
-        );
-      window.location.assign(authorizationUrl.toString());
-    } catch {
-      setSetupNotice(
-        "Die eBay-Verbindung konnte nicht gestartet werden. Prüfe die eBay-App-Konfiguration oder wende dich an den AutoLister-Administrator.",
-      );
-      setConnectBusy(false);
-    }
-  }
+  async function connectEbay() { setShowStoreConnect(true); }
   const inventory = automation?.inventory;
   const tracking = automation?.tracking;
   const tabs = [
-    ["server-import", tr("Amazon-Import")],
-    ["jobs", tr("Server-Aufträge")],
+    ["server-import", locale === "tr" ? "Amazon Merkezi" : locale === "en" ? "Amazon Center" : "Amazon-Zentrale"],
     ["live", tr("Aktive eBay-Angebote")],
     ["pool", tr("Produktpool")],
     ["drafts", tr("Produktentwürfe")],
     ["automation", tr("Synchronisation")],
-    ["matcher", tr("Amazon-Zuordnung")],
     ["archive", tr("Archiv")],
     ["settings", tr("Einstellungen")],
   ];
   return (
     <main className="webDashboard">
+      <StoreConnectModal open={showStoreConnect} onClose={() => setShowStoreConnect(false)} />
+      <DraftListingQueueWidget onNavigate={navigateTab} />
       <header className="dashboardHeader">
         <div>
           <span className="sectionEyebrow">AUTOLISTER · EBAY.DE</span>
           <h1>{tr("Verwaltungsübersicht")}</h1>
           <p className="dashboardSubtitle">
-            {tr("Angebote, Server-Aufträge und Lagerbestand an einem Ort.")}
+            {locale === "tr" ? "Ürünler, ilanlar ve stok tek yerde." : locale === "en" ? "Products, listings and stock in one place." : "Produkte, Angebote und Bestand an einem Ort."}
           </p>
         </div>
         <div className="dashboardUser">
@@ -426,20 +306,20 @@ export function EbayDashboard({ email }: { email: string }) {
       <section className="dashboardStats">
         <article>
           <span>{tr("Wartende Produkte")}</span>
-          <strong>{drafts.length}</strong>
+          <strong>{summary?.pending ?? "…"}</strong><small>{locale === "tr" ? "Havuzda inceleme bekliyor" : locale === "en" ? "Awaiting review in your pool" : "Warten im Pool auf Prüfung"}</small>
         </article>
         <article>
           <span>{tr("Gelistet auf eBay")}</span>
-          <strong>{listedCount ?? "—"}</strong>
+          <strong>{listedCount ?? summary?.listed ?? "…"}</strong><small>{locale === "tr" ? "Fiyat ve stok takibinde" : locale === "en" ? "Price and stock monitoring" : "Preis- und Bestandsüberwachung"}</small>
         </article>
         <article>
           <span>{tr("Synchronisierungswarnungen")}</span>
           <strong>
-            {inventory ? inventory.lowStock + inventory.outOfStock : "—"}
-          </strong>
+            {summary?.warnings ?? "…"}
+          </strong><small>{locale === "tr" ? (summary?.warnings === 0 ? "Tüm sistemler stabil" : "Kontrol gereken ürünler") : locale === "en" ? "Products requiring attention" : "Produkte mit Prüfbedarf"}</small>
         </article>
       </section>
-      {connectionStatus && !connectionStatus.ok && activeTab !== "settings" ? (
+      {connectionStatus && !connectionStatus.ok && !stores.some(store => store.status === "active") && activeTab !== "settings" ? (
         <div className="dashboardOnboardingBanner" role="status">
           <div>
             <strong>{tr("eBay-Konto noch nicht verbunden")}</strong>
@@ -448,7 +328,7 @@ export function EbayDashboard({ email }: { email: string }) {
           <button
             type="button"
             className="primaryButton"
-            onClick={() => setActiveTab("settings")}
+            onClick={() => navigateTab("settings")}
           >
             {tr("Zur Einrichtung →")}
           </button>
@@ -468,7 +348,7 @@ export function EbayDashboard({ email }: { email: string }) {
             role="tab"
             aria-selected={activeTab === id}
             className={activeTab === id ? "active" : ""}
-            onClick={() => setActiveTab(id)}
+            onClick={() => navigateTab(id)}
           >
             {label}
           </button>
@@ -478,9 +358,9 @@ export function EbayDashboard({ email }: { email: string }) {
         <section id="server-import" className="dashboardCard">
           <div>
             <p className="sectionEyebrow">{tr("SERVERVERARBEITUNG")}</p>
-            <h2>{tr("Amazon-Produkt ohne Erweiterung verarbeiten")}</h2>
+            <h2>{locale === "tr" ? "Amazon’dan Ürün Çek & Havuza Ekle" : locale === "en" ? "Import Amazon product to your pool" : "Amazon-Produkt laden und im Pool prüfen"}</h2>
             <p className="emptyDashboard">
-              {tr("Amazon.de URL oder ASIN eingeben. Der Server liest das Produkt, verarbeitet die Bilder, berechnet den Preis und führt den eBay-Auftrag unabhängig von diesem Gerät aus.")}
+              {locale === "tr" ? "Amazon URL’si veya ASIN girin. Ürün, fiyat, görseller ve standart açıklama inceleme havuzunuza kaydedilir. İnceledikten sonra yayınlayın." : locale === "en" ? "Enter an Amazon URL or ASIN. Review product details, images, price and the standard description in your pool before publishing." : "Amazon-URL oder ASIN eingeben. Produktdaten, Bilder, Preis und Standardbeschreibung werden im Pool zur Prüfung gespeichert. Erst nach der Prüfung veröffentlichen."}
             </p>
           </div>
           <div className="mappingInputs">
@@ -520,14 +400,6 @@ export function EbayDashboard({ email }: { email: string }) {
               />{" "}
               {tr("Ich bestätige die Nutzungsrechte der Produktbilder.")}
             </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={importAutoPublish}
-                onChange={(event) => setImportAutoPublish(event.target.checked)}
-              />{" "}
-              {tr("Nach erfolgreicher Prüfung automatisch bei eBay veröffentlichen.")}
-            </label>
             <button
               className="primaryButton"
               disabled={importBusy || !importAmazonUrl.trim()}
@@ -535,41 +407,10 @@ export function EbayDashboard({ email }: { email: string }) {
             >
               {importBusy
                 ? tr("Auftrag wird gestartet …")
-                : tr("Server-Auftrag starten")}
+                : locale === "tr" ? "Ürün Havuzuna Ekle & İncele" : locale === "en" ? "Add to pool & review" : "Im Pool speichern & prüfen"}
             </button>
           </div>
           {importNotice ? <p className="authNotice">{importNotice}</p> : null}
-        </section>
-      ) : null}
-      {activeTab === "jobs" ? (
-        <section className="dashboardCard">
-          <div className="dashboardCardHeading">
-            <div>
-              <p className="sectionEyebrow">SERVER</p>
-              <h2>{tr("eBay-Aufträge")}</h2>
-            </div>
-            <button className="quietButton" onClick={() => void refresh()}>
-              {tr("Aktualisieren")}
-            </button>
-          </div>
-          {jobs.length ? (
-            <ul className="attentionList">
-              {jobs.slice(0, 30).map((job) => (
-                <li key={job.jobId}>
-                  <span>
-                    {job.sourceId} · {job.status}
-                  </span>
-                  <b>
-                    {job.result?.listingId
-                      ? `Item ID ${job.result.listingId}`
-                      : job.message || job.jobId}
-                  </b>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="emptyDashboard">{tr("Keine Server-Aufträge vorhanden.")}</p>
-          )}
         </section>
       ) : null}
       {activeTab === "automation" ? (
@@ -668,31 +509,8 @@ export function EbayDashboard({ email }: { email: string }) {
                 {tracking?.configured ? tr("Verbunden") : tr("eBay verbinden")}
               </span>
             </div>
-            <div className="moduleMetrics">
-              <span>
-                <b>{tracking?.total ?? "—"}</b> {tr("Bestellungen")}
-              </span>
-              <span>
-                <b>{tracking?.withTracking ?? "—"}</b> {tr("Mit Tracking")}
-              </span>
-              <span>
-                <b>{tracking?.awaitingTracking ?? "—"}</b> {tr("Offen")}
-              </span>
-            </div>
-            {tracking?.shipments?.length ? (
-              <ul className="attentionList">
-                {tracking.shipments.slice(0, 3).map((shipment) => (
-                  <li key={shipment.orderId}>
-                    <span>{shipment.orderId}</span>
-                    <b>{shipment.trackingNumber || tr("Tracking fehlt")}</b>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="emptyDashboard">
-                {tr("Noch keine eBay-Sendungen verfügbar.")}
-              </p>
-            )}
+            <p className="dashboardSubtitle">{locale === "tr" ? "Sipariş, müşteri, kargo ve gerçek takip bilgilerini yönetin." : "Manage orders, carriers and verified tracking data."}</p>
+            <a className="primaryButton" href="/dashboard/orders">{locale === "tr" ? "Takip Kodu Gir / Dönüştür & eBay’e Gönder →" : "Orders & tracking →"}</a>
           </article>
         </section>
       ) : null}
@@ -710,52 +528,11 @@ export function EbayDashboard({ email }: { email: string }) {
       ) : null}
       {activeTab === "pool" ? (
         <section id="pool" className="dashboardCard">
-          <FavoritesPool />
-          <div className="dashboardCardHeading">
-            <div>
-              <p className="sectionEyebrow">{tr("Produktpool")}</p>
-              <h2>{locale === "de" ? "Entwürfe & Angebote" : locale === "en" ? "Drafts & listings" : "Taslaklar ve ilanlar"}</h2>
-            </div>
-            <button className="quietButton" onClick={() => void refresh()}>
-              {tr("Aktualisieren")}
-            </button>
-          </div>
-          {busy ? (
-            <p>{tr("Produktdaten werden geladen …")}</p>
-          ) : drafts.length === 0 ? (
-            <p className="emptyDashboard">{tr("Keine Entwürfe vorhanden.")}</p>
-          ) : (
-            <div className="productGrid">
-              {drafts.map((draft) => (
-                <article className="productCard" key={draft.id}>
-                  <ProductThumbnail
-                    src={draft.imageUrls?.[0]}
-                    title={draft.title}
-                  />
-                  <div>
-                    <strong>{draft.title || tr("Ohne Titel")}</strong>
-                    <small>
-                      {draft.price || "—"} · {draft.quantity ?? 0} {locale === "de" ? "Stück" : locale === "en" ? "pcs" : "adet"}
-                    </small>
-                  </div>
-                  <span className="statusChip">{draft.status || "READY"}</span>
-                  {draft.offerId ? (
-                    <button
-                      className="primaryButton"
-                      disabled={busy}
-                      onClick={() => void publishDraft(draft)}
-                    >
-                      {tr("Auf eBay veröffentlichen")}
-                    </button>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
+          <FavoritesPool onInspect={() => navigateTab("drafts")} />
         </section>
       ) : null}
       {activeTab === "drafts" ? <DraftsTab /> : null}
-      {activeTab === "matcher" ? (
+      {activeTab === "server-import" ? (
         <section id="matcher" className="dashboardCard">
           <div>
             <p className="sectionEyebrow">{tr("Manuelle Produktzuordnung")}</p>
@@ -786,6 +563,8 @@ export function EbayDashboard({ email }: { email: string }) {
             </button>
           </div>
           {mappingNotice ? <p className="authNotice">{mappingNotice}</p> : null}
+          <div className="proTableWrap"><table className="proTable"><thead><tr><th>Amazon ASIN</th><th>eBay Item ID</th><th>{locale === "tr" ? "Ürün" : "Product"}</th></tr></thead><tbody>{mappings.map(item => <tr key={item.id}><td><a href={item.amazon_url} target="_blank" rel="noopener noreferrer">{item.amazon_asin}</a></td><td><a href={item.ebay_url} target="_blank" rel="noopener noreferrer">{item.ebay_item_id}</a></td><td>{item.title}</td></tr>)}</tbody></table>{!mappings.length && <p className="proEmpty">{locale === "tr" ? "Henüz ASIN – eBay eşlemesi yok." : "No ASIN – eBay mappings yet."}</p>}</div>
+
         </section>
       ) : null}
       {activeTab === "archive" ? (
@@ -814,7 +593,7 @@ export function EbayDashboard({ email }: { email: string }) {
                 <span className="setupStepNumber">{tr("Schritt 1").toUpperCase()}</span>
                 <span aria-hidden="true">▣</span>
               </div>
-              <h3>{tr("Chrome-Erweiterung installieren")}</h3>
+              <h3>{locale === "tr" ? "Chrome Eklentisi veya Bulut Motoru" : "Chrome / Cloud Import"}</h3>
               <p>
                 {tr("Erfasse Produktdaten direkt auf Amazon.de. Der Importauftrag wird anschließend an AutoLister übergeben.")}
               </p>
@@ -832,14 +611,14 @@ export function EbayDashboard({ email }: { email: string }) {
                 <span className="setupStepNumber">{tr("Schritt 2").toUpperCase()}</span>
                 <span
                   className={
-                    connectionStatus?.ok
+                    (stores.some(store => store.status === "active") || connectionStatus?.ok)
                       ? "setupStatus connected"
                       : "setupStatus"
                   }
                 >
                   {connectionStatus === null
                     ? tr("Status wird geprüft")
-                    : connectionStatus.ok
+                    : (stores.some(store => store.status === "active") || connectionStatus.ok)
                       ? tr("Token aktiv")
                       : tr("Nicht verbunden")}
                 </span>
@@ -856,7 +635,8 @@ export function EbayDashboard({ email }: { email: string }) {
               >
                 {connectBusy ? tr("eBay wird geöffnet …") : tr("eBay-Konto sicher verbinden")}
               </button>
-              {connectionStatus?.error ? (
+              {stores.map(store => <p key={store.id}>{store.store_name}<br /><small>{locale === "tr" ? "Token bitişi: " : "Token: "}{new Date(store.token_expires_at).toLocaleString()}</small></p>)}
+              {connectionStatus?.error && !stores.some(store => store.status === "active") ? (
                 <p className="setupFeedback authError">
                   {connectionStatus.error}
                 </p>
@@ -867,7 +647,7 @@ export function EbayDashboard({ email }: { email: string }) {
                 <span className="setupStepNumber">{tr("Schritt 3").toUpperCase()}</span>
                 <span className="setupStatus">{tr("Produkt vorbereiten")}</span>
               </div>
-              <h3>{tr("Erstes Produkt erfassen")}</h3>
+              <h3>{locale === "tr" ? "Favori Havuzuna Ekle & İncele" : "Im Pool speichern & prüfen"}</h3>
               <p>
                 {tr("Amazon-URL oder ASIN eingeben und Marge, Menge sowie Bildrechte vor dem Auftrag prüfen.")}
               </p>
@@ -941,23 +721,13 @@ export function EbayDashboard({ email }: { email: string }) {
                   />{" "}
                   {tr("Ich darf die Produktbilder verwenden.")}
                 </label>
-                <label className="setupCheck">
-                  <input
-                    type="checkbox"
-                    checked={importAutoPublish}
-                    onChange={(event) =>
-                      setImportAutoPublish(event.target.checked)
-                    }
-                  />{" "}
-                  {tr("Nach erfolgreicher Prüfung automatisch veröffentlichen.")}
-                </label>
                 <button
                   className="primaryButton"
                   type="button"
                   disabled={importBusy || !importAmazonUrl.trim()}
                   onClick={() => void importFromAmazon()}
                 >
-                  {importBusy ? tr("Auftrag wird gestartet …") : tr("Server-Auftrag starten")}
+                  {importBusy ? tr("Auftrag wird gestartet …") : locale === "tr" ? "Ürün Havuzuna Ekle & İncele" : locale === "en" ? "Add to pool & review" : "Im Pool speichern & prüfen"}
                 </button>
                 {importNotice ? (
                   <p className="setupFeedback authNotice">{importNotice}</p>

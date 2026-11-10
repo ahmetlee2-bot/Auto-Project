@@ -3,6 +3,7 @@ import { createClient } from "../../../lib/supabase/server";
 import { bearerUser } from "../../../lib/supabase/bearer-user";
 import { repricerAdmin } from "../../../lib/repricer/admin";
 import { normalizeProductImages } from "../../../lib/images/normalizeProductImages";
+import { premiumDescription } from "../../../lib/ebay/premium-description";
 
 export const runtime = "nodejs";
 
@@ -53,10 +54,25 @@ export async function POST(request: NextRequest) {
       user_id: auth.user.id, asin, title, image_url: primaryImage || null, images,
       amazon_url: `https://www.amazon.de/dp/${asin}`, amazon_price: parsed,
       is_prime: body.isPrime === true, suggested_ebay_price: suggested,
+      description_html: premiumDescription({ title, asin, description: String(body.description || "") }),
     }, { onConflict: "user_id,asin" }).select("*").single();
     if (error) throw new Error(error.message);
     return NextResponse.json({ favorite: data }, { status: 201, headers: cors(request) });
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "Favori kaydedilemedi." }, { status: 400, headers: cors(request) });
   }
+}
+
+export async function DELETE(request: Request) {
+  const client = await createClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const body = await request.json();
+    const ids = [...new Set<string>(Array.isArray(body.ids) ? body.ids.map(String) : [])];
+    if (!ids.length || ids.length > 200 || ids.some(id => !/^[0-9a-f-]{36}$/i.test(id))) throw new Error("Geçerli ürünleri seçin (en fazla 200).");
+    const { data, error } = await repricerAdmin().from("favorite_products").delete().eq("user_id", auth.user.id).in("id", ids).select("id");
+    if (error) throw error;
+    return NextResponse.json({ deletedIds: (data || []).map(row => row.id) });
+  } catch (cause) { return NextResponse.json({ error: cause instanceof Error ? cause.message : "Silinemedi." }, { status: 400 }); }
 }

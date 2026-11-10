@@ -9,14 +9,16 @@ export const metadata: Metadata = { title: { absolute: "Dashboard | AutoLister O
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string }>;
+  searchParams: Promise<{ code?: string; tab?: string; editDraft?: string }>;
 }) {
-  const { code } = await searchParams;
+  const { code, tab } = await searchParams;
   if (code) return <OAuthCallback code={code} />;
 
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
   if (!claims) redirect("/login?next=/dashboard");
-  return <EbayDashboard email={String(claims.email || "")} />;
+  const validTabs = ["server-import", "live", "pool", "drafts", "automation", "archive", "settings"];
+  const initialTab = validTabs.includes(String(tab)) ? String(tab) : "server-import";
+  return <EbayDashboard email={String(claims.email || "")} initialTab={initialTab} />;
 }

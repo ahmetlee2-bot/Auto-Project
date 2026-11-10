@@ -7,8 +7,8 @@ import type { TrackedProduct } from "../../lib/repricer/types";
 
 type Listing = { listingId?: string; title?: string; price?: string; quantity?: number; imageUrls?: string[] };
 const euro = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
-type Settings = { margin: string; shipping: string; minimum: string; quantity: string };
-const settingsOf = (p: TrackedProduct): Settings => ({ margin: String(p.target_margin_percent), shipping: String(p.estimated_shipping ?? 0), minimum: String(p.minimum_sale_price ?? 0), quantity: p.manual_quantity_override == null ? "" : String(p.manual_quantity_override) });
+type Settings = { margin: string; shipping: string; minimum: string; manual: string; quantity: string };
+const settingsOf = (p: TrackedProduct): Settings => ({ margin: String(p.target_margin_percent), shipping: String(p.estimated_shipping ?? 0), minimum: String(p.minimum_sale_price ?? 0), manual: p.manual_sale_price == null ? "" : String(p.manual_sale_price), quantity: p.manual_quantity_override == null ? "" : String(p.manual_quantity_override) });
 
 const copyByLocale: Record<Locale, {
   loadError: string;
@@ -37,6 +37,10 @@ const copyByLocale: Record<Locale, {
   unchecked: string;
   pieces: string;
   paused: string;
+  verificationPending: string;
+  extensionActive: string;
+  extensionHelp: string;
+  extensionOnly: string;
   outOfStockZero: string;
   errorStatus: string;
   priceSynced: string;
@@ -91,7 +95,7 @@ const copyByLocale: Record<Locale, {
     empty: "Noch keine überwachten Produkte. Verbinde unten ein eBay-Angebot mit einer Amazon-ASIN.",
     selectAll: "Alle Produkte auswählen",
     colProduct: "Produkt",
-    colAmazon: "Quelle · Amazon",
+    colAmazon: "Quelle · Lieferant",
     colEbay: "Ziel · eBay",
     colStatus: "Änderung & Status",
     colActions: "Aktionen",
@@ -100,6 +104,10 @@ const copyByLocale: Record<Locale, {
     unchecked: "Ungeprüft",
     pieces: "Stück",
     paused: "Pausiert",
+    verificationPending: "Verifizierung wartet",
+    extensionActive: "Erweiterungssync aktiv",
+    extensionHelp: "Joybuy wird nur auf einer geöffneten Produktseite in deiner angemeldeten Erweiterung geprüft.",
+    extensionOnly: "Mit Erweiterung prüfen",
     outOfStockZero: "Nicht vorrätig · Bestand 0",
     errorStatus: "Fehler",
     priceSynced: "Preis synchronisiert",
@@ -107,7 +115,7 @@ const copyByLocale: Record<Locale, {
     checkedAt: (date) => `Geprüft ${date}`,
     notCheckedYet: "Noch nicht geprüft",
     syncNow: "Jetzt synchronisieren",
-    syncDone: "Amazon und eBay wurden geprüft.",
+    syncDone: "Quelle und eBay wurden geprüft.",
     settings: "Einstellungen",
     pause: "Pausieren",
     activate: "Aktivieren",
@@ -154,7 +162,7 @@ const copyByLocale: Record<Locale, {
     empty: "No monitored products yet. Link an eBay listing with an Amazon ASIN below.",
     selectAll: "Select all products",
     colProduct: "Product",
-    colAmazon: "Source · Amazon",
+    colAmazon: "Source · Supplier",
     colEbay: "Target · eBay",
     colStatus: "Change & Status",
     colActions: "Actions",
@@ -163,6 +171,10 @@ const copyByLocale: Record<Locale, {
     unchecked: "Unchecked",
     pieces: "pcs",
     paused: "Paused",
+    verificationPending: "Verification pending",
+    extensionActive: "Extension sync active",
+    extensionHelp: "Joybuy is checked only on an open product page in your signed-in extension.",
+    extensionOnly: "Check with extension",
     outOfStockZero: "Out of stock · Qty 0",
     errorStatus: "Error",
     priceSynced: "Price synced",
@@ -170,7 +182,7 @@ const copyByLocale: Record<Locale, {
     checkedAt: (date) => `Checked ${date}`,
     notCheckedYet: "Not checked yet",
     syncNow: "Sync now",
-    syncDone: "Amazon and eBay were checked.",
+    syncDone: "Source and eBay were checked.",
     settings: "Settings",
     pause: "Pause",
     activate: "Activate",
@@ -217,7 +229,7 @@ const copyByLocale: Record<Locale, {
     empty: "Henüz izlenen ürün yok. Aşağıdan bir eBay ilanını Amazon ASIN ile eşleştirin.",
     selectAll: "Tüm ürünleri seç",
     colProduct: "Ürün",
-    colAmazon: "Kaynak · Amazon",
+    colAmazon: "Kaynak · Tedarikçi",
     colEbay: "Hedef · eBay",
     colStatus: "Değişim ve Durum",
     colActions: "İşlemler",
@@ -226,6 +238,10 @@ const copyByLocale: Record<Locale, {
     unchecked: "Kontrol edilmedi",
     pieces: "adet",
     paused: "Duraklatıldı",
+    verificationPending: "Doğrulama bekliyor",
+    extensionActive: "Eklenti eşitlemesi aktif",
+    extensionHelp: "Joybuy yalnızca giriş yapılmış eklentide açık olan ürün sayfasından kontrol edilir.",
+    extensionOnly: "Eklentiyle kontrol et",
     outOfStockZero: "Stokta yok · Adet 0",
     errorStatus: "Hata",
     priceSynced: "Fiyat eşitlendi",
@@ -233,7 +249,7 @@ const copyByLocale: Record<Locale, {
     checkedAt: (date) => `Son kontrol: ${date}`,
     notCheckedYet: "Henüz kontrol edilmedi",
     syncNow: "Şimdi eşitle",
-    syncDone: "Amazon ve eBay kontrol edildi.",
+    syncDone: "Kaynak ve eBay kontrol edildi.",
     settings: "Ayarlar",
     pause: "Duraklat",
     activate: "Etkinleştir",
@@ -273,7 +289,7 @@ export function ProductTable({ listings }: { listings: Listing[] }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<TrackedProduct | null>(null);
-  const [settings, setSettings] = useState<Settings>({ margin: "20", shipping: "0", minimum: "0", quantity: "" });
+  const [settings, setSettings] = useState<Settings>({ margin: "20", shipping: "0", minimum: "0", manual: "", quantity: "" });
   const [selected, setSelected] = useState<string[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [amazonInput, setAmazonInput] = useState("");
@@ -319,13 +335,13 @@ export function ProductTable({ listings }: { listings: Listing[] }) {
     {error && <p className="trackedError" role="alert">{error}</p>}{notice && <p className="trackedNotice" role="status">{notice}</p>}
     {loading ? <p className="trackedEmpty">{t.loading}</p> : products.length === 0 ? <p className="trackedEmpty">{t.empty}</p> : <div className="trackedScroll"><table className="trackedTable"><thead><tr><th><input aria-label={t.selectAll} type="checkbox" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? products.map((p) => p.id) : [])} /></th><th>{t.colProduct}</th><th>{t.colAmazon}</th><th>{t.colEbay}</th><th>{t.colStatus}</th><th>{t.colActions}</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} className={product.active ? "" : "trackedPaused"}>
       <td><input aria-label={`${product.title}`} type="checkbox" checked={selected.includes(product.id)} onChange={(e) => setSelected((old) => e.target.checked ? [...old, product.id] : old.filter((id) => id !== product.id))} /></td>
-      <td><div className="trackedProductName">{product.image_url ? <img src={product.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="trackedNoImage">▧</span>}<div><strong>{product.title}</strong><small>ASIN {product.amazon_asin} · eBay {product.ebay_item_id}</small></div></div></td>
-      <td><strong>{product.amazon_price === null ? "—" : euro.format(Number(product.amazon_price))}</strong><div className="trackedMeta"><span className={`trackedBadge ${product.amazon_stock_status === true ? "stock" : product.amazon_stock_status === false ? "empty" : "unknown"}`}>{product.amazon_stock_status === true ? t.inStock : product.amazon_stock_status === false ? t.outOfStock : t.unchecked}</span><a href={product.amazon_url} target="_blank" rel="noopener noreferrer" aria-label={`Amazon: ${product.amazon_asin}`}><ExternalLink size={15} /></a></div></td>
+      <td><div className="trackedProductName">{product.image_url ? <img src={product.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="trackedNoImage">▧</span>}<div><strong>{product.title}</strong><small>{product.supplier === "joybuy_de" ? "Joybuy.de" : "Amazon.de"} · {product.amazon_asin} · eBay {product.ebay_item_id}</small></div></div></td>
+      <td><strong>{product.amazon_price === null ? "—" : euro.format(Number(product.amazon_price))}</strong><div className="trackedMeta"><span className={`trackedBadge ${product.amazon_stock_status === true ? "stock" : product.amazon_stock_status === false ? "empty" : "unknown"}`}>{product.amazon_stock_status === true ? t.inStock : product.amazon_stock_status === false ? t.outOfStock : t.unchecked}</span><a href={product.amazon_url} target="_blank" rel="noopener noreferrer" aria-label={`${product.supplier === "joybuy_de" ? "Joybuy.de" : "Amazon"}: ${product.amazon_asin}`}><ExternalLink size={15} /></a></div></td>
       <td><strong>{product.ebay_price === null ? "—" : euro.format(Number(product.ebay_price))}</strong><div className="trackedMeta"><span>{product.ebay_quantity} {t.pieces}</span><a href={product.ebay_url} target="_blank" rel="noopener noreferrer" aria-label={`eBay: ${product.ebay_item_id}`}><ExternalLink size={15} /></a></div></td>
-      <td><div className="trackedState"><span className={`trackedBadge ${!product.active ? "unknown" : product.sync_status === "out_of_stock" || product.sync_status === "error" ? "empty" : "stock"}`}>{!product.active ? t.paused : product.sync_status === "out_of_stock" ? t.outOfStockZero : product.sync_status === "error" ? t.errorStatus : product.sync_status === "price_changed" ? t.priceSynced : t.synced}</span>{product.amazon_price_delta !== null && Number(product.amazon_price_delta) !== 0 && <span className={`trackedDelta ${Number(product.amazon_price_delta) > 0 ? "up" : "down"}`}>{Number(product.amazon_price_delta) > 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Number(product.amazon_price_delta) > 0 ? "+" : ""}{euro.format(Number(product.amazon_price_delta))}</span>}<small>{product.last_checked_at ? t.checkedAt(new Date(product.last_checked_at).toLocaleString(dateLocale)) : t.notCheckedYet}</small>{product.last_error && <small className="trackedRowError" title={product.last_error}>{product.last_error}</small>}</div></td>
-      <td><div className="trackedActions"><button type="button" disabled={busyId !== null || !product.active} onClick={() => void action(product.id, async () => { await mutate(`/api/tracked-products/${product.id}/sync`, "POST"); setNotice(t.syncDone); })}><RefreshCw size={15} /> {t.syncNow}</button><button type="button" disabled={busyId !== null} onClick={() => { setEditing(product); setSettings(settingsOf(product)); }}><Settings2 size={15} /> {t.settings}</button><button type="button" disabled={busyId !== null} onClick={() => void action(product.id, async () => { await mutate(`/api/tracked-products/${product.id}`, "PATCH", { active: !product.active }); setNotice(product.active ? t.pausedNotice : t.activatedNotice); })}>{product.active ? t.pause : t.activate}</button><button type="button" className="trackedDelete" disabled={busyId !== null} onClick={() => { const close = window.confirm(t.confirmDelete); if (close) { const endListing = window.confirm(t.confirmEndEbay); void action(product.id, async () => { await mutate(`/api/tracked-products/${product.id}`, "DELETE", { endEbayListing: endListing }); setNotice(t.deletedNotice); }); } }}><Trash2 size={15} /> {t.deleteLabel}</button></div></td>
+      <td><div className="trackedState"><span className={`trackedBadge ${!product.active || product.last_error?.startsWith("VERIFICATION_PENDING:") ? "unknown" : product.sync_status === "out_of_stock" || product.sync_status === "error" ? "empty" : "stock"}`}>{product.last_error?.startsWith("VERIFICATION_PENDING:") ? t.verificationPending : !product.active ? t.paused : product.supplier === "joybuy_de" ? t.extensionActive : product.sync_status === "out_of_stock" ? t.outOfStockZero : product.sync_status === "error" ? t.errorStatus : product.sync_status === "price_changed" ? t.priceSynced : t.synced}</span>{product.amazon_price_delta !== null && Number(product.amazon_price_delta) !== 0 && <span className={`trackedDelta ${Number(product.amazon_price_delta) > 0 ? "up" : "down"}`}>{Number(product.amazon_price_delta) > 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Number(product.amazon_price_delta) > 0 ? "+" : ""}{euro.format(Number(product.amazon_price_delta))}</span>}{product.supplier === "joybuy_de" && product.active ? <small>{product.last_error?.startsWith("VERIFICATION_PENDING:") ? t.verificationPending : product.last_checked_at ? `${t.extensionActive} (${t.checkedAt(new Date(product.last_checked_at).toLocaleString(dateLocale))})` : t.notCheckedYet}</small> : <small>{product.last_checked_at ? t.checkedAt(new Date(product.last_checked_at).toLocaleString(dateLocale)) : t.notCheckedYet}</small>}{product.supplier === "joybuy_de" && !product.active && <small>{t.extensionHelp}</small>}{product.last_error && <small className={product.last_error.startsWith("VERIFICATION_PENDING:") ? "trackedMeta" : "trackedRowError"} title={product.last_error}>{product.last_error.replace(/^VERIFICATION_PENDING:\s*/, "")}</small>}</div></td>
+      <td><div className="trackedActions"><button type="button" disabled={busyId !== null || !product.active || product.supplier === "joybuy_de"} onClick={() => void action(product.id, async () => { await mutate(`/api/tracked-products/${product.id}/sync`, "POST"); setNotice(t.syncDone); })}><RefreshCw size={15} /> {product.supplier === "joybuy_de" ? t.extensionOnly : t.syncNow}</button><button type="button" disabled={busyId !== null} onClick={() => { setEditing(product); setSettings(settingsOf(product)); }}><Settings2 size={15} /> {t.settings}</button><button type="button" disabled={busyId !== null} onClick={() => void action(product.id, async () => { await mutate(`/api/tracked-products/${product.id}`, "PATCH", { active: !product.active }); setNotice(product.active ? t.pausedNotice : t.activatedNotice); })}>{product.active ? t.pause : t.activate}</button><button type="button" className="trackedDelete" disabled={busyId !== null} onClick={() => { const close = window.confirm(t.confirmDelete); if (close) { const endListing = window.confirm(t.confirmEndEbay); void action(product.id, async () => { await mutate(`/api/tracked-products/${product.id}`, "DELETE", { endEbayListing: endListing }); setNotice(t.deletedNotice); }); } }}><Trash2 size={15} /> {t.deleteLabel}</button></div></td>
     </tr>)}</tbody></table></div>}
-    {editing && <div className="trackedModalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null); }}><section className="trackedModal" role="dialog" aria-modal="true" aria-labelledby="trackedSettingsTitle"><div className="trackedModalHeader"><div><span className="trackedEyebrow">{t.modalEyebrow}</span><h3 id="trackedSettingsTitle">{editing.title}</h3></div><button type="button" aria-label={t.closeLabel} onClick={() => setEditing(null)}>×</button></div><form onSubmit={(event) => { event.preventDefault(); void action(editing.id, async () => { const result = await mutate(`/api/tracked-products/${editing.id}`, "PATCH", { targetMarginPercent: Number(settings.margin), estimatedShipping: Number(settings.shipping), minimumSalePrice: Number(settings.minimum), manualQuantityOverride: settings.quantity === "" ? null : Number(settings.quantity), recalculate: true }); setEditing(null); setNotice(result.syncError ? t.syncPartialError(String(result.syncError)) : t.settingsSaved); }); }}><label>{t.targetMargin}<input required type="number" min="0" max="300" step="0.01" value={settings.margin} onChange={(e) => setSettings({ ...settings, margin: e.target.value })} /></label><label>{t.shippingCost}<input required type="number" min="0" max="10000" step="0.01" value={settings.shipping} onChange={(e) => setSettings({ ...settings, shipping: e.target.value })} /></label><label>{t.minSalePrice}<input required type="number" min="0" max="1000000" step="0.01" value={settings.minimum} onChange={(e) => setSettings({ ...settings, minimum: e.target.value })} /></label><label>{t.quantityOverride}<input type="number" min="0" max="10000" step="1" value={settings.quantity} onChange={(e) => setSettings({ ...settings, quantity: e.target.value })} /></label><div className="trackedModalActions"><button type="button" onClick={() => setEditing(null)}>{t.cancel}</button><button type="submit" disabled={busyId !== null}>{busyId === editing.id ? t.saving : t.saveAndSync}</button></div></form></section></div>}
+    {editing && <div className="trackedModalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null); }}><section className="trackedModal" role="dialog" aria-modal="true" aria-labelledby="trackedSettingsTitle"><div className="trackedModalHeader"><div><span className="trackedEyebrow">{t.modalEyebrow}</span><h3 id="trackedSettingsTitle">{editing.title}</h3></div><button type="button" aria-label={t.closeLabel} onClick={() => setEditing(null)}>×</button></div><form onSubmit={(event) => { event.preventDefault(); void action(editing.id, async () => { const result = await mutate(`/api/tracked-products/${editing.id}`, "PATCH", { targetMarginPercent: Number(settings.margin), estimatedShipping: Number(settings.shipping), minimumSalePrice: Number(settings.minimum), manualSalePrice: settings.manual.trim() === "" ? null : Number(settings.manual), manualQuantityOverride: settings.quantity === "" ? null : Number(settings.quantity), recalculate: true }); setEditing(null); setNotice(result.syncError ? t.syncPartialError(String(result.syncError)) : t.settingsSaved); }); }}><label>{t.targetMargin}<input required type="number" min="0" max="300" step="0.01" value={settings.margin} onChange={(e) => setSettings({ ...settings, margin: e.target.value })} /></label><label>{t.shippingCost}<input required type="number" min="0" max="10000" step="0.01" value={settings.shipping} onChange={(e) => setSettings({ ...settings, shipping: e.target.value })} /></label><label>{t.minSalePrice}<input required type="number" min="0" max="1000000" step="0.01" value={settings.minimum} onChange={(e) => setSettings({ ...settings, minimum: e.target.value })} /></label><label>{locale === "de" ? "Fester eBay-Verkaufspreis (€) · leer = automatisch" : locale === "en" ? "Fixed eBay sale price (€) · blank = automatic" : "Sabit eBay satış fiyatı (€) · boş = otomatik"}<input type="number" min="0.01" max="1000000" step="0.01" value={settings.manual} onChange={(e) => setSettings({ ...settings, manual: e.target.value })} /></label><label>{t.quantityOverride}<input type="number" min="0" max="10000" step="1" value={settings.quantity} onChange={(e) => setSettings({ ...settings, quantity: e.target.value })} /></label><div className="trackedModalActions"><button type="button" onClick={() => setEditing(null)}>{t.cancel}</button><button type="submit" disabled={busyId !== null}>{busyId === editing.id ? t.saving : t.saveAndSync}</button></div></form></section></div>}
     {unmanaged.length > 0 && <div className="trackedUnmanaged"><h4>{t.unmanagedHeading}</h4><p>{t.unmanagedSub}</p>{unmanaged.map((item) => <div className="trackedEnroll" key={item.listingId}><span><strong>{item.title || item.listingId}</strong><small>Item ID {item.listingId}</small></span>{addingId === item.listingId ? <form onSubmit={(event) => { event.preventDefault(); void action(item.listingId!, async () => { await mutate("/api/tracked-products", "POST", { ebayItemId: item.listingId, amazonUrl: amazonInput, targetMarginPercent: Number(enrollMargin) }); setAddingId(null); setAmazonInput(""); setNotice(t.addedNotice); }); }}><input required aria-label={t.amazonPlaceholder} placeholder={t.amazonPlaceholder} value={amazonInput} onChange={(event) => setAmazonInput(event.target.value)} /><label>{t.marginShort} <input type="number" min="0" max="300" step="0.01" value={enrollMargin} onChange={(event) => setEnrollMargin(event.target.value)} /></label><button type="submit" disabled={busyId !== null}>{t.startMonitoring}</button></form> : <button type="button" onClick={() => { setAddingId(item.listingId!); setAmazonInput(""); }}>{t.assignAmazon}</button>}</div>)}</div>}
   </div>;
 }

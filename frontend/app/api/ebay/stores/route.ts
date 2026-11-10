@@ -10,6 +10,7 @@ const safeFields = [
   "refresh_token_expires_at", "daily_listing_limit", "auto_lister_enabled", "auto_pull_from_depot",
   "listing_interval_hours", "default_margin_percent", "merchant_location_key", "fulfillment_policy_id",
   "payment_policy_id", "return_policy_id", "status", "last_listed_at",
+  "sku_prefix",
 ].join(",");
 
 export async function GET() {
@@ -32,6 +33,11 @@ export async function PATCH(request: NextRequest) {
       const storeName = String(body.storeName).trim();
       if (!storeName || storeName.length > 120) throw new Error("Mağaza adı 1–120 karakter olmalı.");
       patch.store_name = storeName;
+    }
+    if (body.skuPrefix !== undefined) {
+      const skuPrefix = String(body.skuPrefix || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+      if (skuPrefix && !/^[A-Z0-9]{2,6}$/.test(skuPrefix)) throw new Error("SKU-Präfix muss 2–6 Buchstaben oder Ziffern enthalten.");
+      patch.sku_prefix = skuPrefix || null;
     }
     if (body.dailyListingLimit !== undefined) {
       const limit = Number(body.dailyListingLimit);

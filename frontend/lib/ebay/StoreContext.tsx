@@ -6,6 +6,7 @@ export type StoreSummary = {
   id: string;
   store_name: string;
   seller_username: string | null;
+  sku_prefix: string | null;
   marketplace_id: string;
   token_expires_at: string;
   daily_listing_limit: number;
@@ -68,6 +69,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     const storeConnection = params.get("store_connection");
     const connectedStoreId = params.get("store_id");
+      const setupStatus = params.get("store_setup");
     void refreshStores().then((available) => {
       if (storeConnection === "connected" && connectedStoreId && available.some((store) => store.id === connectedStoreId)) {
         setSelectedStoreIdState(connectedStoreId);
@@ -81,11 +83,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           session: "Sitzung abgelaufen. Bitte erneut anmelden und den Shop verbinden.",
           failed: "eBay-Shop konnte nicht verbunden werden. Prüfen Sie die OAuth-Konfiguration.",
         };
-        setConnectionMessage(messages[storeConnection] || "");
+        const setupMessages: Record<string, string> = {
+          ready: "eBay mağazası bağlandı; hesap izinleri ve mevcut politikalar otomatik kontrol edildi.",
+          policies_needed: "eBay mağazası bağlandı ve izinler otomatik açıldı. Bu hesapta yayınlama politikaları eksik; bir kez tamamlayın.",
+          check_failed: "eBay mağazası bağlandı; otomatik hesap kontrolü tamamlanamadı. Yayınlama ayarlarını yenileyin.",
+        };
+        setConnectionMessage(storeConnection === "connected" && setupStatus ? setupMessages[setupStatus] || messages.connected : messages[storeConnection] || "");
       }
       if (storeConnection) {
         params.delete("store_connection");
         params.delete("store_id");
+        params.delete("store_setup");
         const query = params.toString();
         window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
       }

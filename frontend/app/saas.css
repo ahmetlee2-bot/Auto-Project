@@ -1749,6 +1749,8 @@ html.dark,
 .dark .dashboardCardHeading,
 .dark .emptyDashboard,
 .dark .productCard { border-color: #263449; background: #0f172a; color: #cbd5e1; }
+.dark .productCard > div:nth-child(2) strong { color: #f8fafc; }
+.dark .productCard > div:nth-child(2) small { color: #cbd5e1; }
 .dark .authNotice { border-color: #14532d; background: #102a22; color: #86efac; }
 .dark .authError { border-color: #7f1d1d; background: #321717; color: #fca5a5; }
 @media (max-width: 600px) {

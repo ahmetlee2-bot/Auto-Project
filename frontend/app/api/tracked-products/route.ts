@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "../../../lib/supabase/server";
 import { repricerAdmin } from "../../../lib/repricer/admin";
 import { parseAsin } from "../../../lib/repricer/amazon";
+import { activeListingsForUser } from "../../../lib/ebay/active-listings";
 
 export const runtime = "nodejs";
 
@@ -36,14 +37,7 @@ export async function POST(request: NextRequest) {
     const margin = Number(body.targetMarginPercent ?? 20);
     if (!Number.isFinite(margin) || margin < 0 || margin > 300) throw new Error("Marge muss zwischen 0 und 300 % liegen.");
 
-    // The existing API lists only items owned by this authenticated eBay seller.
-    const { data: sessionData } = await auth.client.auth.getSession();
-    const token = sessionData.session?.access_token;
-    if (!token) return NextResponse.json({ error: "Sitzung abgelaufen." }, { status: 401 });
-    const apiBase = (process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.autolister-app.de").replace(/\/$/, "");
-    const listingResponse = await fetch(`${apiBase}/api/v1/ebay/active-listings`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
-    const listingBody = await listingResponse.json().catch(() => ({}));
-    if (!listingResponse.ok) throw new Error(listingBody.error || "eBay-Inhaberschaft konnte nicht geprüft werden.");
+    const listingBody = await activeListingsForUser(auth.id);
     const listing = (listingBody.listings || []).find((entry: { listingId?: string }) => entry.listingId === itemId);
     if (!listing) return NextResponse.json({ error: "Das eBay-Angebot gehört nicht zu diesem verbundenen Verkäuferkonto." }, { status: 403 });
 

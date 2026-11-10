@@ -21,6 +21,8 @@ export async function PATCH(request: NextRequest, context: Context) {
   if (!userId) return NextResponse.json({ error: "Produkt nicht gefunden." }, { status: 404 });
   try {
     const body = await request.json();
+    const { data: current } = await repricerAdmin().from("tracked_products").select("supplier").eq("id", id).eq("user_id", userId).maybeSingle();
+    const joybuy = current?.supplier === "joybuy_de";
     const patch: Record<string, number | boolean | null> = {};
     if (body.targetMarginPercent !== undefined) {
       const value = Number(body.targetMarginPercent);
@@ -41,6 +43,14 @@ export async function PATCH(request: NextRequest, context: Context) {
       if (!Number.isFinite(value) || value < 0 || value > 1000000) throw new Error("Minimum fiyat geçersiz.");
       patch.minimum_sale_price = value;
     }
+    if (body.manualSalePrice !== undefined) {
+      if (body.manualSalePrice === null || body.manualSalePrice === "") patch.manual_sale_price = null;
+      else {
+        const value = Number(body.manualSalePrice);
+        if (!Number.isFinite(value) || value <= 0 || value > 1_000_000) throw new Error("Der feste eBay-Verkaufspreis muss zwischen 0,01 € und 1.000.000 € liegen.");
+        patch.manual_sale_price = value;
+      }
+    }
     if (body.manualQuantityOverride !== undefined) {
       if (body.manualQuantityOverride === null || body.manualQuantityOverride === "") patch.manual_quantity_override = null;
       else {
@@ -51,10 +61,15 @@ export async function PATCH(request: NextRequest, context: Context) {
     }
     if (!Object.keys(patch).length) throw new Error("Keine gültige Änderung übermittelt.");
     const admin = repricerAdmin();
-    const { data, error } = await admin.from("tracked_products").update({ ...patch, sync_status: "error", last_error: "Einstellungen geändert; Synchronisierung ausstehend.", last_checked_at: null, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", userId).or(`sync_lease_until.is.null,sync_lease_until.lt.${new Date().toISOString()}`).select("*").maybeSingle();
+    const now = new Date().toISOString();
+    const paused = body.active === false;
+    const syncFields = joybuy
+      ? { sync_status: "error" as const, last_error: paused ? null : "VERIFICATION_PENDING: Änderungen warten auf die nächste Prüfung durch die angemeldete Browser-Erweiterung.", last_checked_at: paused ? now : null }
+      : { sync_status: "error" as const, last_error: "Einstellungen geändert; Synchronisierung ausstehend.", last_checked_at: null };
+    const { data, error } = await admin.from("tracked_products").update({ ...patch, ...syncFields, updated_at: now }).eq("id", id).eq("user_id", userId).or(`sync_lease_until.is.null,sync_lease_until.lt.${now}`).select("*").maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return NextResponse.json({ error: "Synchronisierung läuft. Änderung anschließend erneut speichern." }, { status: 409 });
-    if (body.recalculate === true && data.active) {
+    if (body.recalculate === true && data.active && !joybuy) {
       try {
         const result = await syncProductById(id, userId);
         return NextResponse.json({ product: result.product || data, syncSkipped: result.skipped === true });
@@ -62,6 +77,7 @@ export async function PATCH(request: NextRequest, context: Context) {
         return NextResponse.json({ product: data, syncError: cause instanceof Error ? cause.message : "Senkronizasyon başarısız." }, { status: 502 });
       }
     }
+    if (body.recalculate === true && data.active && joybuy) return NextResponse.json({ product: data, extensionSyncPending: true });
     return NextResponse.json({ product: data });
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "Änderung fehlgeschlagen." }, { status: 400 });

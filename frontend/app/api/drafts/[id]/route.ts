@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { repricerAdmin } from "../../../../lib/repricer/admin";
 import { calculateDraftTargetPrice } from "../../../../lib/drafts/pricing";
 import { draftRequestUser, parseDraftImages } from "../../../../lib/drafts/server";
+import { dedupeSimilarProductImages } from "../../../../lib/images/dedupeSimilarProductImages";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string }> };
@@ -26,11 +27,23 @@ export async function PATCH(request: Request, { params }: Context) {
     const shipping = Number(body.shipping_cost ?? current.shipping_cost);
     if (!Number.isFinite(margin) || margin < 0 || margin > 300) throw new Error("Die Zielmarge muss zwischen 0 und 300 % liegen.");
     if (!Number.isFinite(shipping) || shipping < 0 || shipping > 100_000) throw new Error("Die Versandkosten sind ungültig.");
-    const images = body.images === undefined ? current.images : parseDraftImages(body.images);
+    const images = await dedupeSimilarProductImages(parseDraftImages(body.images === undefined ? current.images : body.images));
     if (body.apply_custom_frame !== undefined && typeof body.apply_custom_frame !== "boolean") throw new Error("Die Rahmen-Option muss wahr oder falsch sein.");
     const description = String(body.description_html ?? current.description_html ?? "");
     if (description.length > 50_000) throw new Error("Die Beschreibung darf maximal 50.000 Zeichen enthalten.");
     const category = String(body.selected_category_id ?? current.selected_category_id ?? "").trim();
+    const rawSpecifics = body.item_specifics === undefined ? current.item_specifics : body.item_specifics;
+    if (!rawSpecifics || typeof rawSpecifics !== "object" || Array.isArray(rawSpecifics)) throw new Error("Die eBay-Produktmerkmale sind ungültig.");
+    const itemSpecifics: Record<string, string[]> = {};
+    for (const [key, rawValues] of Object.entries(rawSpecifics as Record<string, unknown>).slice(0, 100)) {
+      const name = key.trim().slice(0, 100);
+      const values = Array.isArray(rawValues) ? rawValues : [rawValues];
+      const clean = values.map((value) => String(value ?? "").trim().slice(0, 100)).filter(Boolean).slice(0, 5);
+      if (name && clean.length) itemSpecifics[name] = clean;
+    }
+    const rawManualPrice = body.manual_sale_price === undefined ? current.manual_sale_price : body.manual_sale_price;
+    const manualSalePrice = rawManualPrice == null || rawManualPrice === "" ? null : Number(rawManualPrice);
+    if (manualSalePrice !== null && (!Number.isFinite(manualSalePrice) || manualSalePrice <= 0 || manualSalePrice > 1_000_000)) throw new Error("Der manuelle eBay-Verkaufspreis muss zwischen 0,01 € und 1.000.000 € liegen.");
     const changes = {
       title,
       description_html: description,
@@ -40,9 +53,11 @@ export async function PATCH(request: Request, { params }: Context) {
       cover_source_url: null,
       published_images: [],
       selected_category_id: category || null,
+      item_specifics: itemSpecifics,
+      manual_sale_price: manualSalePrice,
       profit_margin_percent: margin,
       shipping_cost: shipping,
-      target_price: calculateDraftTargetPrice({ source_price: current.source_price, shipping_cost: shipping, profit_margin_percent: margin }),
+      target_price: manualSalePrice ?? calculateDraftTargetPrice({ source_price: current.source_price, shipping_cost: shipping, profit_margin_percent: margin }),
       status: "draft",
       last_error: null,
       updated_at: new Date().toISOString(),

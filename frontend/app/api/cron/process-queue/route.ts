@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { computeSuggestedPrice, ebayApiRequest, marketplaceCurrency, publishPoolProduct, type EbayStoreCredentials } from "../../../../lib/ebay/multi-store";
 import { repricerAdmin } from "../../../../lib/repricer/admin";
+import { drainDraftListingQueue } from "../../../../lib/drafts/listing-jobs";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -197,6 +198,9 @@ async function processOneStore(admin: ReturnType<typeof repricerAdmin>, storeId:
 export async function POST(request: NextRequest) {
   if (!validSecret(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const admin = repricerAdmin();
+  let draftJobsProcessed = 0;
+  try { draftJobsProcessed = (await drainDraftListingQueue(1)).processed; }
+  catch (error) { console.error("Draft-listing cron worker failed:", error); }
   const now = new Date().toISOString();
   const [{ data: due, error: dueError }, { data: automatic, error: autoError }] = await Promise.all([
     admin.from("listing_queue").select("store_id").eq("status", "pending").lte("scheduled_for", now).order("scheduled_for", { ascending: true }).limit(1000),
@@ -204,7 +208,7 @@ export async function POST(request: NextRequest) {
   ]);
   if (dueError || autoError) return NextResponse.json({ error: "Kuyruk mağazaları alınamadı." }, { status: 500 });
   const candidateIds = [...new Set([...(due || []).map((row) => row.store_id), ...(automatic || []).map((row) => row.id)])];
-  if (!candidateIds.length) return NextResponse.json({ checkedStores: 0, results: [] });
+  if (!candidateIds.length) return NextResponse.json({ checkedStores: 0, draftJobsProcessed, results: [] });
   const { data: storeOrder, error: storeOrderError } = await admin.from("ebay_stores").select("id,updated_at").in("id", candidateIds);
   if (storeOrderError) return NextResponse.json({ error: "Kuyruk mağaza sırası alınamadı." }, { status: 500 });
   const storeIds = (storeOrder || []).sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)) || a.id.localeCompare(b.id)).map((store) => store.id);
@@ -223,7 +227,7 @@ export async function POST(request: NextRequest) {
     // the next scheduled invocation can pick up the remaining shops.
     if (results.length >= 4) break;
   }
-  return NextResponse.json({ checkedStores: results.length, results });
+  return NextResponse.json({ checkedStores: results.length, draftJobsProcessed, results });
 }
 
 export async function GET() {
