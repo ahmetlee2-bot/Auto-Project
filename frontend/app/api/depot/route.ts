@@ -33,7 +33,8 @@ type PoolImport = {
 };
 
 const AMAZON_DISCOVERY_TERMS = ["3D Drucker Zubehör", "Haustier Zubehör", "Küche Haushalt", "Auto Zubehör", "Garten Werkzeuge", "Hobby Basteln Werkzeug"];
-let amazonDiscoveryCache: { expiresAt: number; result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean; skippedRecent?: boolean } } | null = null;
+type AmazonDiscoveryResult = { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean; skippedRecent?: boolean; quotaExhausted?: boolean };
+let amazonDiscoveryCache: { expiresAt: number; result: AmazonDiscoveryResult } | null = null;
 type SearchResult = { asin?: string; title?: string; image?: string; link?: string; price?: { value?: number | string; currency?: string }; product?: {
   title?: string; brand?: string; description?: string; main_image?: { link?: string } | string; images?: Array<{ link?: string }>;
   buybox_winner?: { price?: { value?: number | string; currency?: string }; shipping?: { value?: number | string }; availability?: { type?: string } };
@@ -42,7 +43,7 @@ type SearchResult = { asin?: string; title?: string; image?: string; link?: stri
 
 async function discoverAmazonProducts() {
   if (amazonDiscoveryCache && amazonDiscoveryCache.expiresAt > Date.now()) return amazonDiscoveryCache.result;
-  const cache = (result: { discovered: number; checked?: number; updated?: number; failedTerms?: string[]; providerUnavailable?: boolean; skippedRecent?: boolean }) => {
+  const cache = (result: AmazonDiscoveryResult) => {
     amazonDiscoveryCache = { expiresAt: Date.now() + 6 * 60 * 60_000, result };
     return result;
   };
@@ -56,6 +57,7 @@ async function discoverAmazonProducts() {
   if ((freshCount || 0) >= 30) return cache({ discovered: 0, checked: freshCount || 0, updated: 0, skippedRecent: true });
   const candidates = new Map<string, PoolImport>();
   const failedTerms: string[] = [];
+  let quotaExhausted = false;
   for (const searchTerm of AMAZON_DISCOVERY_TERMS) {
     try {
       const url = new URL("https://api.rainforestapi.com/request");
@@ -64,7 +66,15 @@ async function discoverAmazonProducts() {
         fields: "search_results.asin,search_results.title,search_results.link,search_results.image,search_results.price,search_results.product.title,search_results.product.brand,search_results.product.description,search_results.product.main_image,search_results.product.images,search_results.product.buybox_winner,search_results.product.feature_bullets,search_results.product.specifications" }).toString();
       const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
       const body = await response.json().catch(() => null) as { request_info?: { success?: boolean; message?: string }; search_results?: SearchResult[] } | null;
-      if (!response.ok || !body?.request_info?.success) throw new Error(body?.request_info?.message || `HTTP ${response.status}`);
+      if (!response.ok || !body?.request_info?.success) {
+        const message = body?.request_info?.message || `HTTP ${response.status}`;
+        if (response.status === 402 || /(?:free\s+)?credits?\s+(?:are\s+)?(?:used\s+up|exhausted)|quota\s+(?:exceeded|exhausted)|rate\s+limit/i.test(message)) {
+          quotaExhausted = true;
+          failedTerms.push(searchTerm);
+          break;
+        }
+        throw new Error(message);
+      }
       for (const result of body.search_results || []) {
         const asin = String(result.asin || "").toUpperCase();
         const detail = result.product;
@@ -89,7 +99,7 @@ async function discoverAmazonProducts() {
       }
     } catch { failedTerms.push(searchTerm); }
   }
-  if (!candidates.size) return cache({ discovered: 0, checked: 0, failedTerms });
+  if (!candidates.size) return cache({ discovered: 0, checked: 0, failedTerms, quotaExhausted });
   const rows = [...candidates.values()];
   const { data: existing, error: existingError } = await admin.from("product_pool").select("asin").eq("source_marketplace", "AMZ_DE").in("asin", rows.map((row) => String(row.asin)));
   if (existingError) throw existingError;
@@ -106,7 +116,7 @@ async function discoverAmazonProducts() {
     .eq("asin", String(row.asin)).eq("source_marketplace", "AMZ_DE"));
   const refreshed = await Promise.all(refreshes);
   if (refreshed.some((result) => result.error)) throw refreshed.find((result) => result.error)?.error;
-  return cache({ discovered: insertedRows.length, checked: rows.length, updated: refreshes.length, failedTerms });
+  return cache({ discovered: insertedRows.length, checked: rows.length, updated: refreshes.length, failedTerms, quotaExhausted });
 }
 
 function finiteMoney(value: unknown, label: string, optional = false): number | null {
