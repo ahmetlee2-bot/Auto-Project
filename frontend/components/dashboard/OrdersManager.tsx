@@ -300,6 +300,11 @@ export function OrdersManager() {
                       type="button"
                       style={{ padding: "6px 14px", fontSize: "12px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", fontWeight: 700, border: "none", boxShadow: "0 2px 8px rgba(37, 99, 235, 0.4)" }}
                       onClick={() => {
+                        const hasExtension = Boolean(
+                          (typeof window !== "undefined" && (window as unknown as { __AUTOLISTER_EXTENSION_ACTIVE?: boolean }).__AUTOLISTER_EXTENSION_ACTIVE) ||
+                          (typeof document !== "undefined" && document.documentElement.dataset.autolisterExtension === "ready")
+                        );
+
                         window.postMessage({
                           type: "AUTOLISTER_TRIGGER_AUTO_ORDER",
                           payload: {
@@ -312,10 +317,13 @@ export function OrdersManager() {
                             parsedAddress: parsed,
                           },
                         }, "*");
+
                         void navigator.clipboard.writeText(parsed.formattedText).then(() => {
-                          setNotice(`⚡ 1-Click Sipariş Hazırlandı: ${parsed.fullName} adresi ayrıştırıldı ve eklentiye iletildi. Amazon/Joybuy sekmesinde otomatik doldurulacaktır.`);
+                          setNotice(`⚡ 1-Click Sipariş Başlatıldı: ${parsed.fullName} adresi ayrıştırıldı ve eklentiye aktarıldı. Amazon sekmesinde ürün sepete eklenecek, hediye seçeneği seçilecek ve adres otomatik doldurulacaktır.`);
                         });
-                        if (targetSupplierUrl) {
+
+                        // Eklenti yüklü değilse fallback olarak hedef sayfayı aç, yüklüyse çift sekme açılmasını önle
+                        if (!hasExtension && targetSupplierUrl) {
                           window.open(targetSupplierUrl, "_blank", "noopener,noreferrer");
                         }
                       }}

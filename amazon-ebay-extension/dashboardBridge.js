@@ -4,8 +4,11 @@
  * and the AutoLister Chrome Extension service worker.
  */
 (() => {
-  // Announce to web app that AutoLister Extension is installed and active
-  window.postMessage({ type: "AUTOLISTER_EXTENSION_READY", version: "1.0.3" }, "*");
+  try {
+    window.__AUTOLISTER_EXTENSION_ACTIVE = true;
+    document.documentElement.dataset.autolisterExtension = "ready";
+    window.postMessage({ type: "AUTOLISTER_EXTENSION_READY", version: "1.1.9" }, "*");
+  } catch {}
 
   window.addEventListener("message", (event) => {
     // Only accept messages from self window
