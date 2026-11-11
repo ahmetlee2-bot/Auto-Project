@@ -4,7 +4,7 @@ import { ebayHtmlTemplate } from "../../../lib/ebay/ebayHtmlTemplate";
 import { generateProductCopy, type ProductFacts } from "../../../lib/ai/gemini-product";
 import { cleanEbayTitle } from "../../../lib/ebay/seo-title";
 import { repricerAdmin } from "../../../lib/repricer/admin";
-import { calculateDraftTargetPrice } from "../../../lib/drafts/pricing";
+import { calculateDraftTargetPrice, estimateDraftNetProfit, resolveEffectiveDraftPrice } from "../../../lib/drafts/pricing";
 import { draftRequestUser, parseDraftAmazonUrl, parseDraftImages } from "../../../lib/drafts/server";
 import { dedupeSimilarProductImages } from "../../../lib/images/dedupeSimilarProductImages";
 
@@ -14,11 +14,24 @@ export const maxDuration = 90;
 export async function GET(request: Request) {
   const user = await draftRequestUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { data, error } = await repricerAdmin().from("draft_products")
+  const admin = repricerAdmin();
+  const { data, error } = await admin.from("draft_products")
     .select("*").eq("user_id", user.id).in("status", ["draft", "publishing", "error"])
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ drafts: data || [] }, { headers: { "Cache-Control": "no-store" } });
+  const drafts = (data || []).map((row) => {
+    const effectiveTarget = resolveEffectiveDraftPrice(row);
+    const manualProfit = row.manual_sale_price != null
+      ? estimateDraftNetProfit(row, row.manual_sale_price)
+      : null;
+    const clearLossManual = manualProfit !== null && manualProfit < 0 && Number(row.profit_margin_percent ?? 20) > 0;
+    return {
+      ...row,
+      manual_sale_price: clearLossManual ? null : row.manual_sale_price,
+      target_price: effectiveTarget ?? row.target_price,
+    };
+  });
+  return NextResponse.json({ drafts }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -99,8 +112,8 @@ export async function PATCH(request: Request) {
     if (readError) throw new Error(readError.message);
     const updated: string[] = [];
     for (const row of rows || []) {
-      const targetPrice = row.manual_sale_price ?? calculateDraftTargetPrice({ source_price: row.source_price, shipping_cost: row.shipping_cost, profit_margin_percent: margin });
-      const { error } = await admin.from("draft_products").update({ profit_margin_percent: margin, target_price: targetPrice, status: "draft", last_error: null, updated_at: new Date().toISOString() })
+      const targetPrice = calculateDraftTargetPrice({ source_price: row.source_price, shipping_cost: row.shipping_cost, profit_margin_percent: margin });
+      const { error } = await admin.from("draft_products").update({ profit_margin_percent: margin, manual_sale_price: null, target_price: targetPrice, status: "draft", last_error: null, updated_at: new Date().toISOString() })
         .eq("id", row.id).eq("user_id", user.id).in("status", ["draft", "error"]).is("ebay_item_id", null);
       if (error) throw new Error(error.message);
       updated.push(row.id);

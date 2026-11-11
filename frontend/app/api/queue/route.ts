@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser } from "../../../lib/dashboard/server-auth";
 import { computeSuggestedPrice, marketplaceCurrency } from "../../../lib/ebay/multi-store";
+import { calculateEffectiveMarginPercent } from "../../../lib/drafts/pricing";
 import { repricerAdmin } from "../../../lib/repricer/admin";
 import { ALL_CURATED_DEPOT_PRODUCTS } from "../../../lib/depot/curatedCatalog";
 import { premiumDescription } from "../../../lib/ebay/premium-description";
@@ -136,16 +137,17 @@ export async function POST(request: NextRequest) {
       )
       .in("status", ["draft", "publishing", "error"]);
     const existingDraftAsins = new Set((existingDrafts || []).map((d) => String(d.asin).toUpperCase()));
-    const defaultMargin = Number(stores[0]?.default_margin_percent || 20);
+    const defaultMargin = Math.max(20, Number(stores[0]?.default_margin_percent || 20));
 
     for (const product of products) {
       if (!existingDraftAsins.has(String(product.asin).toUpperCase())) {
         const sourcePrice = Number(product.amazon_price) || 0;
         const shipping = Number(product.estimated_shipping || 0);
-        const targetPrice =
-          Number(product.suggested_ebay_price) > 0
-            ? Number(product.suggested_ebay_price)
-            : computeSuggestedPrice(sourcePrice, shipping, defaultMargin);
+        const minMarginPrice = computeSuggestedPrice(sourcePrice, shipping, defaultMargin);
+        const targetPrice = Math.max(Number(product.suggested_ebay_price || 0), minMarginPrice);
+        const effectiveMargin =
+          calculateEffectiveMarginPercent({ source_price: sourcePrice, shipping_cost: shipping }, targetPrice) ??
+          defaultMargin;
         const sourceUrl =
           product.source_url ||
           (product.source_marketplace === "JOYBUY_DE"
@@ -176,7 +178,7 @@ export async function POST(request: NextRequest) {
           source_url: sourceUrl,
           source_price: sourcePrice,
           manual_sale_price: null,
-          profit_margin_percent: defaultMargin,
+          profit_margin_percent: Math.max(defaultMargin, Math.round(effectiveMargin * 10) / 10),
           shipping_cost: shipping,
           target_price: targetPrice,
           title: String(product.title || product.asin).slice(0, 80),
@@ -259,11 +261,13 @@ export async function POST(request: NextRequest) {
           cursor = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 1, 0, 15);
           scheduledDay = new Date(cursor).toISOString().slice(0, 10);
         }
-        const margin = Number(store.default_margin_percent);
-        const price =
-          Number(product.suggested_ebay_price) > 0
-            ? Number(product.suggested_ebay_price)
-            : computeSuggestedPrice(Number(product.amazon_price), Number(product.estimated_shipping || 0), margin);
+        const margin = Math.max(20, Number(store.default_margin_percent || 20));
+        const minStorePrice = computeSuggestedPrice(
+          Number(product.amazon_price),
+          Number(product.estimated_shipping || 0),
+          margin,
+        );
+        const price = Math.max(Number(product.suggested_ebay_price || 0), minStorePrice);
         const scheduledFor = new Date(cursor).toISOString();
         const storeListingWrite = {
           user_id: user.id,

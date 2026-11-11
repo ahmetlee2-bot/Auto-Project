@@ -1,4 +1,6 @@
 (() => {
+  const EBAY_TOTAL_FEE_RATE = 0;
+
   function parsePrice(value) {
     const normalized = String(value || "")
       .replace(/[^\d,.]/g, "")
@@ -8,18 +10,18 @@
     return Number.isFinite(price) && price > 0 ? price : null;
   }
 
-  function charmPrice(value, ending = ".99") {
+  function charmPrice(value) {
     const price = Number(value);
     if (!Number.isFinite(price) || price <= 0) return null;
-    const cents = ending === ".95" ? 0.95 : 0.99;
-    return (Math.ceil(price) - 1 + cents).toFixed(2);
+    return (Math.ceil(price * 100 - 1e-8) / 100).toFixed(2);
   }
 
-  function calculateSalePrice(sourcePrice, marginPercent = 20, ending = ".99") {
+  function calculateSalePrice(sourcePrice, marginPercent = 20) {
     const source = typeof sourcePrice === "number" ? sourcePrice : parsePrice(sourcePrice);
     const margin = Number(marginPercent) / 100;
-    if (!source || !Number.isFinite(margin) || margin < 0 || margin >= 0.9) return null;
-    return charmPrice(source / (1 - margin), ending);
+    if (!source || !Number.isFinite(margin) || margin < 0 || margin > 3) return null;
+    const rawTarget = (source * (1 + margin)) / (1 - EBAY_TOTAL_FEE_RATE);
+    return (Math.ceil(rawTarget * 100 - 1e-8) / 100).toFixed(2);
   }
 
   globalThis.AlltaghausPrice = { parsePrice, charmPrice, calculateSalePrice };

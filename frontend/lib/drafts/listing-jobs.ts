@@ -1,5 +1,5 @@
 import "server-only";
-import { calculateDraftTargetPrice } from "./pricing";
+import { calculateDraftTargetPrice, estimateDraftNetProfit, resolveEffectiveDraftPrice } from "./pricing";
 import { repricerAdmin } from "../repricer/admin";
 import { completeDraftRequiredAspects, getEbayListingSetup, publishEbayDraftProduct, suggestEbayCategories, type EbayListingSetup } from "../repricer/ebay";
 import { syncProductById } from "../repricer/sync";
@@ -54,6 +54,9 @@ async function publishOne(job: ListingJob): Promise<PublishOutcome> {
   // linked. Reconcile it first so a retry never intentionally creates a copy.
   if (draft.ebay_item_id) {
     const itemId = String(draft.ebay_item_id);
+    const reconciledPrice = resolveEffectiveDraftPrice(draft) ?? draft.target_price;
+    const manualProfit = draft.manual_sale_price != null ? estimateDraftNetProfit(draft, draft.manual_sale_price) : null;
+    const safeManual = manualProfit !== null && manualProfit < 0 && Number(draft.profit_margin_percent ?? 20) > 0 ? null : draft.manual_sale_price;
     const { error: trackError } = await admin.from("tracked_products").upsert({
       user_id: job.user_id,
       title: draft.title,
@@ -65,8 +68,8 @@ async function publishOne(job: ListingJob): Promise<PublishOutcome> {
       amazon_stock_status: null,
       ebay_item_id: itemId,
       ebay_url: `https://www.ebay.de/itm/${itemId}`,
-      ebay_price: draft.manual_sale_price ?? draft.target_price,
-      manual_sale_price: draft.manual_sale_price,
+      ebay_price: reconciledPrice,
+      manual_sale_price: safeManual,
       ebay_quantity: draft.quantity || 1,
       target_margin_percent: draft.profit_margin_percent,
       estimated_shipping: draft.shipping_cost,
@@ -83,7 +86,9 @@ async function publishOne(job: ListingJob): Promise<PublishOutcome> {
   await setProgress(job, 20, "Ürün verileri ve kategori hazırlanıyor…");
   const sourceImages = await dedupeSimilarProductImages(parseDraftImages(draft.images));
   const calculatedPrice = calculateDraftTargetPrice({ source_price: draft.source_price, shipping_cost: draft.shipping_cost, profit_margin_percent: draft.profit_margin_percent });
-  const price = draft.manual_sale_price == null ? calculatedPrice : Number(draft.manual_sale_price);
+  const price = resolveEffectiveDraftPrice(draft) ?? calculatedPrice;
+  const manualProfit = draft.manual_sale_price != null ? estimateDraftNetProfit(draft, draft.manual_sale_price) : null;
+  const safeManual = manualProfit !== null && manualProfit < 0 && Number(draft.profit_margin_percent ?? 20) > 0 ? null : draft.manual_sale_price;
   if ((!draft.source_price && draft.manual_sale_price == null) || price == null || !Number.isFinite(price) || price <= 0) throw new Error("Geçerli bir eBay satış fiyatı girin veya kaynak fiyatını yenileyin.");
   if (!String(draft.title || "").trim() || String(draft.title).length > 80) throw new Error("İlan başlığı 1 ile 80 karakter arasında olmalıdır.");
   let categoryId = String(draft.selected_category_id || setup.defaults.categoryId || "").trim();
@@ -151,7 +156,7 @@ async function publishOne(job: ListingJob): Promise<PublishOutcome> {
     ebay_item_id: listing.itemId,
     ebay_url: `https://www.ebay.de/itm/${listing.itemId}`,
     ebay_price: listing.price,
-    manual_sale_price: draft.manual_sale_price,
+    manual_sale_price: safeManual,
     ebay_quantity: listing.quantity,
     target_margin_percent: draft.profit_margin_percent,
     estimated_shipping: draft.shipping_cost,

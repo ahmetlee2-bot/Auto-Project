@@ -48,8 +48,20 @@ export async function POST(request: Request) {
     const live = await fetchEbayListing(user.id, String(row.ebay_item_id), String(row.amazon_asin));
     const sourceChanged = row.amazon_price == null || Math.round((price - Number(row.amazon_price)) * 100) !== 0;
     const inStock = body.inStock;
+    const autoCalculatedPrice = Math.max(
+      Number(row.minimum_sale_price || 0),
+      calculateEbayPrice(price, Number(row.estimated_shipping), Number(row.target_margin_percent), Number(row.ebay_fee_percent), Number(row.payment_fee_percent)),
+    );
+    const feeRate = (Number(row.ebay_fee_percent) + Number(row.payment_fee_percent)) / 100;
+    const manualPriceNum = row.manual_sale_price != null ? Number(row.manual_sale_price) : null;
+    const isManualLossMaking =
+      manualPriceNum !== null &&
+      Number(row.target_margin_percent) > 0 &&
+      manualPriceNum * (1 - feeRate) < price + Number(row.estimated_shipping || 0);
     const nextPrice = inStock
-      ? row.manual_sale_price != null ? Number(row.manual_sale_price) : Math.max(Number(row.minimum_sale_price || 0), calculateEbayPrice(price, Number(row.estimated_shipping), Number(row.target_margin_percent), Number(row.ebay_fee_percent), Number(row.payment_fee_percent)))
+      ? manualPriceNum !== null && !isManualLossMaking
+        ? manualPriceNum
+        : autoCalculatedPrice
       : live.price;
     const quantity = resolveEbayQuantity({ amazonInStock: inStock, desiredQuantity: Number(row.desired_quantity), manualQuantityOverride: row.manual_quantity_override == null ? null : Number(row.manual_quantity_override), storedQuantity: Number(row.ebay_quantity), liveQuantity: live.quantity });
     const nextQuantity = inStock ? quantity.quantity : 0;

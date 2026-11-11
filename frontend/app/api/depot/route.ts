@@ -2,6 +2,7 @@ import { premiumDescription } from "../../../lib/ebay/premium-description";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser, isAutolisterAdmin } from "../../../lib/dashboard/server-auth";
 import { computeSuggestedPrice } from "../../../lib/ebay/multi-store";
+import { calculateDraftTargetPrice, estimateDraftNetProfit } from "../../../lib/drafts/pricing";
 import { fetchAmazonProductDetails, type AmazonMarketplace } from "../../../lib/repricer/amazon";
 import { repricerAdmin } from "../../../lib/repricer/admin";
 import { supplierRegistry } from "../../../lib/suppliers/registry";
@@ -280,6 +281,9 @@ export async function GET(request: NextRequest) {
     // Fall back to rotated curated catalog if DB read fails.
   }
 
+  const curatedByAsin = new Map(
+    ALL_CURATED_DEPOT_PRODUCTS.map((item) => [item.asin.toUpperCase(), item]),
+  );
   const mergedByKey = new Map<string, Record<string, unknown>>();
   for (const row of dbProducts) {
     const asin = String(row.asin || "").toUpperCase();
@@ -287,9 +291,33 @@ export async function GET(request: NextRequest) {
     const specifics = (row.item_specifics && typeof row.item_specifics === "object" && !Array.isArray(row.item_specifics))
       ? (row.item_specifics as Record<string, string[]>)
       : {};
+    const curatedMatch = curatedByAsin.get(asin);
     const seasonTag = seasonByAsin.get(asin) || specifics.Saison?.[0] || seasonal.campaignBadge;
+    const amazonPrice = curatedMatch ? curatedMatch.amazon_price : Number(row.amazon_price || 0);
+    const shippingCost = Number(row.estimated_shipping || 0);
+    const calc20 = calculateDraftTargetPrice({
+      source_price: amazonPrice,
+      shipping_cost: shippingCost,
+      profit_margin_percent: 20,
+    }) ?? Number(((amazonPrice + shippingCost) * 1.2 / 0.85).toFixed(2));
+    const suggestedPrice = curatedMatch
+      ? curatedMatch.suggested_ebay_price
+      : Math.max(Number(row.suggested_ebay_price || 0), calc20);
+    const exactProfit =
+      estimateDraftNetProfit(
+        {
+          source_price: amazonPrice,
+          shipping_cost: shippingCost,
+          profit_margin_percent: 20,
+        },
+        suggestedPrice,
+      ) ?? 0;
+
     mergedByKey.set(key, {
       ...row,
+      amazon_price: amazonPrice,
+      suggested_ebay_price: suggestedPrice,
+      estimated_profit: exactProfit,
       season_tag: seasonTag,
       is_published: true,
       is_vero_safe: true,

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, Check, ExternalLink, LoaderCircle, PackageCheck, Pencil, RefreshCw, Rocket, Settings2, Trash2 } from "lucide-react";
-import { calculateDraftTargetPrice, estimateDraftNetProfit } from "../../lib/drafts/pricing";
+import {
+  calculateDraftEbayFee,
+  calculateEffectiveMarginPercent,
+  estimateDraftNetProfit,
+  resolveEffectiveDraftPrice,
+} from "../../lib/drafts/pricing";
 import type { DraftEditInput, DraftProduct } from "../../lib/drafts/types";
 import { useLocale } from "../../lib/locale";
 import { useStores } from "../../lib/ebay/StoreContext";
@@ -372,15 +377,18 @@ export function DraftsTab() {
             : listingJob?.status === "completed" ? "Yayında"
               : listingJob?.status === "failed" ? "Hatalı - Müdahale Gerekli"
                 : draft.status === "draft" ? "Taslak" : draft.status === "publishing" ? "İşleniyor" : "Hata";
-                const target = draft.manual_sale_price == null ? calculateDraftTargetPrice({ source_price: draft.source_price, shipping_cost: draft.shipping_cost, profit_margin_percent: draft.profit_margin_percent }) : Number(draft.manual_sale_price);
+        const target = resolveEffectiveDraftPrice(draft);
+        const ebayFee = calculateDraftEbayFee(target);
         const profit = estimateDraftNetProfit({ source_price: draft.source_price, shipping_cost: draft.shipping_cost, profit_margin_percent: draft.profit_margin_percent }, target);
+        const effectiveMargin = calculateEffectiveMarginPercent({ source_price: draft.source_price, shipping_cost: draft.shipping_cost }, target) ?? Number(draft.profit_margin_percent);
         return <article className={`draftCard ${selected.includes(draft.id) ? "selected" : ""}`} key={draft.id}>
           <div className="draftCardTop"><label className="draftCheckbox"><input type="checkbox" checked={selected.includes(draft.id)} disabled={!isSelectable || busy} onChange={() => toggle(draft.id)} /><span className="sr-only">{locale === "de" ? "Entwurf auswählen" : locale === "en" ? "Select draft" : "Taslağı seç"}</span></label><span className={`draftStatus draftStatus-${listingJob?.status || draft.status}`}>{listingStatus}</span></div>
           {draft.images?.[0] ? <img className="draftCardImage" src={draft.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <div className="draftCardImage draftCardNoImage">{locale === "de" ? "Bild fehlt" : locale === "en" ? "No image" : "Görsel yok"}</div>}
           <div className="draftCardContent"><div className="draftCardIdentity"><span>{draft.supplier === "joybuy_de" ? "Joybuy.de" : "Amazon.de"}</span><a href={draft.source_url || `https://www.amazon.de/dp/${draft.asin}`} target="_blank" rel="noopener noreferrer">Tedarikçide Aç ↗</a><span>{draft.title.length}/80</span></div><h3>{draft.title}</h3>
-            <div className="draftPriceCompare"><div><small>{locale === "de" ? "Amazon Einkauf" : locale === "en" ? "Amazon cost" : "Amazon alış"}</small><strong>{draft.source_price == null ? (locale === "de" ? "Preis fehlt" : locale === "en" ? "Price missing" : "Fiyat eksik") : euro.format(Number(draft.source_price))}</strong></div><span aria-hidden="true">→</span><div><small>{locale === "de" ? "eBay Verkauf" : locale === "en" ? "eBay sale" : "eBay satış"}</small><strong>{target == null ? "—" : euro.format(target)}</strong></div></div>
-            <div className="draftProfitLine"><span>{locale === "de" ? "Geschätzter Nettogewinn" : locale === "en" ? "Estimated net profit" : "Tahmini net kâr"}</span><strong className={profit != null && profit < 0 ? "draftDangerText" : ""}>{profit == null ? "—" : euro.format(profit)}</strong></div>
-            <div className="draftCardMeta"><span>{locale === "de" ? "Marge" : locale === "en" ? "Margin" : "Marj"} {Number(draft.profit_margin_percent)} %</span><span>{locale === "de" ? "Versand" : locale === "en" ? "Shipping" : "Kargo"} {euro.format(Number(draft.shipping_cost))}</span><span>{draft.apply_custom_frame === false ? (locale === "de" ? "Originalcover" : locale === "en" ? "Original cover" : "Orijinal kapak") : (locale === "de" ? "Cover mit Rahmen" : locale === "en" ? "Framed cover" : "Çerçeveli kapak")}</span></div>
+            <div className="draftPriceCompare"><div><small>{locale === "de" ? (draft.supplier === "joybuy_de" ? "Joybuy Einkauf" : "Amazon Einkauf") : locale === "en" ? "Supplier cost" : "Tedarikçi alış"}</small><strong>{draft.source_price == null ? (locale === "de" ? "Preis fehlt" : locale === "en" ? "Price missing" : "Fiyat eksik") : euro.format(Number(draft.source_price))}</strong></div><span aria-hidden="true">→</span><div><small>{locale === "de" ? "eBay Verkauf" : locale === "en" ? "eBay sale" : "eBay satış"}</small><strong>{target == null ? "—" : euro.format(target)}</strong></div></div>
+            {ebayFee != null ? <div className="draftProfitLine" style={{ opacity: 0.82, fontSize: "12px" }}><span>{locale === "de" ? "eBay-Gebühren (15 %)" : locale === "en" ? "eBay fees (15%)" : "eBay komisyonu (%15)"}</span><span>-{euro.format(ebayFee)}</span></div> : null}
+            <div className="draftProfitLine"><span>{locale === "de" ? "Geschätzter Nettogewinn" : locale === "en" ? "Estimated net profit" : "Tahmini net kâr"}</span><strong className={profit != null && profit < 0 ? "draftDangerText" : ""}>{profit == null ? "—" : `${profit > 0 ? "+" : ""}${euro.format(profit)}`}</strong></div>
+            <div className="draftCardMeta"><span>{locale === "de" ? "Marge" : locale === "en" ? "Margin" : "Marj"} {effectiveMargin} %</span><span>{locale === "de" ? "Versand" : locale === "en" ? "Shipping" : "Kargo"} {euro.format(Number(draft.shipping_cost))}</span><span>{draft.apply_custom_frame === false ? (locale === "de" ? "Originalcover" : locale === "en" ? "Original cover" : "Orijinal kapak") : (locale === "de" ? "Cover mit Rahmen" : locale === "en" ? "Framed cover" : "Çerçeveli kapak")}</span></div>
             {!draft.selected_category_id && !setup?.defaults.categoryId ? <p className="draftHint">{locale === "de" ? "eBay-Kategorie wird beim Bearbeiten vorgeschlagen." : locale === "en" ? "eBay category will be suggested when you edit." : "Düzenle ekranında eBay kategori önerileri gösterilecek."}</p> : null}
             {listingJob?.status === "processing" || listingJob?.status === "queued" ? <div className="draftListingProgress" aria-label={`Listeleme ${listingJob.progress}%`}><span style={{ width: `${Math.max(0, Math.min(100, listingJob.progress))}%` }} /><small>{listingJob.current_step}</small></div> : null}
             {(listingJob?.last_error || draft.last_error) ? <p className="draftCardError">{listingJob?.last_error || draft.last_error}</p> : null}

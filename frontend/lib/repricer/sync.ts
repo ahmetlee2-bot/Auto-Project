@@ -61,8 +61,20 @@ export async function syncProductById(id: string, userId?: string): Promise<{ pr
     let snapshot: Awaited<ReturnType<typeof fetchAmazonSnapshot>>;
     try { snapshot = await fetchAmazonSnapshot(row.amazon_asin); }
     catch (cause) { sourceVerificationFailed = true; throw cause; }
+    const autoCalculatedPrice = Math.max(
+      row.minimum_sale_price || 0,
+      calculateEbayPrice(snapshot.price!, row.estimated_shipping, row.target_margin_percent, row.ebay_fee_percent, row.payment_fee_percent),
+    );
+    const feeRate = (Number(row.ebay_fee_percent) + Number(row.payment_fee_percent)) / 100;
+    const manualPriceNum = row.manual_sale_price != null ? Number(row.manual_sale_price) : null;
+    const isManualLossMaking =
+      manualPriceNum !== null &&
+      Number(row.target_margin_percent) > 0 &&
+      manualPriceNum * (1 - feeRate) < Number(snapshot.price!) + Number(row.estimated_shipping || 0);
     const nextPrice = snapshot.inStock
-      ? row.manual_sale_price != null ? Number(row.manual_sale_price) : Math.max(row.minimum_sale_price || 0, calculateEbayPrice(snapshot.price!, row.estimated_shipping, row.target_margin_percent, row.ebay_fee_percent, row.payment_fee_percent))
+      ? manualPriceNum !== null && !isManualLossMaking
+        ? manualPriceNum
+        : autoCalculatedPrice
       : live.price;
     const quantity = resolveEbayQuantity({ amazonInStock: snapshot.inStock, desiredQuantity: row.desired_quantity,
       manualQuantityOverride: row.manual_quantity_override, storedQuantity: row.ebay_quantity, liveQuantity: live.quantity });

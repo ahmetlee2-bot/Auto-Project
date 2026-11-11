@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { calculateDraftTargetPrice } from "../../../../lib/drafts/pricing";
+import { calculateDraftTargetPrice, estimateDraftNetProfit, resolveEffectiveDraftPrice } from "../../../../lib/drafts/pricing";
 import { draftRequestUser } from "../../../../lib/drafts/server";
 import { repricerAdmin } from "../../../../lib/repricer/admin";
 import { fetchAmazonProductDetails } from "../../../../lib/repricer/amazon";
@@ -26,11 +26,29 @@ export async function POST(request: Request) {
       shipping_cost: draft.shipping_cost,
       profit_margin_percent: draft.profit_margin_percent,
     });
+    const manualProfit = draft.manual_sale_price != null
+      ? estimateDraftNetProfit(
+          { source_price: product.price, shipping_cost: draft.shipping_cost, profit_margin_percent: draft.profit_margin_percent },
+          draft.manual_sale_price,
+        )
+      : null;
+    const clearLossManual = manualProfit !== null && manualProfit < 0 && Number(draft.profit_margin_percent ?? 20) > 0;
+    const nextManual = clearLossManual ? null : draft.manual_sale_price;
+    const effectiveTarget = resolveEffectiveDraftPrice({
+      source_price: product.price,
+      shipping_cost: draft.shipping_cost,
+      profit_margin_percent: draft.profit_margin_percent,
+      manual_sale_price: nextManual,
+      target_price: targetPrice,
+    });
     const { error: updateError } = await admin.from("draft_products").update({
-      source_price: product.price, target_price: draft.manual_sale_price ?? targetPrice, updated_at: new Date().toISOString(),
+      source_price: product.price,
+      manual_sale_price: nextManual,
+      target_price: effectiveTarget ?? targetPrice,
+      updated_at: new Date().toISOString(),
     }).eq("id", draftId).eq("user_id", user.id).is("ebay_item_id", null);
     if (updateError) throw new Error(updateError.message);
-    return NextResponse.json({ sourcePrice: product.price, targetPrice });
+    return NextResponse.json({ sourcePrice: product.price, targetPrice: effectiveTarget ?? targetPrice });
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "Amazon-Preis konnte nicht aktualisiert werden." }, { status: 400 });
   }

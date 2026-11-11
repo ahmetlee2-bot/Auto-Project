@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ExternalLink, ImagePlus, LoaderCircle, Sparkles, X, RefreshCw } from "lucide-react";
-import { calculateDraftTargetPrice } from "../../lib/drafts/pricing";
+import {
+  calculateDraftEbayFee,
+  calculateDraftTargetPrice,
+  calculateEffectiveMarginPercent,
+  estimateDraftNetProfit,
+} from "../../lib/drafts/pricing";
 import type { DraftEditInput, DraftProduct } from "../../lib/drafts/types";
 import { useLocale } from "../../lib/locale";
 
@@ -51,7 +56,15 @@ export function ProductEditModal({ draft, defaultCategoryId, storeId, onClose, o
     setTitle(draft.title || "");
     setDescription(draft.description_html || "");
     setImages(Array.isArray(draft.images) ? draft.images : []);
-    setManualSalePrice(draft.manual_sale_price == null ? "" : String(draft.manual_sale_price));
+    const initialManual = draft.manual_sale_price == null ? null : Number(draft.manual_sale_price);
+    const initialProfit = initialManual != null
+      ? estimateDraftNetProfit(
+          { source_price: draft.source_price, shipping_cost: draft.shipping_cost, profit_margin_percent: draft.profit_margin_percent },
+          initialManual,
+        )
+      : null;
+    const isLossManual = initialProfit !== null && initialProfit < 0 && Number(draft.profit_margin_percent ?? 20) > 0;
+    setManualSalePrice(initialManual == null || isLossManual ? "" : String(draft.manual_sale_price));
     setCategory(draft.selected_category_id || "");
     setItemSpecifics(draft.item_specifics && typeof draft.item_specifics === "object" ? draft.item_specifics : {});
     setRequiredAspects([]);
@@ -140,6 +153,9 @@ export function ProductEditModal({ draft, defaultCategoryId, storeId, onClose, o
   const target = manualSalePrice.trim()
     ? manualPriceValue !== null && Number.isFinite(manualPriceValue) && manualPriceValue > 0 && manualPriceValue <= 1_000_000 ? manualPriceValue : null
     : calculatedTarget;
+  const previewFee = calculateDraftEbayFee(target);
+  const previewProfit = estimateDraftNetProfit({ source_price: sourcePrice, shipping_cost: shipping, profit_margin_percent: margin }, target);
+  const previewMargin = calculateEffectiveMarginPercent({ source_price: sourcePrice, shipping_cost: shipping }, target);
   const titleInvalid = !title.trim() || title.length > 80;
 
   async function refreshAmazonPrice() {
@@ -318,13 +334,14 @@ export function ProductEditModal({ draft, defaultCategoryId, storeId, onClose, o
           <div className="draftSectionHeading"><div><h3>{locale === "de" ? "Preis & Marge" : locale === "en" ? "Price & Margin" : "Fiyat ve Marj"}</h3><p>{locale === "de" ? "Vorschau berücksichtigt 13 % eBay- und 2 % Zahlungsgebühren." : locale === "en" ? "Preview accounts for 13% eBay and 2% payment fees." : "Önizleme %13 eBay ve %2 ödeme komisyonunu dikkate alır."}</p></div></div>
           <div className="draftPriceFields">
             <label className="draftFieldLabel">{locale === "de" ? "Amazon-Einkaufspreis" : locale === "en" ? "Amazon cost price" : "Amazon alış fiyatı"}<input value={sourcePrice == null ? "—" : euro.format(Number(sourcePrice))} readOnly /></label>
-            <label className="draftFieldLabel">{locale === "de" ? "Zielmarge (%)" : locale === "en" ? "Target margin (%)" : "Hedef marj (%)"}<input type="number" min="0" max="300" step="0.1" value={margin} onChange={(event) => setMargin(event.target.value)} /></label>
-            <label className="draftFieldLabel">{locale === "de" ? "Versandkosten (€)" : locale === "en" ? "Shipping cost (€)" : "Kargo (€)"}<input type="number" min="0" step="0.01" value={shipping} onChange={(event) => setShipping(event.target.value)} /></label>
+            <label className="draftFieldLabel">{locale === "de" ? "Zielmarge (%)" : locale === "en" ? "Target margin (%)" : "Hedef marj (%)"}<input type="number" min="0" max="300" step="0.1" value={margin} onChange={(event) => { setMargin(event.target.value); if (manualSalePrice.trim()) setManualSalePrice(""); }} /></label>
+            <label className="draftFieldLabel">{locale === "de" ? "Versandkosten (€)" : locale === "en" ? "Shipping cost (€)" : "Kargo (€)"}<input type="number" min="0" step="0.01" value={shipping} onChange={(event) => { setShipping(event.target.value); if (manualSalePrice.trim()) setManualSalePrice(""); }} /></label>
           </div>
-          <label className="draftFieldLabel draftManualPriceField">{locale === "de" ? "Gewünschter eBay-Verkaufspreis (€) · optional" : locale === "en" ? "Desired eBay sale price (€) · optional" : "İstediğiniz eBay satış fiyatı (€) · isteğe bağlı"}<input type="number" min="0.01" max="1000000" step="0.01" value={manualSalePrice} onChange={(event) => setManualSalePrice(event.target.value)} placeholder={calculatedTarget == null ? "—" : calculatedTarget.toFixed(2)} /><small>{locale === "de" ? "Leer lassen = automatische Berechnung. Ein eingetragener Preis bleibt auch in der laufenden Überwachung fest." : locale === "en" ? "Leave blank for automatic pricing. An entered price stays fixed during monitoring." : "Boş bırakılırsa otomatik hesaplanır. Girilen fiyat izleme süresince sabit kalır."}</small></label>
+          <label className="draftFieldLabel draftManualPriceField">{locale === "de" ? "Gewünschter eBay-Verkaufspreis (€) · optional" : locale === "en" ? "Desired eBay sale price (€) · optional" : "İstediğiniz eBay satış fiyatı (€) · isteğe bağlı"}<input type="number" min="0.01" max="1000000" step="0.01" value={manualSalePrice} onChange={(event) => setManualSalePrice(event.target.value)} placeholder={calculatedTarget == null ? "—" : calculatedTarget.toFixed(2)} /><small>{locale === "de" ? "Leer lassen = automatische Berechnung nach Zielmarge. Wenn du die Zielmarge oben änderst, wird dieser manuelle Preis automatisch zurückgesetzt." : locale === "en" ? "Leave blank for automatic pricing. Changing target margin above resets manual price." : "Boş bırakılırsa hedef marja göre otomatik hesaplanır. Yukarıdaki hedef marjı değiştirdiğinizde manuel fiyat otomatik sıfırlanır."}</small></label>
           {sourcePrice == null ? <button type="button" className="draftSecondaryButton" disabled={refreshingPrice} onClick={() => void refreshAmazonPrice()}>{refreshingPrice ? <LoaderCircle size={16} className="draftSpin" /> : <RefreshCw size={16} />} {locale === "de" ? "Amazon-Preis erneut laden" : locale === "en" ? "Retry Amazon price" : "Amazon fiyatını yeniden al"}</button> : null}
           {dedupingImages ? <p className="draftMutedText">{locale === "de" ? "Doppelte Bilder werden geprüft …" : locale === "en" ? "Checking duplicate images …" : "Yinelenen görseller kontrol ediliyor …"}</p> : null}
           <div className="draftPricePreview"><span>{manualSalePrice.trim() ? (locale === "de" ? "Manuell festgelegter eBay-Verkaufspreis" : locale === "en" ? "Manually set eBay sale price" : "Elle belirlenen eBay satış fiyatı") : (locale === "de" ? "Berechneter eBay-Verkaufspreis" : locale === "en" ? "Calculated eBay sale price" : "Hesaplanan eBay satış fiyatı")}</span><strong>{target == null ? (locale === "de" ? "Preis fehlt" : locale === "en" ? "Price missing" : "Fiyat eksik") : euro.format(target)}</strong></div>
+          {target != null ? <div className="draftPricePreview" style={{ marginTop: 8 }}><span>{locale === "de" ? `Abzüglich 15 % eBay-Gebühren (${previewFee == null ? "—" : euro.format(previewFee)}) → Geschätzter Nettogewinn` : locale === "en" ? `Less 15% eBay fees (${previewFee == null ? "—" : euro.format(previewFee)}) → Estimated net profit` : `%15 eBay komisyonu (${previewFee == null ? "—" : euro.format(previewFee)}) düşüldükten sonra Tahmini Net Kâr`}</span><strong className={previewProfit != null && previewProfit < 0 ? "draftDangerText" : ""}>{previewProfit == null ? "—" : `${previewProfit > 0 ? "+" : ""}${euro.format(previewProfit)}${previewMargin != null ? ` (${previewMargin} %)` : ""}`}</strong></div> : null}
         </section>
 
         <section className="draftEditorSection">

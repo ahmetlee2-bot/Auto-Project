@@ -19,6 +19,12 @@ import { analyzeProductVero } from "../lib/depot/veroChecker";
 import { getGermanSeasonalContext } from "../lib/depot/seasonalEngine";
 import { buildGpsrComplianceInfo, enrichItemSpecificsWithGpsr } from "../lib/compliance/gpsrEngine";
 import { calculateGermanNetProfit } from "../lib/pricing/germanProfitCalculator";
+import {
+  calculateDraftEbayFee,
+  calculateDraftTargetPrice,
+  estimateDraftNetProfit,
+  resolveEffectiveDraftPrice,
+} from "../lib/drafts/pricing";
 
 test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads remain validation pending", () => {
   assert.equal(isJoybuyTrackedProduct({ supplier: "joybuy_de", amazon_asin: "JB-10520407" }), true);
@@ -292,6 +298,30 @@ test("interactive VERO check and German seasonal rotation engine return live ver
   assert.equal(profit.shippingTier.code, "SUPPLIER_FREE");
   assert.ok(profit.netProfitEur > 8);
   assert.ok(profit.roiPercent > 60);
+
+  // Goodyear B00BGT6ZL2 0-fee check: 49.99 EUR at 20% margin targets 59.99 EUR and generates +10.00 EUR profit
+  const goodyearTarget = calculateDraftTargetPrice({
+    source_price: 49.99,
+    shipping_cost: 0,
+    profit_margin_percent: 20,
+  });
+  assert.equal(goodyearTarget, 59.99);
+  assert.equal(calculateDraftEbayFee(goodyearTarget), 0);
+  assert.equal(
+    estimateDraftNetProfit({ source_price: 49.99, shipping_cost: 0, profit_margin_percent: 20 }, goodyearTarget),
+    10.0,
+  );
+  assert.equal(
+    estimateDraftNetProfit({ source_price: 49.99, shipping_cost: 0, profit_margin_percent: 20 }, 54.9),
+    4.91,
+  );
+
+  // Every curated depot product must have exact cent-level math consistency (0% fee)
+  for (const item of ALL_CURATED_DEPOT_PRODUCTS) {
+    const fee = calculateDraftEbayFee(item.suggested_ebay_price)!;
+    const expectedProfit = Math.round((item.suggested_ebay_price - fee - item.amazon_price) * 100) / 100;
+    assert.equal(item.estimated_profit, expectedProfit);
+  }
 });
 
 test("tracking validates real identifiers and only uses a provider's returned conversion", async () => {

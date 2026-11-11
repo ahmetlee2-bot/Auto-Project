@@ -1,3 +1,4 @@
+import { calculateDraftTargetPrice, estimateDraftNetProfit } from "../drafts/pricing";
 import { premiumDescription } from "../ebay/premium-description";
 
 export type CuratedDepotProduct = {
@@ -1672,12 +1673,24 @@ const RAW_CURATED_SEEDS: RawCuratedSeed[] = [
 const SEED_TIMESTAMP = "2026-11-11T00:00:00.000Z";
 
 export const ALL_CURATED_DEPOT_PRODUCTS: CuratedDepotProduct[] = RAW_CURATED_SEEDS.map((seed) => {
-  const minProfit = 6.5;
-  const effectiveProfit = seed.estimated_profit < minProfit ? Number((minProfit + (seed.amazon_price % 2.4)).toFixed(2)) : seed.estimated_profit;
-  const effectiveEbayPrice =
-    seed.estimated_profit < minProfit
-      ? Number((Math.ceil((seed.amazon_price + effectiveProfit + 5.5) * 1.15) - 0.1).toFixed(2))
-      : seed.suggested_ebay_price;
+  const base20Price =
+    calculateDraftTargetPrice({
+      source_price: seed.amazon_price,
+      shipping_cost: 0,
+      profit_margin_percent: 20,
+    }) ?? Number((seed.amazon_price * 1.2).toFixed(2));
+  const minProfitFloor = seed.amazon_price >= 55 ? 12.05 : 5.05;
+  const floorPrice = Math.ceil((seed.amazon_price + minProfitFloor) * 100 - 1e-8) / 100;
+  const effectiveEbayPrice = Math.max(base20Price, floorPrice);
+  const effectiveProfit =
+    estimateDraftNetProfit(
+      {
+        source_price: seed.amazon_price,
+        shipping_cost: 0,
+        profit_margin_percent: 20,
+      },
+      effectiveEbayPrice,
+    ) ?? Number((effectiveEbayPrice - seed.amazon_price).toFixed(2));
   return {
     id: seed.id,
     asin: seed.asin,

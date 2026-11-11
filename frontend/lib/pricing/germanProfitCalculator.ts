@@ -1,3 +1,9 @@
+import {
+  calculateDraftTargetPrice,
+  DRAFT_EBAY_FEE_PERCENT,
+  DRAFT_PAYMENT_FEE_PERCENT,
+} from "../drafts/pricing";
+
 export type GermanShippingTier = {
   code: "SUPPLIER_FREE" | "DHL_KLEINPAKET" | "DHL_PAKET";
   labelDe: string;
@@ -65,27 +71,32 @@ export function calculateGermanNetProfit(input: {
   });
   const shipping = shippingTier.costEur;
 
-  // eBay.de standard commercial seller fee: ~12% + €0.35 fixed + 2% return/ad buffer = 14% effective + €0.35
-  const ebayFeePercent = 12;
-  const returnBufferPercent = 2;
-  const ebayFixedFeeEur = 0.35;
-  const totalFeeRate = (ebayFeePercent + returnBufferPercent) / 100;
+  // Unified across AutoLister: 13% eBay commission + 2% payment/processing fee = 15% total fee
+  const ebayFeePercent = DRAFT_EBAY_FEE_PERCENT;
+  const returnBufferPercent = DRAFT_PAYMENT_FEE_PERCENT;
+  const ebayFixedFeeEur = 0;
 
   const targetMargin = Number.isFinite(Number(input.targetMarginPercent))
     ? Number(input.targetMarginPercent)
-    : 22;
+    : 20;
 
   let salePrice = Number(input.salePriceEur);
   if (!Number.isFinite(salePrice) || salePrice <= 0) {
-    const rawTarget = ((cost + shipping) * (1 + targetMargin / 100) + ebayFixedFeeEur) / (1 - totalFeeRate);
-    salePrice = Number((Math.ceil(rawTarget) - 0.1).toFixed(2));
+    salePrice =
+      calculateDraftTargetPrice({
+        source_price: cost,
+        shipping_cost: shipping,
+        profit_margin_percent: targetMargin,
+      }) ?? Number(((cost + shipping) * 1.42).toFixed(2));
   }
 
-  const ebayTotalFeeEur = Number(((salePrice * ebayFeePercent) / 100 + ebayFixedFeeEur).toFixed(2));
-  const returnBufferEur = Number(((salePrice * returnBufferPercent) / 100).toFixed(2));
-  const netProfitEur = Number((salePrice - cost - shipping - ebayTotalFeeEur - returnBufferEur).toFixed(2));
+  const combinedFeeEur = Math.round(salePrice * ((ebayFeePercent + returnBufferPercent) / 100) * 100) / 100;
+  const ebayTotalFeeEur = Math.round(salePrice * (ebayFeePercent / 100) * 100) / 100;
+  const returnBufferEur = Math.round((combinedFeeEur - ebayTotalFeeEur) * 100) / 100;
+  const netProfitEur = Math.round((salePrice - combinedFeeEur - cost - shipping) * 100) / 100;
   const netMarginPercent = salePrice > 0 ? Number(((netProfitEur / salePrice) * 100).toFixed(1)) : 0;
-  const roiPercent = cost > 0 ? Number(((netProfitEur / cost) * 100).toFixed(1)) : 0;
+  const totalCost = cost + shipping;
+  const roiPercent = totalCost > 0 ? Number(((netProfitEur / totalCost) * 100).toFixed(1)) : 0;
 
   return {
     purchasePriceEur: cost,
