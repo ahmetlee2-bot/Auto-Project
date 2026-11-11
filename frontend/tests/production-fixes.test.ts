@@ -17,6 +17,8 @@ import { joybuyAdapter } from "../lib/suppliers/joybuyAdapter";
 import { ALL_CURATED_DEPOT_PRODUCTS, CURATED_DEPOT_CATALOG, filterCuratedDepotCatalog, getRotatedCuratedCatalog } from "../lib/depot/curatedCatalog";
 import { analyzeProductVero } from "../lib/depot/veroChecker";
 import { getGermanSeasonalContext } from "../lib/depot/seasonalEngine";
+import { buildGpsrComplianceInfo, enrichItemSpecificsWithGpsr } from "../lib/compliance/gpsrEngine";
+import { calculateGermanNetProfit } from "../lib/pricing/germanProfitCalculator";
 
 test("Joybuy supplier IDs never enter Amazon ASIN checks and failed source reads remain validation pending", () => {
   assert.equal(isJoybuyTrackedProduct({ supplier: "joybuy_de", amazon_asin: "JB-10520407" }), true);
@@ -268,6 +270,28 @@ test("interactive VERO check and German seasonal rotation engine return live ver
   const seasonal = getGermanSeasonalContext(new Date("2026-11-11T10:00:00Z"));
   assert.ok(seasonal.upcomingHolidays.length > 0);
   assert.ok(seasonal.hoursUntilNextRotation > 0 && seasonal.hoursUntilNextRotation <= 72);
+
+  const gpsr = buildGpsrComplianceInfo({
+    title: "USB LED Lichterkette Außen Warmweiß",
+    brand: "Govee",
+    asin: "B091L128V7",
+  });
+  assert.equal(gpsr.regulationCode, "EU 2023/988 (GPSR)");
+  assert.equal(gpsr.ceMarkingRequired, true);
+  const specifics = enrichItemSpecificsWithGpsr({}, { title: "USB LED Lichterkette", brand: "Govee", asin: "B091L128V7" });
+  assert.deepEqual(specifics.Hersteller, ["Govee"]);
+  assert.ok(specifics.Produktsicherheit?.[0]?.includes("GPSR"));
+
+  const profit = calculateGermanNetProfit({
+    purchasePriceEur: 12.99,
+    salePriceEur: 26.9,
+    shippingCostEur: 0,
+    title: "Airfryer Silikonform",
+    supplier: "amazon_de",
+  });
+  assert.equal(profit.shippingTier.code, "SUPPLIER_FREE");
+  assert.ok(profit.netProfitEur > 8);
+  assert.ok(profit.roiPercent > 60);
 });
 
 test("tracking validates real identifiers and only uses a provider's returned conversion", async () => {

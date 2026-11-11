@@ -8,8 +8,9 @@ import { TopUpCreditsModal } from "./TopUpCreditsModal";
 type EbayOrder = {
   tracking?: { source_tracking_id: string | null; tracking_number: string; carrier_code: string; provider: string | null; status: string; last_error: string | null };
   supplierTracking?: { supplier_order_id: string; recipient_name: string; source_carrier: string | null; source_tracking_number: string; amazon_share_url: string | null; estimated_delivery_date: string | null; synced_at: string; public_tracking_number?: string; delivery_status?: string; last_synced_at?: string; recipient_city?: string | null; recipient_zip?: string | null; estimated_delivery?: string | null; buyer_notified_at?: string | null } | null;
+  shippingAddress?: { fullName: string; addressLine1: string; addressLine2: string; postalCode: string; city: string; countryCode: string; phoneNumber: string } | null;
   orderId: string; orderFulfillmentStatus?: string; orderPaymentStatus?: string; creationDate?: string;
-  lineItems?: Array<{ lineItemId: string; legacyItemId?: string; title?: string; quantity?: number }>;
+  lineItems?: Array<{ lineItemId: string; legacyItemId?: string; title?: string; quantity?: number; sourceAsin?: string | null; supplier?: string; supplierUrl?: string; amazonCartUrl?: string | null }>;
   fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string } } }>;
 };
 type OrderRow = { storeId: string; order: EbayOrder };
@@ -259,7 +260,51 @@ export function OrdersManager() {
             </div>
           )}
           {order.tracking?.last_error && <p role="alert" className="proNotice proNoticeError">{order.tracking.last_error}</p>}
-          <ul className="proOrderItems">{(order.lineItems || []).map((line) => <li key={line.lineItemId}>{line.title || line.lineItemId} <span>× {line.quantity || 1}</span></li>)}</ul>
+          <ul className="proOrderItems">{(order.lineItems || []).map((line) => <li key={line.lineItemId}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "8px", width: "100%" }}>
+              <span>{line.title || line.lineItemId} <b>× {line.quantity || 1}</b> {line.sourceAsin ? <span className="proMuted">({line.sourceAsin})</span> : null}</span>
+              <span style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {line.amazonCartUrl && (
+                  <a className="proButton proButtonPrimary" style={{ padding: "4px 10px", fontSize: "12px" }} href={line.amazonCartUrl} target="_blank" rel="noreferrer">
+                    🛒 Amazon.de Sepete Ekle ↗
+                  </a>
+                )}
+                {line.supplierUrl && (
+                  <a className="proButton" style={{ padding: "4px 10px", fontSize: "12px" }} href={line.supplierUrl} target="_blank" rel="noreferrer">
+                    🔗 Tedarikçide Aç ↗
+                  </a>
+                )}
+              </span>
+            </div>
+          </li>)}</ul>
+          {order.shippingAddress && (order.shippingAddress.fullName || order.shippingAddress.addressLine1) && (
+            <div style={{ margin: "10px 0", padding: "10px 12px", borderRadius: "8px", background: "rgba(30, 41, 59, 0.7)", border: "1px solid rgba(148, 163, 184, 0.25)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+              <div style={{ fontSize: "12px", lineHeight: 1.45 }}>
+                <b>📦 Teslimat Adresi (DE):</b> {order.shippingAddress.fullName} · {order.shippingAddress.addressLine1}
+                {order.shippingAddress.addressLine2 ? `, ${order.shippingAddress.addressLine2}` : ""}, {order.shippingAddress.postalCode} {order.shippingAddress.city} ({order.shippingAddress.countryCode})
+                {order.shippingAddress.phoneNumber ? ` · Tel: ${order.shippingAddress.phoneNumber}` : ""}
+              </div>
+              <button
+                className="proButton"
+                type="button"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+                onClick={() => {
+                  const addr = order.shippingAddress!;
+                  const formatted = [
+                    addr.fullName,
+                    addr.addressLine1,
+                    addr.addressLine2,
+                    `${addr.postalCode} ${addr.city}`,
+                    addr.countryCode === "DE" ? "Deutschland" : addr.countryCode,
+                    addr.phoneNumber ? `Tel: ${addr.phoneNumber}` : "",
+                  ].filter(Boolean).join("\n");
+                  void navigator.clipboard.writeText(formatted).then(() => setNotice(`Teslimat adresi kopyalandı (${addr.fullName}). Amazon/Joybuy sipariş ekranına yapıştırabilirsiniz.`));
+                }}
+              >
+                📋 Adresi Kopyala
+              </button>
+            </div>
+          )}
           <div className="proFormGrid">
             <label className="proLabel">Amazon / Tedarikçi Takip No<input className="proInput" autoComplete="off" value={value.sourceTrackingId} onChange={e => {
               const sourceTrackingId = e.target.value;

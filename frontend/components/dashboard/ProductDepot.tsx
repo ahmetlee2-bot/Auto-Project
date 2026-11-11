@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useStores } from "../../lib/ebay/StoreContext";
+import { calculateGermanNetProfit } from "../../lib/pricing/germanProfitCalculator";
 
 type PoolProduct = {
   id: string;
@@ -266,6 +268,7 @@ export function ProductDepot() {
       const body = (await response.json()) as {
         queued?: Array<{ asin: string }>;
         skipped?: Array<{ reason: string }>;
+        syncedToDrafts?: number;
         error?: string;
       };
       if (!response.ok) throw new Error(body.error || "Die Produkte konnten nicht eingereiht werden.");
@@ -275,7 +278,13 @@ export function ProductDepot() {
             .map((item) => item.reason)
             .join("; ")}${body.skipped.length > 3 ? " …" : ""}`
         : "";
-      setNotice(`${body.queued?.length || 0} Produkte wurden in die Shop-Warteschlange aufgenommen.${skipSummary}`);
+      const draftNote =
+        typeof body.syncedToDrafts === "number" && body.syncedToDrafts > 0
+          ? ` (${body.syncedToDrafts}x auch unter „Overview / Entwürfe“ angelegt)`
+          : "";
+      setNotice(
+        `✅ ${body.queued?.length || 0} Produkte wurden in „Queue & Logs“ eingereiht${draftNote}.${skipSummary}`,
+      );
       setSelected([]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Die Produkte konnten nicht eingereiht werden.");
@@ -548,9 +557,17 @@ export function ProductDepot() {
           </details>
         )}
         {notice && (
-          <p className="proNotice" role="status">
-            {notice}
-          </p>
+          <div className="proNotice" role="status" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+            <span>{notice}</span>
+            <span style={{ display: "flex", gap: "8px" }}>
+              <Link className="proButton" href="/dashboard/queue">
+                📋 Queue &amp; Logs öffnen ↗
+              </Link>
+              <Link className="proButton" href="/dashboard">
+                ✏️ Overview (Entwürfe) öffnen ↗
+              </Link>
+            </span>
+          </div>
         )}
         {error && (
           <p className="proNotice proNoticeError" role="alert">
@@ -769,11 +786,56 @@ export function ProductDepot() {
                 )}
 
                 <h3>{product.title}</h3>
-                {product.season_tag && (
-                  <p style={{ margin: "2px 0 6px", fontSize: "11px", color: "#93c5fd" }}>
-                    🎯 Sezon Etiketi: <b>{product.season_tag}</b>
-                  </p>
-                )}
+                {(() => {
+                  const breakdown = calculateGermanNetProfit({
+                    purchasePriceEur: product.amazon_price,
+                    salePriceEur: product.suggested_ebay_price,
+                    shippingCostEur: product.estimated_shipping,
+                    title: product.title,
+                    supplier: product.supplier,
+                  });
+                  return (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "4px 0 8px" }}>
+                      {product.season_tag && (
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            padding: "2px 8px",
+                            borderRadius: "999px",
+                            background: "rgba(59, 130, 246, 0.16)",
+                            color: "#93c5fd",
+                          }}
+                        >
+                          🎯 {product.season_tag}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          padding: "2px 8px",
+                          borderRadius: "999px",
+                          background: "rgba(16, 185, 129, 0.14)",
+                          color: "#6ee7b7",
+                        }}
+                        title="EU 2023/988 Genel Ürün Güvenliği Tüzüğü & üretici bilgileri otomatik eklenir"
+                      >
+                        🛡️ EU-GPSR 2023/988
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          padding: "2px 8px",
+                          borderRadius: "999px",
+                          background: "rgba(139, 92, 246, 0.16)",
+                          color: "#c4b5fd",
+                        }}
+                        title={`eBay DE Komisyonu: ${money(breakdown.ebayTotalFeeEur, currency)} · İade Tamponu: ${money(breakdown.returnBufferEur, currency)}`}
+                      >
+                        📦 {breakdown.shippingTier.labelDe} · ROI %{breakdown.roiPercent}
+                      </span>
+                    </div>
+                  );
+                })()}
                 <p className="proMuted">
                   <span className="draftReadyBadge">
                     {product.supplier === "joybuy_de" || product.source_marketplace === "JOYBUY_DE"

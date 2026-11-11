@@ -2,6 +2,7 @@ import "server-only";
 
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { repricerAdmin } from "../repricer/admin";
+import { enrichItemSpecificsWithGpsr } from "../compliance/gpsrEngine";
 
 export const EBAY_OAUTH_COOKIE = "autolister_ebay_oauth_state";
 export const EBAY_SCOPES = [
@@ -376,7 +377,11 @@ export async function publishPoolProduct(input: {
   if (!product.category_id) throw new Error("Ürün için eBay kategori kimliği gerekli.");
   if (!product.images.length) throw new Error("Yayınlamak için en az bir ürün görseli gerekli.");
   const sku = createInventorySku(store.id, product.asin);
-  const aspects = product.item_specifics || {};
+  const aspects = enrichItemSpecificsWithGpsr(product.item_specifics || {}, {
+    title: product.title,
+    asin: product.asin,
+    categoryId: product.category_id,
+  });
   await ebayApiRequest(store, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, "PUT", {
     availability: { shipToLocationAvailability: { quantity: 1 } },
     condition: product.condition || "NEW",
