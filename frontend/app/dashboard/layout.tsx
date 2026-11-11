@@ -11,6 +11,7 @@ const sections = [
   ["/dashboard/depot", "Product Depot"],
   ["/dashboard/queue", "Queue & Logs"],
   ["/dashboard/orders", "Orders"],
+  ["/track", "Tracking 📦"],
   ["/dashboard/academy", "Academy"],
 ] as const;
 

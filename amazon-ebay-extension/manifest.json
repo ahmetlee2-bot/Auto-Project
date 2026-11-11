@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoLister: Amazon zu eBay 1-Klick Lister & Repricer",
-  "version": "1.0.5",
+  "version": "1.1.5",
   "description": "Amazon-Produkte mit 1 Klick auf eBay listen. Automatische Preis- und Bestandsprüfung, SEO-Titel und sofortige Margenberechnung.",
   "minimum_chrome_version": "120",
   "permissions": [

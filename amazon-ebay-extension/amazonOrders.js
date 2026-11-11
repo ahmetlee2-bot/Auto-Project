@@ -70,20 +70,58 @@
     }
     return { recipientName, recipientZip, recipientCity };
   }
+  const INVALID_TRACKING = /^(?:Hauptinhalt|Bestelldetails|Lieferadresse|Tracking|Sendung|Details|Amazon|Bestellung|Prime|Ankunft|Zustellung)$/i;
+
+  function determineDeliveryStatus(root, bodyText) {
+    if (PROGRESS.test(location.pathname)) {
+      const activeStep = document.querySelector('[aria-current="step"], .current-milestone, .milestone-heading, [data-milestone-state="current"], .pt-status-message');
+      const activeText = activeStep ? text(activeStep) : "";
+      const headings = [...document.querySelectorAll("h1, h2, h3, .milestone-text")].map((h) => text(h)).join(" ");
+      const combined = `${activeText} ${headings}`.trim();
+
+      if (/zugestellt am|erfolgreich zugestellt|paket wurde zugestellt/i.test(combined) || (/zugestellt/i.test(activeText) && !/bestellt|versendet/i.test(activeText))) {
+        return "DELIVERED";
+      }
+      if (/in zustellung|heute zustellbar|wird heute geliefert/i.test(combined)) {
+        return "OUT_FOR_DELIVERY";
+      }
+      if (/versendet|unterwegs|versandt/i.test(combined) && !/bestellt/i.test(activeText)) {
+        return "IN_TRANSIT";
+      }
+      if (/bestellt|bestellung aufgegeben|noch nicht versandt/i.test(combined) || /bestellt/i.test(activeText)) {
+        return "ORDER_RECEIVED";
+      }
+    }
+
+    const cardText = text(root);
+    if (/zugestellt am|paket wurde übergeben|erfolgreich zugestellt/i.test(cardText)) return "DELIVERED";
+    if (/in zustellung|heute bis|wird heute zugestellt/i.test(cardText)) return "OUT_FOR_DELIVERY";
+    if (/versandt am|unterwegs|versendet/i.test(cardText)) return "IN_TRANSIT";
+    if (/bestellt|bestellung aufgegeben|noch nicht versandt/i.test(cardText)) return "ORDER_RECEIVED";
+
+    return "ORDER_RECEIVED";
+  }
+
   function shipmentFrom(root, orderId) {
     const bodyText = text(root);
-    const deliveryStatus = /zugestellt|erfolgreich zugestellt/i.test(bodyText) ? "DELIVERED"
-      : /in zustellung|heute zustellbar/i.test(bodyText) ? "OUT_FOR_DELIVERY"
-      : /unterwegs|wird zugestellt/i.test(bodyText) ? "IN_TRANSIT"
-      : /versandt|versendet|auf dem weg/i.test(bodyText) ? "SHIPPED" : "ORDER_RECEIVED";
+    const deliveryStatus = determineDeliveryStatus(root, bodyText);
     let sourceTrackingNumber = "";
     for (const match of bodyText.matchAll(/(?:Sendungsnummer|Tracking\s*ID|Trackingnummer|Verfolgungsnummer)\s*:?\s*([A-Z0-9-]{8,40})/gi)) {
-      const value = match[1].replace(/-/g, "");
-      if (value !== orderId.replace(/-/g, "")) { sourceTrackingNumber = value; break; }
+      const value = match[1].replace(/-/g, "").trim();
+      if (value !== orderId.replace(/-/g, "") && !INVALID_TRACKING.test(value)) {
+        sourceTrackingNumber = value;
+        break;
+      }
     }
     if (!sourceTrackingNumber) {
       const candidates = bodyText.match(new RegExp(TRACKING_ID.source, "gi")) || [];
-      sourceTrackingNumber = candidates.find((value) => value.toUpperCase() !== orderId.replace(/-/g, "").toUpperCase() && !/^20\d{6,}$/.test(value)) || "";
+      sourceTrackingNumber = candidates.find((value) => {
+        const clean = value.replace(/-/g, "").trim();
+        return clean.toUpperCase() !== orderId.replace(/-/g, "").toUpperCase() && !/^20\d{6,}$/.test(clean) && !INVALID_TRACKING.test(clean);
+      }) || "";
+    }
+    if (deliveryStatus === "ORDER_RECEIVED" && !/^TBA/i.test(sourceTrackingNumber) && !/^\d{12,20}$/.test(sourceTrackingNumber)) {
+      sourceTrackingNumber = "";
     }
     const sourceCarrier = /\bTBA[A-Z0-9]+\b/i.test(sourceTrackingNumber) || /amazon\s*logistics/i.test(bodyText)
       ? "Amazon Logistics"
@@ -191,15 +229,13 @@
     let host = document.getElementById("autolister-progress-tracking-widget");
     if (host) {
       // If widget already exists but is misplaced (e.g. at the top of the page), move it to the anchor!
-      if (host.nextElementSibling !== anchor && host.parentElement !== anchor.parentElement) {
-        anchor.insertAdjacentElement("beforebegin", host);
-      }
+      if (host.nextElementSibling !== anchor) anchor.insertAdjacentElement("beforebegin", host);
       return;
     }
 
     host = document.createElement("div");
     host.id = "autolister-progress-tracking-widget";
-    host.style.cssText = "display:block;width:min(520px,calc(100% - 32px));margin:20px auto 16px auto;position:relative;z-index:10;clear:both;";
+    host.style.cssText = "display:block;width:min(520px,calc(100% - 32px));margin:8px auto 12px auto;position:relative;z-index:10;clear:both;";
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>
