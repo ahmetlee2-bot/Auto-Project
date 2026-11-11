@@ -53,6 +53,7 @@
         "descriptionProcessor.js",
         "listing_builder.js",
         "amazon_parser.js",
+        "amazonOrders.js",
         "content.js",
         "addressParser.js",
         "checkoutRunner.js"

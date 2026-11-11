@@ -151,25 +151,58 @@
     const orderId = new URL(location.href).searchParams.get("orderId") || document.body.innerText.match(ORDER_ID)?.[0] || "";
     const shipment = orderId ? shipmentFrom(document.body, orderId) : null;
     if (!shipment?.sourceTrackingNumber) return;
-    const heading = [...document.querySelectorAll("h1,h2,h3,[role='heading']")]
-      .find((node) => /zustellung|lieferung/i.test(text(node)) && text(node).length < 180);
+
+    // Find the ideal placement right above "Bestellt" / progress status
+    function findProgressAnchor() {
+      // 1. Prioritize element containing "Bestellt", "Versendet", "In Zustellung", "Zugestellt"
+      const statusNodes = [...document.querySelectorAll("h1, h2, h3, h4, h5, div, span, p")]
+        .filter((node) => {
+          if (node.closest("#navbar, #nav-belt, #nav-main, header, #navFooter, #nav-global-location-slot")) return false;
+          const val = (node.textContent || "").trim();
+          return /^(?:Bestellt|Versendet|In Zustellung|Zugestellt)$/i.test(val) && node.children.length === 0;
+        });
+
+      if (statusNodes.length > 0) {
+        const target = statusNodes[0];
+        return target.closest(".pt-status-message, .a-row, div") || target;
+      }
+
+      // 2. Look for progress tracker container
+      const trackerContainer = document.querySelector("#tracking-events-container, .pt-status-message-container, [data-component-type='progress-tracker'], .track-package-container, #progress-tracker-container");
+      if (trackerContainer && !trackerContainer.closest("#navbar, header")) {
+        return trackerContainer;
+      }
+
+      // 3. Look for the main delivery heading inside content area (e.g. "Ankunft morgen")
+      const mainContent = document.querySelector("#mainContent, main, #content, .a-container");
+      if (mainContent) {
+        const heading = [...mainContent.querySelectorAll("h1, h2, h3, [role='heading']")]
+          .find((n) => !n.closest("#navbar, header, #nav-global-location-slot") && n.textContent && n.textContent.length < 120);
+        if (heading) return heading;
+      }
+
+      return null;
+    }
+
+    const anchor = findProgressAnchor();
 
     const host = document.createElement("div");
     host.id = "autolister-progress-tracking-widget";
-    host.style.cssText = "display:block;width:min(500px,calc(100% - 32px));margin:14px auto;position:relative;z-index:4";
+    host.style.cssText = "display:block;width:min(520px,calc(100% - 32px));margin:14px auto 18px auto;position:relative;z-index:10;clear:both;";
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>
         :host{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
-        .card{box-sizing:border-box;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:#fff;border:2px solid #1e293b;border-radius:14px;box-shadow:0 4px 0 #1e293b}
+        .card{box-sizing:border-box;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 4px 12px rgba(37,99,235,0.15)}
         .identity{display:flex;align-items:center;gap:10px;min-width:0}
-        .logo{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:9px;background:#2563eb;color:#fff;font-size:18px;font-weight:800}
-        .name{font-size:14px;line-height:18px;font-weight:800;white-space:nowrap}
+        .logo{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:8px;background:#2563eb;color:#fff;font-size:18px;font-weight:800}
+        .name{font-size:14px;line-height:18px;font-weight:800;white-space:nowrap;color:#0f172a}
         .dot{display:inline-block;width:7px;height:7px;margin-left:5px;border-radius:50%;background:#22c55e;vertical-align:2px}
         .caption{margin-top:2px;color:#64748b;font-size:11px;line-height:15px}
-        button{flex:0 0 auto;padding:8px 12px;border:1.5px solid #1e293b;border-radius:8px;background:#f97316;color:#fff;font-size:12px;font-weight:700;cursor:pointer}
-        button:disabled{opacity:.55;cursor:not-allowed}
-        button.success{background:#087f5b;color:#fff}
+        button{flex:0 0 auto;padding:8px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s ease}
+        button:hover:not(:disabled){background:#1d4ed8}
+        button:disabled{opacity:.65;cursor:not-allowed}
+        button.success{background:#10b981;color:#fff}
         .error{margin:7px 3px 0;color:#b91c1c;font-size:12px;line-height:16px}
         @media(max-width:420px){.card{align-items:flex-start;flex-direction:column}.action{width:100%}button{width:100%}}
       </style>
@@ -199,8 +232,14 @@
         }
       }
     });
-    if (heading?.parentElement) heading.insertAdjacentElement("beforebegin", host);
-    else (document.querySelector("#mainContent,main") || document.body).prepend(host);
+    if (anchor) {
+      anchor.insertAdjacentElement("beforebegin", host);
+    } else {
+      const container = document.querySelector("#mainContent, main, #content, .a-container");
+      if (container) {
+        container.insertAdjacentElement("afterbegin", host);
+      }
+    }
   }
   function extractAll() {
     if (!ORDER_HISTORY.test(location.pathname) && !PROGRESS.test(location.pathname)) throw new Error("Öffne zuerst die Amazon-Bestellübersicht oder die Paketverfolgung.");
