@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Alltaghaus Amazon to eBay",
-  "version": "1.0.2",
-  "description": "Extract Amazon product data, prepare eBay drafts, and monitor price and stock changes.",
+  "name": "AutoLister: Amazon zu eBay 1-Klick Lister & Repricer",
+  "version": "1.0.4",
+  "description": "Amazon-Produkte mit 1 Klick auf eBay listen. Automatische Preis- und Bestandsprüfung, SEO-Titel und sofortige Margenberechnung.",
   "minimum_chrome_version": "120",
   "permissions": [
     "tabs",
@@ -11,17 +11,19 @@
   ],
   "host_permissions": [
     "https://*.amazon.de/*",
+    "https://*.joybuy.de/*",
     "https://*.media-amazon.com/*",
     "https://*.ssl-images-amazon.com/*",
     "https://images-na.ssl-images-amazon.com/*",
     "https://api.autolister-app.de/*",
+    "https://autolister-app.de/*",
     "https://rdwqrygkkzzouiamrxwq.supabase.co/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Amazon ürününü eBay taslağına aktar",
+    "default_title": "AutoLister: Amazon-Produkt auf eBay listen",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -51,7 +53,31 @@
         "descriptionProcessor.js",
         "listing_builder.js",
         "amazon_parser.js",
-        "content.js"
+        "content.js",
+        "addressParser.js",
+        "checkoutRunner.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.joybuy.de/*"
+      ],
+      "js": [
+        "addressParser.js",
+        "checkoutRunner.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://autolister-app.de/*",
+        "https://*.autolister-app.de/*",
+        "http://localhost/*",
+        "http://localhost:*/*"
+      ],
+      "js": [
+        "dashboardBridge.js"
       ],
       "run_at": "document_idle"
     }

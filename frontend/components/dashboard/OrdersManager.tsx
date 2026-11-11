@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useStores } from "../../lib/ebay/StoreContext";
 import { routeSupplierTracking } from "../../lib/tracking/carrierRouter";
+import { parseGermanShippingAddress } from "../../lib/orders/germanAddressParser";
 import { TopUpCreditsModal } from "./TopUpCreditsModal";
 
 type EbayOrder = {
@@ -277,34 +278,67 @@ export function OrdersManager() {
               </span>
             </div>
           </li>)}</ul>
-          {order.shippingAddress && (order.shippingAddress.fullName || order.shippingAddress.addressLine1) && (
-            <div style={{ margin: "10px 0", padding: "10px 12px", borderRadius: "8px", background: "rgba(30, 41, 59, 0.7)", border: "1px solid rgba(148, 163, 184, 0.25)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-              <div style={{ fontSize: "12px", lineHeight: 1.45 }}>
-                <b>📦 Teslimat Adresi (DE):</b> {order.shippingAddress.fullName} · {order.shippingAddress.addressLine1}
-                {order.shippingAddress.addressLine2 ? `, ${order.shippingAddress.addressLine2}` : ""}, {order.shippingAddress.postalCode} {order.shippingAddress.city} ({order.shippingAddress.countryCode})
-                {order.shippingAddress.phoneNumber ? ` · Tel: ${order.shippingAddress.phoneNumber}` : ""}
+          {order.shippingAddress && (order.shippingAddress.fullName || order.shippingAddress.addressLine1) && (() => {
+            const parsed = parseGermanShippingAddress(order.shippingAddress);
+            const primaryLine = order.lineItems?.[0];
+            const targetSupplierUrl = primaryLine?.supplierUrl || primaryLine?.amazonCartUrl || (primaryLine?.sourceAsin ? `https://www.amazon.de/dp/${primaryLine.sourceAsin}` : null);
+            return (
+              <div style={{ margin: "10px 0", padding: "12px 14px", borderRadius: "10px", background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(59, 130, 246, 0.4)", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ fontSize: "12px", lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 700, color: "#60a5fa", display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <span>📦 Teslimat Adresi (DE):</span>
+                      {parsed.isPackstation && <span style={{ background: "#f59e0b", color: "#000", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 800 }}>DHL PACKSTATION</span>}
+                    </div>
+                    <div><b>{parsed.fullName}</b> · {parsed.isPackstation ? parsed.street : `${parsed.street} ${parsed.houseNumber}`.trim()}</div>
+                    {parsed.addressLine2 ? <div style={{ color: "#94a3b8" }}>{parsed.addressLine2}</div> : null}
+                    <div>{parsed.postalCode} {parsed.city} ({parsed.countryCode}){parsed.phoneNumber ? ` · Tel: ${parsed.phoneNumber}` : ""}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      className="proButton proButtonPrimary"
+                      type="button"
+                      style={{ padding: "6px 14px", fontSize: "12px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", fontWeight: 700, border: "none", boxShadow: "0 2px 8px rgba(37, 99, 235, 0.4)" }}
+                      onClick={() => {
+                        window.postMessage({
+                          type: "AUTOLISTER_TRIGGER_AUTO_ORDER",
+                          payload: {
+                            orderId: order.orderId,
+                            storeId,
+                            sourceAsin: primaryLine?.sourceAsin,
+                            supplierUrl: primaryLine?.supplierUrl,
+                            amazonCartUrl: primaryLine?.amazonCartUrl,
+                            quantity: primaryLine?.quantity || 1,
+                            parsedAddress: parsed,
+                          },
+                        }, "*");
+                        void navigator.clipboard.writeText(parsed.formattedText).then(() => {
+                          setNotice(`⚡ 1-Click Sipariş Hazırlandı: ${parsed.fullName} adresi ayrıştırıldı ve eklentiye iletildi. Amazon/Joybuy sekmesinde otomatik doldurulacaktır.`);
+                        });
+                        if (targetSupplierUrl) {
+                          window.open(targetSupplierUrl, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      ⚡ 1-Click Siparişi Hazırla
+                    </button>
+                    <button
+                      className="proButton"
+                      type="button"
+                      style={{ padding: "6px 10px", fontSize: "12px" }}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(parsed.formattedText).then(() => {
+                          setNotice(`Teslimat adresi kopyalandı (${parsed.fullName}).`);
+                        });
+                      }}
+                    >
+                      📋 Adresi Kopyala
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                className="proButton"
-                type="button"
-                style={{ padding: "4px 10px", fontSize: "12px" }}
-                onClick={() => {
-                  const addr = order.shippingAddress!;
-                  const formatted = [
-                    addr.fullName,
-                    addr.addressLine1,
-                    addr.addressLine2,
-                    `${addr.postalCode} ${addr.city}`,
-                    addr.countryCode === "DE" ? "Deutschland" : addr.countryCode,
-                    addr.phoneNumber ? `Tel: ${addr.phoneNumber}` : "",
-                  ].filter(Boolean).join("\n");
-                  void navigator.clipboard.writeText(formatted).then(() => setNotice(`Teslimat adresi kopyalandı (${addr.fullName}). Amazon/Joybuy sipariş ekranına yapıştırabilirsiniz.`));
-                }}
-              >
-                📋 Adresi Kopyala
-              </button>
-            </div>
-          )}
+            );
+          })()}
           <div className="proFormGrid">
             <label className="proLabel">Amazon / Tedarikçi Takip No<input className="proInput" autoComplete="off" value={value.sourceTrackingId} onChange={e => {
               const sourceTrackingId = e.target.value;

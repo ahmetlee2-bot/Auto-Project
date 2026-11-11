@@ -1,18 +1,15 @@
 if (typeof importScripts === "function") importScripts("cloudClient.js");
-if (typeof importScripts === "function") importScripts("config.js", "priceCalculator.js", "imageProcessor.js", "offscreen.js", "listing_builder.js", "amazon_parser.js", "bridgeClient.js");
+if (typeof importScripts === "function") importScripts("config.js", "priceCalculator.js", "listing_builder.js", "amazon_parser.js", "bridgeClient.js");
 
 const priceTools = globalThis.AlltaghausPrice || {
   calculateSalePrice(source, marginPercent) {
     const margin = Number(marginPercent) / 100;
     if (!Number.isFinite(source) || !Number.isFinite(margin) || margin < 0 || margin >= 0.9) return null;
-    return (Math.ceil(source / (1 - margin)) - 0.01).toFixed(2);
+    return (Math.ceil(((source * (1 + margin)) / 0.85) * 100 - 1e-8) / 100).toFixed(2);
   },
 };
 
-const IMAGE_PIPELINE_VERSION = 8;
-const REFERENCE_BADGE_LAYOUT = "REFERENCE_BADGE_LAYOUT_V2";
-const MAIN_IMAGE_MIN_DIMENSION = 1200;
-const SETTINGS_VERSION = 7;
+const SETTINGS_VERSION = 8;
 const DEFAULT_SETTINGS = {
   apiBaseUrl: globalThis.AlltaghausConfig.API_BASE_URL,
   draftMode: false,
@@ -26,10 +23,9 @@ const DEFAULT_SETTINGS = {
   paymentPolicyId: "",
   returnPolicyId: "",
   lowStockThreshold: 3,
-  customImageOverlay: false,
+  customImageOverlay: true,
 };
 let monitorInFlight = false;
-const MAX_GALLERY_PAYLOAD_BYTES = 18_000_000;
 
 function generateEbaySku() {
   return `DE-INV-${String(Date.now()).slice(-10)}${Math.floor(Math.random() * 900 + 100)}`;
@@ -97,133 +93,10 @@ function highResolutionImageUrl(value) {
   return globalThis.AlltaghausAmazonParser.normalizeImageUrl(value);
 }
 
-async function processImageToCleanBase64(imageUrl, { applyReferenceBadges = false } = {}) {
-  const sourceUrl = highResolutionImageUrl(imageUrl);
-  if (!/^https:\/\//i.test(sourceUrl)) throw new Error("Görsel HTTPS URLsi olmalı.");
-  let bitmap;
-  try {
-    const attempts = [];
-    for (const candidate of globalThis.AlltaghausAmazonParser.imageCandidates(imageUrl)) {
-      try {
-        const response = await fetchWithTimeout(candidate, { cache: "no-store" }, 12_000);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const decoded = await createImageBitmap(await response.blob());
-        attempts.push(`${decoded.width}x${decoded.height}`);
-        if (!bitmap || Math.max(decoded.width, decoded.height) > Math.max(bitmap.width, bitmap.height)) {
-          bitmap?.close(); bitmap = decoded;
-        } else decoded.close();
-        if (Math.max(bitmap.width, bitmap.height) >= 1500) break;
-      } catch (error) { attempts.push(error.message); }
-    }
-    if (!bitmap?.width || !bitmap?.height || Math.max(bitmap.width, bitmap.height) < 500) {
-      throw new Error(`Ürünün yüksek çözünürlüklü görseli alınamadı (${attempts.join('; ')}). Kaynak: ${sourceUrl}`);
-    }
-    // Preserve the complete source image. A square, white canvas prevents visual
-    // distortion while satisfying the minimum eBay image size requirement.
-    const longestSide = Math.max(bitmap.width, bitmap.height);
-    const targetLongestSide = Math.max(500, Math.min(1600, longestSide));
-    const scale = targetLongestSide / longestSide;
-    const drawWidth = Math.max(1, Math.round(bitmap.width * scale));
-    const drawHeight = Math.max(1, Math.round(bitmap.height * scale));
-    const targetWidth = targetLongestSide;
-    const targetHeight = targetLongestSide;
-    const canvas = new OffscreenCanvas(targetWidth, targetHeight);
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("Offscreen Canvas 2D bağlamı oluşturulamadı.");
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, targetWidth, targetHeight);
-    context.drawImage(bitmap, Math.round((targetWidth - drawWidth) / 2), Math.round((targetHeight - drawHeight) / 2), drawWidth, drawHeight);
-    const pixels = context.getImageData(0, 0, targetWidth, targetHeight).data;
-    let hasContent = false;
-    for (let i = 0; i < pixels.length; i += 4) {
-      if (pixels[i] < 250 || pixels[i + 1] < 250 || pixels[i + 2] < 250) { hasContent = true; break; }
-    }
-    if (!hasContent) throw new Error("Bos/beyaz gorsel galeriye eklenmedi.");
-    // Hash before the standard listing badges so duplicates are recognised.
-    const digest = await crypto.subtle.digest("SHA-256", pixels);
-    const pixelHash = `${targetWidth}:` + [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-    const cleanBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.98 });
-    const dataUrl = globalThis.AlltaghausImage?.blobToDataUrl
-      ? await globalThis.AlltaghausImage.blobToDataUrl(cleanBlob)
-      : `data:image/jpeg;base64,${btoa(String.fromCharCode(...new Uint8Array(await cleanBlob.arrayBuffer())))}`;
-    if (!cleanBlob.size) throw new Error("Canvas bos dosya uretti.");
-    if (applyReferenceBadges) {
-      if (!globalThis.AlltaghausOverlay) throw new Error("Referans rozet şablonu yüklenemedi.");
-      await globalThis.AlltaghausOverlay.drawCustomOverlay(context, targetWidth, targetHeight);
-    }
-    return {
-      dataUrl,
-      mimeType: "image/jpeg",
-      cropRatio: 0,
-      width: targetWidth,
-      height: targetHeight,
-      pixelHash,
-      pipelineVersion: IMAGE_PIPELINE_VERSION,
-      overlayApplied: applyReferenceBadges,
-      badgeLayout: applyReferenceBadges ? REFERENCE_BADGE_LAYOUT : "",
-      sourceUrl,
-    };
-  } catch (error) {
-    console.error("CANVAS IMAGE ERROR:", { sourceUrl, applyReferenceBadges, stage: "CANVAS_DECODE_RENDER", message: error.message });
-    throw error;
-  } finally {
-    bitmap?.close();
-  }
-}
-
-async function processGalleryImages(urls) {
-  const uniqueUrls = [...new Set((Array.isArray(urls) ? urls : [])
+function originalGalleryUrls(product) {
+  return [...new Set([...(product.images || []), ...(product.descriptionImages || [])]
     .map(highResolutionImageUrl)
     .filter((url) => /^https:\/\//i.test(String(url))))].slice(0, 12);
-  if (!uniqueUrls.length) throw new Error("İşlenecek galeri görseli bulunamadı.");
-  // Process the primary image first: its failure must never silently promote a detail image.
-  const primaryAsset = await processImageToCleanBase64(uniqueUrls[0], { applyReferenceBadges: true });
-  if (Math.min(primaryAsset.width, primaryAsset.height) < MAIN_IMAGE_MIN_DIMENSION) {
-    throw new Error(`Ana görsel kalite kontrolü başarısız: ambalaj üzerindeki sembollerin okunabilir kalması için en az ${MAIN_IMAGE_MIN_DIMENSION}px kaynak görsel gerekli.`);
-  }
-  const successful = [{ url: uniqueUrls[0], asset: primaryAsset }];
-  const seen = new Set([successful[0].asset.pixelHash]);
-  const failures = [];
-  for (const url of uniqueUrls.slice(1)) {
-    try {
-      const asset = await processImageToCleanBase64(url);
-      if (!seen.has(asset.pixelHash)) { successful.push({ url, asset }); seen.add(asset.pixelHash); }
-    } catch (error) { failures.push({ url, message: error.message }); console.error("GALLERY IMAGE ERROR:", url, error); }
-  }
-  if (!successful.length) throw new Error("Kaynak görseller çözülemedi; lütfen ürün sayfasını yenileyip tekrar deneyin.");
-  const payloadBytes = successful.reduce((total, item) => total + Math.ceil(item.asset.dataUrl.length * 0.75), 0);
-  if (payloadBytes > MAX_GALLERY_PAYLOAD_BYTES) throw new Error("İşlenmiş görsel paketi çok büyük; ürün galerisi güvenli payload sınırını aşıyor.");
-  return {
-    images: successful.map((item) => item.asset),
-    sourceUrls: successful.map((item) => item.url),
-    skipped: uniqueUrls.length - successful.length,
-    failures,
-  };
-}
-
-async function buildProcessedGallery(product, settings) {
-  const sourceUrls = [...new Set([
-    ...(product.images || []), ...(product.descriptionImages || []),
-  ].map(highResolutionImageUrl).filter(Boolean))].slice(0, 12);
-  const assets = product.processedImageData || [];
-  const references = (product.processedSourceUrls || []).map(highResolutionImageUrl);
-  const cacheValid = assets.length === sourceUrls.length && references.length === assets.length
-    && assets.every((asset, index) => asset.pipelineVersion === IMAGE_PIPELINE_VERSION && asset.pixelHash
-      && asset.width >= 500 && asset.height >= 500
-      && (index === 0
-        ? asset.overlayApplied === true && asset.badgeLayout === REFERENCE_BADGE_LAYOUT
-        : asset.overlayApplied === false)
-      && references[index] === sourceUrls[index]);
-  const gallery = cacheValid
-    ? { images: assets, sourceUrls: references, skipped: 0 }
-    : await processGalleryImages(sourceUrls);
-  gallery.images = globalThis.AlltaghausListingBuilder.cleanGallery(gallery.images);
-  await recordPipelineEvent({
-    stage: "GALLERY_PROCESSED", sourceCount: sourceUrls.length,
-    processedCount: gallery.images.length, skipped: sourceUrls.length - gallery.images.length,
-    failures: gallery.failures || [],
-  });
-  return { ...gallery, sourceCount: sourceUrls.length, retriedCount: cacheValid ? 0 : gallery.images.length };
 }
 
 async function ensureSettings() {
@@ -233,6 +106,7 @@ async function ensureSettings() {
   if (Number(settings.settingsVersion || 0) < SETTINGS_VERSION) {
     settings.draftMode = false;
     settings.autoPublish = true;
+    settings.customImageOverlay = true;
     settings.settingsVersion = SETTINGS_VERSION;
   }
   await chrome.storage.local.set({ settings });
@@ -462,6 +336,7 @@ async function createDraft(product) {
       returnPolicyId: settings.returnPolicyId,
     },
     autoPublish: settings.autoPublish === true,
+    applyCustomFrame: settings.customImageOverlay !== false,
   };
   await recordPipelineEvent({ stage: 'SERVER_UPLOAD', message: 'Ürün URL’si ve seçenekler sunucuya aktarılıyor; ürün ve görseller sunucuda işleniyor.' });
   return globalThis.AutoListerCloud.createEbayDraft(listing);
@@ -479,7 +354,7 @@ async function dashboardState() {
 }
 
 async function syncLegacyMappingWithBackend(mapping, method = "POST") {
-  if (method !== "POST") throw new Error("Cloud mapping removal is not available.");
+  if (method !== "POST") return { synced: false, unavailable: true };
   return { synced: true, result: await globalThis.AutoListerCloud.request("/automation/mapping", mapping) };
 }
 
@@ -525,32 +400,27 @@ async function refreshPublishedDraftFromOpenAmazonTab(draftId, sourceId) {
   const response = await extractProductFromTab(tab.id);
   if (!response?.ok || !response.product) throw new Error(response?.error || "Amazon ürün verisi yeniden okunamadı.");
   const settings = await ensureSettings();
-  const gallery = await buildProcessedGallery(response.product, settings);
+  const imageUrls = originalGalleryUrls(response.product);
+  if (!imageUrls.length) throw new Error("Amazon ürününde yayınlanabilir görsel bulunamadı.");
   const refreshResponse = await fetchWithTimeout(`${settings.apiBaseUrl.replace(/\/$/, "")}/ebay/drafts/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       draftId,
-      processedImageData: gallery.images.map(({ dataUrl, mimeType, cropRatio, width, height }) => ({ dataUrl, mimeType, cropRatio, width, height })),
+      imageUrls,
+      applyCustomFrame: settings.customImageOverlay !== false,
       description: response.product.descriptionHtml || response.product.description || "",
       itemSpecifics: response.product.itemSpecifics || {},
     }),
   }, 45_000);
   const body = await refreshResponse.json().catch(() => ({}));
   if (!refreshResponse.ok) throw new Error(body.message || `Canlı ilan yenileme HTTP ${refreshResponse.status} döndürdü.`);
-  return { ...body, processedImageCount: gallery.images.length };
+  return { ...body, imageCount: imageUrls.length };
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.action === "PROCESS_GALLERY_IMAGES") {
-    ensureSettings().then((settings) => processGalleryImages(message.urls, { customImageOverlay: settings.customImageOverlay }))
-      .then((result) => sendResponse({ success: true, ...result }))
-      .catch((error) => sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }));
-    return true;
-  }
-
   const handler = async () => {
-    const privileged = ["CLOUD_LOGIN", "CLOUD_LOGOUT", "CLOUD_STATUS", "SAVE_CLOUD_PRODUCT", "CREATE_EBAY_DRAFT", "CHECK_BRIDGE"];
+    const privileged = ["CLOUD_LOGIN", "CLOUD_LOGOUT", "CLOUD_STATUS", "SAVE_CLOUD_PRODUCT", "SAVE_FAVORITE", "CREATE_EBAY_DRAFT", "CHECK_BRIDGE"];
     if (privileged.includes(message?.type) && (_sender.id !== chrome.runtime.id || _sender.url !== chrome.runtime.getURL("popup.html"))) {
       throw new Error("Untrusted extension sender.");
     }
@@ -560,6 +430,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case "CLOUD_LOGOUT": return globalThis.AutoListerCloud.logout();
       case "CLOUD_STATUS": return globalThis.AutoListerCloud.status();
       case "SAVE_CLOUD_PRODUCT": return createDraft(message.product);
+      case "SAVE_FAVORITE": return globalThis.AutoListerCloud.saveFavorite(message.product);
       case "CREATE_EBAY_DRAFT":
         return createDraft(message.product);
       case "REMEMBER_MANUAL_PRICE": {
@@ -628,7 +499,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return { schemaVersion: 1, exportedAt: new Date().toISOString(), ...state };
       }
       case "SAVE_SETTINGS": {
-        const settings = { ...DEFAULT_SETTINGS, ...(message.settings ?? {}), settingsVersion: SETTINGS_VERSION };
+        const settings = { ...(await ensureSettings()), ...(message.settings ?? {}), settingsVersion: SETTINGS_VERSION };
         await chrome.storage.local.set({ settings });
         return settings;
       }
@@ -673,6 +544,41 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (asin && trackedProducts[asin]) trackedProducts[asin].amazonUrl = url;
         await chrome.storage.local.set({ trackedProducts });
         return { amazonUrl: url };
+      }
+            case "START_AUTO_FULFILLMENT": {
+        const order = message.order;
+        if (!order) throw new Error("Sipariş verisi eksik.");
+        await chrome.storage.local.set({ activeFulfillmentOrder: order });
+        let targetUrl = order.supplierUrl || order.amazonCartUrl;
+        if (!targetUrl && order.sourceAsin) {
+          targetUrl = `https://www.amazon.de/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(order.sourceAsin)}&Quantity.1=${order.quantity || 1}`;
+        }
+        if (!targetUrl) throw new Error("Tedarikçi URL veya ASIN bulunamadı.");
+        const tab = await chrome.tabs.create({ url: targetUrl, active: true });
+        return { ok: true, tabId: tab.id };
+      }
+      case "ORDER_FULFILLED_SUCCESS": {
+        const payload = message.payload;
+        if (!payload || !payload.supplierOrderId) return { ok: false };
+        try {
+          const syncUrl = `${globalThis.AlltaghausConfig?.API_BASE_URL || "https://autolister-app.de"}/api/orders/sync-supplier-tracking`;
+          await fetch(syncUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: payload.orderId,
+              storeId: payload.storeId,
+              supplierOrderId: payload.supplierOrderId,
+              supplier: payload.supplier || "amazon_de",
+              recipientName: payload.recipientName,
+              recipientCity: payload.recipientCity,
+              recipientZip: payload.recipientZip,
+            }),
+          });
+        } catch (e) {
+          console.error("Order fulfillment sync failed:", e);
+        }
+        return { ok: true };
       }
       default:
         throw new Error("Bilinmeyen eklenti komutu.");

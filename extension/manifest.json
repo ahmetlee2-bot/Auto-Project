@@ -1,31 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "AutoLister: Multi-Supplier eBay Lister & Repricer",
-  "version": "1.1.3",
-  "description": "Amazon.de- und Joybuy.de-Produkte mit AutoLister für eBay vorbereiten. Preis- und Bestandsprüfung, SEO-Titel und Margenkalkulation.",
+  "name": "AutoLister: Amazon zu eBay 1-Klick Lister & Repricer",
+  "version": "1.0.4",
+  "description": "Amazon-Produkte mit 1 Klick auf eBay listen. Automatische Preis- und Bestandsprüfung, SEO-Titel und sofortige Margenberechnung.",
   "minimum_chrome_version": "120",
   "permissions": [
     "tabs",
     "storage",
-    "scripting",
-    "alarms"
+    "scripting"
   ],
   "host_permissions": [
     "https://*.amazon.de/*",
+    "https://*.joybuy.de/*",
     "https://*.media-amazon.com/*",
     "https://*.ssl-images-amazon.com/*",
     "https://images-na.ssl-images-amazon.com/*",
     "https://api.autolister-app.de/*",
     "https://autolister-app.de/*",
-    "https://rdwqrygkkzzouiamrxwq.supabase.co/*",
-    "https://*.joybuy.de/*",
-    "https://*.joybuy.com/*"
+    "https://rdwqrygkkzzouiamrxwq.supabase.co/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "AutoLister: Produkt auf eBay vorbereiten",
+    "default_title": "AutoLister: Amazon-Produkt auf eBay listen",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -56,27 +54,30 @@
         "listing_builder.js",
         "amazon_parser.js",
         "content.js",
-        "amazonOrders.js",
-        "syncToast.js"
+        "addressParser.js",
+        "checkoutRunner.js"
       ],
       "run_at": "document_idle"
     },
     {
-      "run_at": "document_idle",
       "matches": [
         "https://*.joybuy.de/*"
       ],
       "js": [
-        "joybuy_content.js",
-        "syncToast.js"
-      ]
+        "addressParser.js",
+        "checkoutRunner.js"
+      ],
+      "run_at": "document_idle"
     },
     {
       "matches": [
-        "https://autolister-app.de/*"
+        "https://autolister-app.de/*",
+        "https://*.autolister-app.de/*",
+        "http://localhost/*",
+        "http://localhost:*/*"
       ],
       "js": [
-        "syncToast.js"
+        "dashboardBridge.js"
       ],
       "run_at": "document_idle"
     }

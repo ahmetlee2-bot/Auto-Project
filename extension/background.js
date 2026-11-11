@@ -5,7 +5,7 @@ const priceTools = globalThis.AlltaghausPrice || {
   calculateSalePrice(source, marginPercent) {
     const margin = Number(marginPercent) / 100;
     if (!Number.isFinite(source) || !Number.isFinite(margin) || margin < 0 || margin >= 0.9) return null;
-    return (Math.ceil(source / (1 - margin)) - 0.01).toFixed(2);
+    return (Math.ceil(((source * (1 + margin)) / 0.85) * 100 - 1e-8) / 100).toFixed(2);
   },
 };
 
@@ -758,6 +758,41 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (asin && trackedProducts[asin]) trackedProducts[asin].amazonUrl = url;
         await chrome.storage.local.set({ trackedProducts });
         return { amazonUrl: url };
+      }
+            case "START_AUTO_FULFILLMENT": {
+        const order = message.order;
+        if (!order) throw new Error("Sipariş verisi eksik.");
+        await chrome.storage.local.set({ activeFulfillmentOrder: order });
+        let targetUrl = order.supplierUrl || order.amazonCartUrl;
+        if (!targetUrl && order.sourceAsin) {
+          targetUrl = `https://www.amazon.de/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(order.sourceAsin)}&Quantity.1=${order.quantity || 1}`;
+        }
+        if (!targetUrl) throw new Error("Tedarikçi URL veya ASIN bulunamadı.");
+        const tab = await chrome.tabs.create({ url: targetUrl, active: true });
+        return { ok: true, tabId: tab.id };
+      }
+      case "ORDER_FULFILLED_SUCCESS": {
+        const payload = message.payload;
+        if (!payload || !payload.supplierOrderId) return { ok: false };
+        try {
+          const syncUrl = `${globalThis.AlltaghausConfig?.API_BASE_URL || "https://autolister-app.de"}/api/orders/sync-supplier-tracking`;
+          await fetch(syncUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: payload.orderId,
+              storeId: payload.storeId,
+              supplierOrderId: payload.supplierOrderId,
+              supplier: payload.supplier || "amazon_de",
+              recipientName: payload.recipientName,
+              recipientCity: payload.recipientCity,
+              recipientZip: payload.recipientZip,
+            }),
+          });
+        } catch (e) {
+          console.error("Order fulfillment sync failed:", e);
+        }
+        return { ok: true };
       }
       default:
         throw new Error("Bilinmeyen eklenti komutu.");
