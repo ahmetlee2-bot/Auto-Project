@@ -147,53 +147,64 @@
     }
   }
   function injectProgressWidget() {
-    if (!PROGRESS.test(location.pathname) || document.getElementById("autolister-progress-tracking-widget")) return;
+    if (!PROGRESS.test(location.pathname)) return;
     const orderId = new URL(location.href).searchParams.get("orderId") || document.body.innerText.match(ORDER_ID)?.[0] || "";
     const shipment = orderId ? shipmentFrom(document.body, orderId) : null;
     if (!shipment?.sourceTrackingNumber) return;
 
     // Find the ideal placement right above "Bestellt" / progress status
     function findProgressAnchor() {
-      // 1. Prioritize element containing "Bestellt", "Versendet", "In Zustellung", "Zugestellt"
-      const statusNodes = [...document.querySelectorAll("h1, h2, h3, h4, h5, div, span, p")]
-        .filter((node) => {
-          if (node.closest("#navbar, #nav-belt, #nav-main, header, #navFooter, #nav-global-location-slot")) return false;
-          const val = (node.textContent || "").trim();
-          return /^(?:Bestellt|Versendet|In Zustellung|Zugestellt)$/i.test(val) && node.children.length === 0;
-        });
-
-      if (statusNodes.length > 0) {
-        const target = statusNodes[0];
-        return target.closest(".pt-status-message, .a-row, div") || target;
+      // 1. Look for visible element whose text is strictly "Bestellt" or current shipment status
+      const candidates = document.querySelectorAll("h1, h2, h3, h4, h5, div, span, b, strong, p");
+      for (const el of candidates) {
+        if (el.closest("#navbar, #nav-belt, #nav-main, header, #navFooter, #nav-global-location-slot, #autolister-progress-tracking-widget")) continue;
+        const val = (el.innerText || el.textContent || "").trim();
+        if (/^(?:Bestellt|Versendet|In Zustellung|Zugestellt)$/i.test(val) && el.children.length === 0) {
+          // If inside a small wrapper or status heading, take that container
+          const wrapper = el.closest(".pt-status-message, [data-component-type='progress-tracker']") || el;
+          return wrapper;
+        }
       }
 
-      // 2. Look for progress tracker container
-      const trackerContainer = document.querySelector("#tracking-events-container, .pt-status-message-container, [data-component-type='progress-tracker'], .track-package-container, #progress-tracker-container");
+      // 2. Look for the main progress tracker container
+      const trackerContainer = document.querySelector("#tracking-events-container, .pt-status-message-container, [data-component-type='progress-tracker'], #progress-tracker-container");
       if (trackerContainer && !trackerContainer.closest("#navbar, header")) {
         return trackerContainer;
       }
 
-      // 3. Look for the main delivery heading inside content area (e.g. "Ankunft morgen")
-      const mainContent = document.querySelector("#mainContent, main, #content, .a-container");
+      // 3. Look for the arrival date heading in the content area (e.g. "Ankunft morgen")
+      const mainContent = document.querySelector("#mainContent, main, #content");
       if (mainContent) {
-        const heading = [...mainContent.querySelectorAll("h1, h2, h3, [role='heading']")]
-          .find((n) => !n.closest("#navbar, header, #nav-global-location-slot") && n.textContent && n.textContent.length < 120);
-        if (heading) return heading;
+        const arrival = [...mainContent.querySelectorAll("h1, h2, h3, [role='heading']")]
+          .find((n) => !n.closest("#navbar, header, #nav-global-location-slot, #autolister-progress-tracking-widget") && n.textContent && n.textContent.length < 120);
+        if (arrival) return arrival;
       }
 
       return null;
     }
 
     const anchor = findProgressAnchor();
+    // CRITICAL: If the "Bestellt" anchor is not rendered yet, wait for MutationObserver!
+    // NEVER fallback to inserting at page top / body / navbar!
+    if (!anchor) return;
 
-    const host = document.createElement("div");
+    let host = document.getElementById("autolister-progress-tracking-widget");
+    if (host) {
+      // If widget already exists but is misplaced (e.g. at the top of the page), move it to the anchor!
+      if (host.nextElementSibling !== anchor && host.parentElement !== anchor.parentElement) {
+        anchor.insertAdjacentElement("beforebegin", host);
+      }
+      return;
+    }
+
+    host = document.createElement("div");
     host.id = "autolister-progress-tracking-widget";
-    host.style.cssText = "display:block;width:min(520px,calc(100% - 32px));margin:14px auto 18px auto;position:relative;z-index:10;clear:both;";
+    host.style.cssText = "display:block;width:min(520px,calc(100% - 32px));margin:20px auto 16px auto;position:relative;z-index:10;clear:both;";
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>
         :host{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
-        .card{box-sizing:border-box;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 4px 12px rgba(37,99,235,0.15)}
+        .card{box-sizing:border-box;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 4px 14px rgba(37,99,235,0.18)}
         .identity{display:flex;align-items:center;gap:10px;min-width:0}
         .logo{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:8px;background:#2563eb;color:#fff;font-size:18px;font-weight:800}
         .name{font-size:14px;line-height:18px;font-weight:800;white-space:nowrap;color:#0f172a}
@@ -232,14 +243,8 @@
         }
       }
     });
-    if (anchor) {
-      anchor.insertAdjacentElement("beforebegin", host);
-    } else {
-      const container = document.querySelector("#mainContent, main, #content, .a-container");
-      if (container) {
-        container.insertAdjacentElement("afterbegin", host);
-      }
-    }
+
+    anchor.insertAdjacentElement("beforebegin", host);
   }
   function extractAll() {
     if (!ORDER_HISTORY.test(location.pathname) && !PROGRESS.test(location.pathname)) throw new Error("Öffne zuerst die Amazon-Bestellübersicht oder die Paketverfolgung.");
